@@ -2,8 +2,6 @@
 
 Type-safe reactive persistence with automated migrations and schema drift detection. Designed for GUI applications and oriented towards vertical-slice/feature-based architectures with compile-time verified relations.
 
----
-
 ## Backends
 
 | Feature flag | Backend | Format |
@@ -15,7 +13,6 @@ Type-safe reactive persistence with automated migrations and schema drift detect
 
 rpstate stands for Reactive Persistent State. When I was checking for name availability, putting the R first was a very conscious and deliberate choice. One search for the alternative anagram was enough to convince me that "managing your internal state" should remain a strictly technical endeavor. 🥴
 
----
 
 ## Quick start
 
@@ -108,7 +105,6 @@ Wrong field name → `no associated item named '__schema_field_porrt'` at compil
 Wrong type → `TypeCheck<String>` is not implemented for `ReadOnly<u16>` at compile time.  
 Writing a read-only link → `no method named 'perform_set' found for ReadOnly<T>` at compile time.
 
----
 
 ## Volatile fields
 
@@ -125,7 +121,6 @@ pub struct AppState {
 }
 ```
 
----
 
 ## Nested structs
 
@@ -143,7 +138,6 @@ pub struct SystemSettings {
 }
 ```
 
----
 
 ## Status
 
