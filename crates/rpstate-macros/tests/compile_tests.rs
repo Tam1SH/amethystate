@@ -1,0 +1,14 @@
+#[test]
+fn test_macro_expansion_compilation() {
+    let t = trybuild::TestCases::new();
+    t.pass("tests/expand/basic.rs");
+    t.pass("tests/expand/nested.rs");
+    t.pass("tests/expand/composition.rs");
+    t.pass("tests/expand/external_linked_nested.rs");
+
+    t.compile_fail("tests/fails/lookup_wrong_name.rs");
+    t.compile_fail("tests/fails/lookup_type_mismatch.rs");
+    t.compile_fail("tests/fails/lookup_write_violation.rs");
+    t.compile_fail("tests/fails/lookup_deep_error.rs");
+    t.compile_fail("tests/fails/lookup_node_not_struct.rs");
+}

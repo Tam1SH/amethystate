@@ -1,0 +1,12 @@
+error[E0599]: no method named `perform_set` found for struct `ReadOnly<T>` in the current scope
+  --> tests/fails/lookup_write_violation.rs:11:22
+   |
+11 |     #[state(lookup = "host", parent = NetworkState, export_mut)]
+   |                      ^^^^^^ method not found in `ReadOnly<std::string::String>`
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+note: `CanWriteField` defines an item `perform_set`, perhaps you need to implement it
+  --> tests/fails/lookup_write_violation.rs:11:22
+   |
+11 |     #[state(lookup = "host", parent = NetworkState, export_mut)]
+   |                      ^^^^^^

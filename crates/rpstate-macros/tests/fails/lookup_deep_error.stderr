@@ -1,0 +1,5 @@
+error[E0599]: no method named `__schema_field_wrong` found for struct `ReadOnly<T>` in the current scope
+  --> tests/fails/lookup_deep_error.rs:17:22
+   |
+17 |     #[state(lookup = "inner.wrong", parent = Root)]
+   |                      ^^^^^^^^^^^^^ method not found in `ReadOnly<Inner>`
