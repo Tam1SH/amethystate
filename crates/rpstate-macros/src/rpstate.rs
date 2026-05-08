@@ -1,11 +1,11 @@
 use darling::util::SpannedValue;
-use darling::{FromField, FromMeta, ast::NestedMeta};
+use darling::{ast::NestedMeta, FromField, FromMeta};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
-use syn::{
-    Data, DataStruct, DeriveInput, Expr, Fields, Ident, Type, Visibility, parse_macro_input,
-};
 use syn::spanned::Spanned;
+use syn::{
+    parse_macro_input, Data, DataStruct, DeriveInput, Expr, Fields, Ident, Type, Visibility,
+};
 
 #[derive(Debug, FromMeta)]
 struct MacroArgs {
@@ -81,10 +81,12 @@ pub fn rpstate_impl(
             && entry.lookup_node.is_none()
             && entry.default.is_none()
         {
-            return darling::Error::custom("Field must have a default value, be nested, or be a lookup")
-                .with_span(&field.ident)
-                .write_errors()
-                .into();
+            return darling::Error::custom(
+                "Field must have a default value, be nested, or be a lookup",
+            )
+            .with_span(&field.ident)
+            .write_errors()
+            .into();
         }
 
         entries.push(entry);
@@ -126,7 +128,16 @@ fn generate_code(
         if e.nested || e.lookup_node.is_some() {
             quote! { #fvis #fname: ::std::sync::Arc<#ty> }
         } else {
-            quote! { #fvis #fname: ::rpstate::Field<#ty> }
+            let mode = if e.lookup.is_some() {
+                if e.export_mut {
+                    quote!(::rpstate::store::shared::WritableMode)
+                } else {
+                    quote!(::rpstate::store::shared::ReadOnlyMode)
+                }
+            } else {
+                quote!(::rpstate::store::shared::WritableMode)
+            };
+            quote! { #fvis #fname: ::rpstate::Field<#ty, #mode> }
         }
     });
 
@@ -164,7 +175,7 @@ fn generate_code(
                     let _ = #chain;
                 };
                 let path = format!("{}.{}", <#parent as ::rpstate::StateScope>::PREFIX, #target_str);
-                ::std::sync::Arc::new(#ty::new(store, &path)?)
+                ::std::sync::Arc::new(<#ty as ::rpstate::store::shared::RpStateNode>::new_node(store, &path)?)
             }
         }
         } else if let Some(target) = &e.lookup {
@@ -173,9 +184,23 @@ fn generate_code(
             let target_span = target.span();
             let target_str = target.to_string();
             let def = e.default.as_ref().map(|d| quote!(#d)).unwrap_or_else(|| quote!(::std::default::Default::default()));
-            quote_spanned! {target_span=>
+
+            let mode = if e.export_mut { quote!(::rpstate::store::shared::WritableMode) } else { quote!(::rpstate::store::shared::ReadOnlyMode) };
+
+            let write_check = if e.export_mut {
+                quote_spanned! { target.span() =>
+                    fn assert_writable<T>(_: ::rpstate::store::shared::Writable<T>) {}
+                    assert_writable(#chain);
+                }
+            } else {
+                quote!()
+            };
+
+
+            quote_spanned! { target_span =>
             #fname: {
                 const _: fn() = || {
+                    #write_check
                     trait TypeCheck<T> {}
                     impl<T> TypeCheck<T> for ::rpstate::store::shared::ReadOnly<T> {}
                     impl<T> TypeCheck<T> for ::rpstate::store::shared::Writable<T> {}
@@ -183,7 +208,7 @@ fn generate_code(
                     assert_field_type_matches_lookup::<#ty, _>(#chain);
                 };
                 let path = format!("{}.{}", <#parent as ::rpstate::StateScope>::PREFIX, #target_str);
-                ::rpstate::store::field_with_path(store, ::std::sync::Arc::from(path), #def)?
+                ::rpstate::store::field_with_path::<#ty, _, #mode>(store, ::std::sync::Arc::from(path), #def)?
             }
         }
         } else if e.nested {
@@ -210,46 +235,45 @@ fn generate_code(
         }
     });
 
+    let node_impl = if is_root {
+        quote! {
+            impl ::rpstate::store::shared::RpStateNode for #name {
+                fn new_node(store: &::std::sync::Arc<::rpstate::DefaultStore>, _path: &str) -> ::rpstate::store::Result<Self> {
+                    Self::new(store)
+                }
+            }
+        }
+    } else {
+        quote! {
+            impl ::rpstate::store::shared::RpStateNode for #name {
+                fn new_node(store: &::std::sync::Arc<::rpstate::DefaultStore>, path: &str) -> ::rpstate::store::Result<Self> {
+                    Self::new(store, path)
+                }
+            }
+        }
+    };
+
     let methods = entries.iter().map(|e| {
         let fname = e.ident.as_ref().unwrap();
         let ty = &e.ty;
-        let setter = format_ident!("set_{}", fname, span = fname.span());
 
         if e.nested || e.lookup_node.is_some() {
             quote! { pub fn #fname(&self) -> ::std::sync::Arc<#ty> { self.#fname.clone() } }
-        } else if let Some(target) = &e.lookup {
-            if e.export_mut {
-                let parent = e.parent.as_ref().unwrap();
-                let target_span = target.span();
-                let parts: Vec<&str> = target.split('.').collect();
-                let mut chain = quote! { #parent };
-                for (i, p) in parts.iter().enumerate() {
-                    let m = format_ident!("__schema_field_{}", p, span = target_span);
-                    chain = if i == 0 { quote!(#chain::#m()) } else { quote!(#chain.#m()) };
-                }
-
-                quote_spanned! { target_span =>
-                    pub fn #fname(&self) -> ::rpstate::Field<#ty> { self.#fname.clone() }
-
-                    pub fn #setter(&self, val: #ty) -> ::rpstate::store::Result<()> {
-                        trait CanWriteField<T> {
-                            fn perform_set(&self, f: &::rpstate::Field<T>, v: T) -> ::rpstate::store::Result<()>;
-                        }
-                        impl<T: ::serde::Serialize + ::serde::de::DeserializeOwned + ::std::clone::Clone + ::std::marker::Send + ::std::marker::Sync + 'static> CanWriteField<T> for ::rpstate::store::shared::Writable<T> {
-                            fn perform_set(&self, f: &::rpstate::Field<T>, v: T) -> ::rpstate::store::Result<()> { f.set(v) }
-                        }
-
-                        let checker = #chain;
-                        checker.perform_set(&self.#fname, val)
-                    }
+        } else {
+            let mode = if e.lookup.is_some() {
+                if e.export_mut {
+                    quote!(::rpstate::store::shared::WritableMode)
+                } else {
+                    quote!(::rpstate::store::shared::ReadOnlyMode)
                 }
             } else {
-                quote! { pub fn #fname(&self) -> ::rpstate::Field<#ty> { self.#fname.clone() } }
-            }
-        } else {
+                quote!(::rpstate::store::shared::WritableMode)
+            };
+
             quote! {
-                pub fn #fname(&self) -> ::rpstate::Field<#ty> { self.#fname.clone() }
-                pub fn #setter(&self, val: #ty) -> ::rpstate::store::Result<()> { self.#fname.set(val) }
+                pub fn #fname(&self) -> ::rpstate::Field<#ty, #mode> {
+                    self.#fname.clone()
+                }
             }
         }
     });
@@ -267,5 +291,6 @@ fn generate_code(
         #[derive(Clone)] #(#attrs)* #vis struct #name { #(#struct_fields,)* }
         #scope
         impl #name { #constructor #(#schema_methods)* #(#methods)* }
+        #node_impl
     }
 }

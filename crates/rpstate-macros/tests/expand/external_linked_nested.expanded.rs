@@ -1,7 +1,7 @@
 use rpstate_macros::rpstate;
 pub struct ConnectionPool {
-    pub max_connections: ::rpstate::Field<u32>,
-    pub timeout_secs: ::rpstate::Field<u32>,
+    pub max_connections: ::rpstate::Field<u32, ::rpstate::store::shared::WritableMode>,
+    pub timeout_secs: ::rpstate::Field<u32, ::rpstate::store::shared::WritableMode>,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for ConnectionPool {
@@ -51,17 +51,23 @@ impl ConnectionPool {
     pub fn __schema_field_timeout_secs() -> ::rpstate::store::shared::ReadOnly<u32> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn max_connections(&self) -> ::rpstate::Field<u32> {
+    pub fn max_connections(
+        &self,
+    ) -> ::rpstate::Field<u32, ::rpstate::store::shared::WritableMode> {
         self.max_connections.clone()
     }
-    pub fn set_max_connections(&self, val: u32) -> ::rpstate::store::Result<()> {
-        self.max_connections.set(val)
-    }
-    pub fn timeout_secs(&self) -> ::rpstate::Field<u32> {
+    pub fn timeout_secs(
+        &self,
+    ) -> ::rpstate::Field<u32, ::rpstate::store::shared::WritableMode> {
         self.timeout_secs.clone()
     }
-    pub fn set_timeout_secs(&self, val: u32) -> ::rpstate::store::Result<()> {
-        self.timeout_secs.set(val)
+}
+impl ::rpstate::store::shared::RpStateNode for ConnectionPool {
+    fn new_node(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        path: &str,
+    ) -> ::rpstate::store::Result<Self> {
+        Self::new(store, path)
     }
 }
 pub struct DatabaseState {
@@ -93,6 +99,14 @@ impl DatabaseState {
     }
     pub fn pool(&self) -> ::std::sync::Arc<ConnectionPool> {
         self.pool.clone()
+    }
+}
+impl ::rpstate::store::shared::RpStateNode for DatabaseState {
+    fn new_node(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        _path: &str,
+    ) -> ::rpstate::store::Result<Self> {
+        Self::new(store)
     }
 }
 pub struct InspectorState {
@@ -129,7 +143,12 @@ impl InspectorState {
                         ),
                     )
                 });
-                ::std::sync::Arc::new(ConnectionPool::new(store, &path)?)
+                ::std::sync::Arc::new(
+                    <ConnectionPool as ::rpstate::store::shared::RpStateNode>::new_node(
+                        store,
+                        &path,
+                    )?,
+                )
             },
         })
     }
@@ -141,6 +160,14 @@ impl InspectorState {
     }
     pub fn db_pool_view(&self) -> ::std::sync::Arc<ConnectionPool> {
         self.db_pool_view.clone()
+    }
+}
+impl ::rpstate::store::shared::RpStateNode for InspectorState {
+    fn new_node(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        _path: &str,
+    ) -> ::rpstate::store::Result<Self> {
+        Self::new(store)
     }
 }
 fn main() {}

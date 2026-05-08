@@ -1,11 +1,15 @@
-error[E0599]: no function or associated item named `new` found for type `u16` in the current scope
-  --> tests/fails/lookup_node_not_struct.rs:11:27
+error[E0277]: the trait bound `u16: RpStateNode` is not satisfied
+  --> tests/fails/lookup_node_not_struct.rs:12:26
    |
-11 |     #[state(lookup_node = "port", parent = NetworkState)]
-   |                           -^^^^^ function or associated item not found in `u16`
+12 |     pub proxy_port_node: u16,
+   |                          ^^^ the trait `RpStateNode` is not implemented for `u16`
    |
-help: there is a method `ne` with a similar name, but with different arguments
-  --> $RUST/core/src/cmp.rs
+help: the following other types implement trait `RpStateNode`
+  --> tests/fails/lookup_node_not_struct.rs:3:1
    |
-   |     fn ne(&self, other: &Rhs) -> bool {
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 3 | #[rpstate(prefix = "net")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^ `NetworkState`
+...
+ 9 | #[rpstate(prefix = "ui")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^ `UiState`
+   = note: this error originates in the attribute macro `rpstate` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -18,6 +18,6 @@ serde_json = { version = "1", optional = true }
 redb = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
 thiserror.workspace = true
-
+petgraph.workspace = true
 [dev-dependencies]
 proptest = "1.11.0"

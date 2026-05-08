@@ -1,8 +1,9 @@
 use super::Result;
 use crate::signal::{Signal, SignalSubscription};
+use crate::store::shared::{AccessMode, ReadOnlyMode, WritableMode};
 use crate::store::{Store, SubscriptionId};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -22,26 +23,29 @@ pub struct FieldSubscription {
     pub signal_sub: SignalSubscription,
 }
 
-pub struct Field<TValue, S: Store> {
+pub struct Field<TValue, S: Store, M: AccessMode = ReadOnlyMode> {
     pub signal: Arc<Signal<TValue>>,
     pub path: Arc<str>,
     pub store_sub: Option<Arc<StoreSubscription<S>>>,
+    pub(crate) _mode: std::marker::PhantomData<M>,
 }
 
-impl<TValue, S: Store> Clone for Field<TValue, S> {
+impl<TValue, S: Store, M: AccessMode> Clone for Field<TValue, S, M> {
     fn clone(&self) -> Self {
         Self {
             signal: Arc::clone(&self.signal),
             path: Arc::clone(&self.path),
             store_sub: self.store_sub.clone(),
+            _mode: std::marker::PhantomData,
         }
     }
 }
 
-impl<TValue, S> Field<TValue, S>
+impl<TValue, S, M> Field<TValue, S, M>
 where
     TValue: DeserializeOwned + Serialize + Send + Sync + Clone + 'static,
     S: Store,
+    M: AccessMode,
 {
     pub fn get(&self) -> TValue {
         self.signal.get()
@@ -55,12 +59,8 @@ where
         self.path.clone()
     }
 
-    pub fn new_volatile(path: Arc<str>, default: TValue) -> Self {
-        Self {
-            signal: Arc::new(Signal::new(default)),
-            path,
-            store_sub: None,
-        }
+    pub fn as_signal(&self) -> Arc<Signal<TValue>> {
+        self.signal.clone()
     }
 
     pub fn subscribe<F>(&self, callback: F) -> FieldSubscription
@@ -72,7 +72,13 @@ where
         });
         FieldSubscription { signal_sub }
     }
+}
 
+impl<TValue, S> Field<TValue, S, WritableMode>
+where
+    TValue: DeserializeOwned + Serialize + Send + Sync + Clone + 'static,
+    S: Store,
+{
     pub fn set(&self, value: TValue) -> Result<()> {
         if let Some(sub) = &self.store_sub {
             sub.store.set(&self.path, &value)
@@ -81,9 +87,20 @@ where
             Ok(())
         }
     }
+}
 
-    pub fn as_signal(&self) -> Arc<Signal<TValue>> {
-        self.signal.clone()
+impl<TValue, S> Field<TValue, S, WritableMode>
+where
+    TValue: DeserializeOwned + Serialize + Send + Sync + Clone + 'static,
+    S: Store,
+{
+    pub fn new_volatile(path: Arc<str>, default: TValue) -> Self {
+        Self {
+            signal: Arc::new(Signal::new(default)),
+            path,
+            store_sub: None,
+            _mode: std::marker::PhantomData,
+        }
     }
 }
 
@@ -102,10 +119,10 @@ mod tests {
     use super::*;
     use crate::signal::Signal;
     use crate::store::config::StoreConfig;
-    use crate::store::{StateScope, Store, json::JsonStore};
-    use serde_json::{Map, json};
-    use std::sync::Mutex;
+    use crate::store::{json::JsonStore, StateScope, Store};
+    use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_store(suffix: &str) -> Arc<JsonStore> {
@@ -156,6 +173,7 @@ mod tests {
                 store: store.clone(),
                 id: sub_id,
             })),
+            _mode: Default::default(),
         };
 
         let debug_str = format!("{:?}", field);
@@ -205,6 +223,7 @@ mod tests {
                 store: store.clone(),
                 id: sub_id,
             })),
+            _mode: Default::default(),
         };
 
         let extracted = field.as_signal();
@@ -217,7 +236,7 @@ mod tests {
 
         let field_path: Arc<str> = Arc::from("ui.temp_spinner");
 
-        let field = Field::<bool, JsonStore>::new_volatile(field_path.clone(), false);
+        let field = Field::<bool, JsonStore, WritableMode>::new_volatile(field_path.clone(), false);
 
         let call_count = Arc::new(Mutex::new(0));
         let last_val = Arc::new(Mutex::new(false));

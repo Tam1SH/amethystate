@@ -1,11 +1,22 @@
-use crate::SubscriptionKind;
 use crate::store::{StoreCallback, SubscriptionId};
+use crate::{DefaultStore, SubscriptionKind};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+pub trait AccessMode: Send + Sync + 'static {}
+pub struct ReadOnlyMode;
+impl AccessMode for ReadOnlyMode {}
+pub struct WritableMode;
+impl AccessMode for WritableMode {}
 
 pub struct ReadOnly<T>(std::marker::PhantomData<T>);
 pub struct Writable<T>(std::marker::PhantomData<T>);
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub trait RpStateNode: Sized {
+    fn new_node(store: &Arc<DefaultStore>, path: &str) -> crate::store::Result<Self>;
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct PrefixMeta {
     pub version: u32,
     pub hash: u64,

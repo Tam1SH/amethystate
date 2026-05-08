@@ -1,7 +1,7 @@
 use rpstate_macros::rpstate;
 pub struct NetworkState {
-    pub port: ::rpstate::Field<u16>,
-    pub host: ::rpstate::Field<String>,
+    pub port: ::rpstate::Field<u16, ::rpstate::store::shared::WritableMode>,
+    pub host: ::rpstate::Field<String, ::rpstate::store::shared::WritableMode>,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for NetworkState {
@@ -41,22 +41,26 @@ impl NetworkState {
     pub fn __schema_field_host() -> ::rpstate::store::shared::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn port(&self) -> ::rpstate::Field<u16> {
+    pub fn port(&self) -> ::rpstate::Field<u16, ::rpstate::store::shared::WritableMode> {
         self.port.clone()
     }
-    pub fn set_port(&self, val: u16) -> ::rpstate::store::Result<()> {
-        self.port.set(val)
-    }
-    pub fn host(&self) -> ::rpstate::Field<String> {
+    pub fn host(
+        &self,
+    ) -> ::rpstate::Field<String, ::rpstate::store::shared::WritableMode> {
         self.host.clone()
     }
-    pub fn set_host(&self, val: String) -> ::rpstate::store::Result<()> {
-        self.host.set(val)
+}
+impl ::rpstate::store::shared::RpStateNode for NetworkState {
+    fn new_node(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        _path: &str,
+    ) -> ::rpstate::store::Result<Self> {
+        Self::new(store)
     }
 }
 pub struct UiState {
-    pub proxy_port: ::rpstate::Field<u16>,
-    pub proxy_host: ::rpstate::Field<String>,
+    pub proxy_port: ::rpstate::Field<u16, ::rpstate::store::shared::ReadOnlyMode>,
+    pub proxy_host: ::rpstate::Field<String, ::rpstate::store::shared::ReadOnlyMode>,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for UiState {
@@ -95,7 +99,11 @@ impl UiState {
                         ),
                     )
                 });
-                ::rpstate::store::field_with_path(
+                ::rpstate::store::field_with_path::<
+                    u16,
+                    _,
+                    ::rpstate::store::shared::ReadOnlyMode,
+                >(
                     store,
                     ::std::sync::Arc::from(path),
                     ::std::default::Default::default(),
@@ -120,7 +128,11 @@ impl UiState {
                         ),
                     )
                 });
-                ::rpstate::store::field_with_path(
+                ::rpstate::store::field_with_path::<
+                    String,
+                    _,
+                    ::rpstate::store::shared::ReadOnlyMode,
+                >(
                     store,
                     ::std::sync::Arc::from(path),
                     ::std::default::Default::default(),
@@ -136,11 +148,23 @@ impl UiState {
     pub fn __schema_field_proxy_host() -> ::rpstate::store::shared::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn proxy_port(&self) -> ::rpstate::Field<u16> {
+    pub fn proxy_port(
+        &self,
+    ) -> ::rpstate::Field<u16, ::rpstate::store::shared::ReadOnlyMode> {
         self.proxy_port.clone()
     }
-    pub fn proxy_host(&self) -> ::rpstate::Field<String> {
+    pub fn proxy_host(
+        &self,
+    ) -> ::rpstate::Field<String, ::rpstate::store::shared::ReadOnlyMode> {
         self.proxy_host.clone()
+    }
+}
+impl ::rpstate::store::shared::RpStateNode for UiState {
+    fn new_node(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        _path: &str,
+    ) -> ::rpstate::store::Result<Self> {
+        Self::new(store)
     }
 }
 fn main() {}

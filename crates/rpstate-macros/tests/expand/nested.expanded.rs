@@ -1,6 +1,6 @@
 use rpstate_macros::rpstate;
 pub struct DatabaseConfig {
-    pub host: ::rpstate::Field<String>,
+    pub host: ::rpstate::Field<String, ::rpstate::store::shared::WritableMode>,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for DatabaseConfig {
@@ -32,11 +32,18 @@ impl DatabaseConfig {
     pub fn __schema_field_host() -> ::rpstate::store::shared::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn host(&self) -> ::rpstate::Field<String> {
+    pub fn host(
+        &self,
+    ) -> ::rpstate::Field<String, ::rpstate::store::shared::WritableMode> {
         self.host.clone()
     }
-    pub fn set_host(&self, val: String) -> ::rpstate::store::Result<()> {
-        self.host.set(val)
+}
+impl ::rpstate::store::shared::RpStateNode for DatabaseConfig {
+    fn new_node(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        path: &str,
+    ) -> ::rpstate::store::Result<Self> {
+        Self::new(store, path)
     }
 }
 pub struct SystemSettings {
@@ -68,6 +75,14 @@ impl SystemSettings {
     }
     pub fn db(&self) -> ::std::sync::Arc<DatabaseConfig> {
         self.db.clone()
+    }
+}
+impl ::rpstate::store::shared::RpStateNode for SystemSettings {
+    fn new_node(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        _path: &str,
+    ) -> ::rpstate::store::Result<Self> {
+        Self::new(store)
     }
 }
 fn main() {}

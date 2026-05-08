@@ -1,7 +1,7 @@
 use rpstate_macros::rpstate;
 pub struct AppConfig {
-    pub port: ::rpstate::Field<u16>,
-    pub session_id: ::rpstate::Field<String>,
+    pub port: ::rpstate::Field<u16, ::rpstate::store::shared::WritableMode>,
+    pub session_id: ::rpstate::Field<String, ::rpstate::store::shared::WritableMode>,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for AppConfig {
@@ -40,17 +40,21 @@ impl AppConfig {
     pub fn __schema_field_session_id() -> ::rpstate::store::shared::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn port(&self) -> ::rpstate::Field<u16> {
+    pub fn port(&self) -> ::rpstate::Field<u16, ::rpstate::store::shared::WritableMode> {
         self.port.clone()
     }
-    pub fn set_port(&self, val: u16) -> ::rpstate::store::Result<()> {
-        self.port.set(val)
-    }
-    pub fn session_id(&self) -> ::rpstate::Field<String> {
+    pub fn session_id(
+        &self,
+    ) -> ::rpstate::Field<String, ::rpstate::store::shared::WritableMode> {
         self.session_id.clone()
     }
-    pub fn set_session_id(&self, val: String) -> ::rpstate::store::Result<()> {
-        self.session_id.set(val)
+}
+impl ::rpstate::store::shared::RpStateNode for AppConfig {
+    fn new_node(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        _path: &str,
+    ) -> ::rpstate::store::Result<Self> {
+        Self::new(store)
     }
 }
 fn main() {}

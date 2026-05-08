@@ -20,10 +20,11 @@ pub mod shared;
 pub use error::Result;
 use std::sync::Arc;
 
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use tracing::error;
 
+use crate::store::shared::WritableMode;
 use crate::Signal;
 pub use field::{Field, FieldSubscription, StoreSubscription};
 
@@ -81,7 +82,7 @@ pub fn field<TScope, TValue, S>(
     store: &Arc<S>,
     key: &str,
     default: TValue,
-) -> Result<Field<TValue, S>>
+) -> Result<Field<TValue, S, WritableMode>>
 where
     TScope: StateScope,
     S: Store,
@@ -91,14 +92,15 @@ where
     field_with_path(store, path, default)
 }
 
-pub fn field_with_path<TValue, S>(
+pub fn field_with_path<TValue, S, M>(
     store: &Arc<S>,
     path: Arc<str>,
     default: TValue,
-) -> Result<Field<TValue, S>>
+) -> Result<Field<TValue, S, M>>
 where
     S: Store,
     TValue: Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
+    M: shared::AccessMode,
 {
     if store.get::<TValue>(&path)?.is_none() {
         store.set(&path, &default)?;
@@ -132,5 +134,6 @@ where
             store: Arc::clone(store),
             id,
         })),
+        _mode: std::marker::PhantomData,
     })
 }
