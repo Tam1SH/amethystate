@@ -1,8 +1,8 @@
 pub mod signal;
 pub mod store;
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 pub use signal::{Signal, SignalSubscription};
 use std::sync::Arc;
 pub use store::Result;

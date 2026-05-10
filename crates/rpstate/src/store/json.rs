@@ -1,19 +1,17 @@
-use super::{error::Error, Result};
+use super::{Result, error::Error};
 use crate::store::config::StoreConfig;
 use crate::store::debouncer::Debouncer;
-use crate::store::shared::{matches_kind, SubscriptionEntry};
+use crate::store::shared::{SubscriptionEntry, matches_kind};
 use crate::store::{Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId, SubscriptionKind};
-use anyhow::{anyhow, bail, Context};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
 use std::{collections::BTreeSet, thread};
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{debug, info, warn};
 
 pub struct JsonStore {
     path: PathBuf,
@@ -122,11 +120,13 @@ impl Store for JsonStore {
     }
 
     fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
-        Ok(serde_json::from_slice(bytes).map_err(|e| Error::Serialization(e.to_string()))?)
+        serde_json::from_slice(bytes).map_err(|e| Error::Serialization(e.to_string()))
     }
 
-    fn evolve_prefix(&self, prefix: &str, version: u32, hash: u64) -> Result<()> {
-        todo!()
+    fn evolve_prefix(&self, _prefix: &str, _version: u32, _hash: u64) -> Result<()> {
+        Err(Error::Backend(
+            "JSON backend migrations are not implemented".to_string(),
+        ))
     }
 }
 
@@ -162,12 +162,11 @@ impl JsonStore {
             let snapshot = persist_inner.read().unwrap().clone();
             if let Err(e) = persist_atomic(&persist_path, &snapshot) {
                 warn!("store save failed: {e:#}");
-            } else if let Ok(meta) = std::fs::metadata(&persist_path) {
-                if let Ok(mtime) = meta.modified() {
-                    if let Ok(mut lw) = lw_capture.write() {
-                        *lw = Some(mtime);
-                    }
-                }
+            } else if let Ok(meta) = std::fs::metadata(&persist_path)
+                && let Ok(mtime) = meta.modified()
+                && let Ok(mut lw) = lw_capture.write()
+            {
+                *lw = Some(mtime);
             }
         });
 
@@ -181,12 +180,11 @@ impl JsonStore {
 
                 if let Ok(meta) = std::fs::metadata(&watch_path) {
                     let mtime = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-                    if let Ok(lw) = watch_mtime.read() {
-                        if let Some(last) = *lw {
-                            if mtime <= last {
-                                continue;
-                            }
-                        }
+                    if let Ok(lw) = watch_mtime.read()
+                        && let Some(last) = *lw
+                        && mtime <= last
+                    {
+                        continue;
                     }
                 }
 
@@ -503,9 +501,9 @@ fn persist_atomic(path: &Path, map: &Map<String, Value>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use std::sync::Mutex;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_test_path(suffix: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -517,10 +515,6 @@ mod tests {
 
     fn make_store(suffix: &str) -> JsonStore {
         JsonStore::open(StoreConfig::new(unique_test_path(suffix))).unwrap()
-    }
-
-    fn decode_event_value(bytes: Option<&Vec<u8>>) -> Option<Value> {
-        bytes.map(|b| serde_json::from_slice(b).expect("event bytes must be valid JSON"))
     }
 
     #[test]

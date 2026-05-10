@@ -1,5 +1,5 @@
-use crate::store::migration::{MigrationContext, Migrator};
 use crate::store::StateScope;
+use crate::store::migration::{MigrationContext, Migrator};
 
 pub trait HasMigrations: StateScope {
     const MIGRATION_DEPS: &'static [&'static str];

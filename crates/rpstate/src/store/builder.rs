@@ -2,9 +2,9 @@ use super::Result;
 use crate::store::config::StoreConfig;
 #[cfg(feature = "json")]
 use crate::store::json::JsonStore;
+use crate::store::migration::Migrator;
 use crate::store::migration::registry::MigrationStepEntry;
 use crate::store::migration::set::MigrationSet;
-use crate::store::migration::Migrator;
 #[cfg(feature = "redb")]
 use crate::store::redb::RedbStore;
 use std::collections::{HashMap, HashSet};
@@ -82,7 +82,7 @@ impl StoreBuilder {
     }
 
     pub fn build(self) -> Result<crate::DefaultStore> {
-        #[cfg(all(feature = "redb"))]
+        #[cfg(feature = "redb")]
         return self.build_redb();
 
         #[cfg(all(feature = "json", not(feature = "redb")))]

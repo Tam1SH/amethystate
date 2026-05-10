@@ -78,7 +78,6 @@ impl ::rpstate::store::shared::RpStateNode for NetworkConfig {
 pub struct NetworkConfig_Data {
     pub host: String,
     pub port: u16,
-    pub connected: bool,
 }
 #[doc(hidden)]
 #[allow(
@@ -102,7 +101,7 @@ const _: () = {
             let mut __serde_state = _serde::Serializer::serialize_struct(
                 __serializer,
                 "NetworkConfig_Data",
-                false as usize + 1 + 1 + 1,
+                false as usize + 1 + 1,
             )?;
             _serde::ser::SerializeStruct::serialize_field(
                 &mut __serde_state,
@@ -113,11 +112,6 @@ const _: () = {
                 &mut __serde_state,
                 "port",
                 &self.port,
-            )?;
-            _serde::ser::SerializeStruct::serialize_field(
-                &mut __serde_state,
-                "connected",
-                &self.connected,
             )?;
             _serde::ser::SerializeStruct::end(__serde_state)
         }
@@ -146,7 +140,6 @@ const _: () = {
             enum __Field {
                 __field0,
                 __field1,
-                __field2,
                 __ignore,
             }
             #[doc(hidden)]
@@ -173,7 +166,6 @@ const _: () = {
                     match __value {
                         0u64 => _serde::__private228::Ok(__Field::__field0),
                         1u64 => _serde::__private228::Ok(__Field::__field1),
-                        2u64 => _serde::__private228::Ok(__Field::__field2),
                         _ => _serde::__private228::Ok(__Field::__ignore),
                     }
                 }
@@ -187,7 +179,6 @@ const _: () = {
                     match __value {
                         "host" => _serde::__private228::Ok(__Field::__field0),
                         "port" => _serde::__private228::Ok(__Field::__field1),
-                        "connected" => _serde::__private228::Ok(__Field::__field2),
                         _ => _serde::__private228::Ok(__Field::__ignore),
                     }
                 }
@@ -201,7 +192,6 @@ const _: () = {
                     match __value {
                         b"host" => _serde::__private228::Ok(__Field::__field0),
                         b"port" => _serde::__private228::Ok(__Field::__field1),
-                        b"connected" => _serde::__private228::Ok(__Field::__field2),
                         _ => _serde::__private228::Ok(__Field::__ignore),
                     }
                 }
@@ -254,7 +244,7 @@ const _: () = {
                             return _serde::__private228::Err(
                                 _serde::de::Error::invalid_length(
                                     0usize,
-                                    &"struct NetworkConfig_Data with 3 elements",
+                                    &"struct NetworkConfig_Data with 2 elements",
                                 ),
                             );
                         }
@@ -267,20 +257,7 @@ const _: () = {
                             return _serde::__private228::Err(
                                 _serde::de::Error::invalid_length(
                                     1usize,
-                                    &"struct NetworkConfig_Data with 3 elements",
-                                ),
-                            );
-                        }
-                    };
-                    let __field2 = match _serde::de::SeqAccess::next_element::<
-                        bool,
-                    >(&mut __seq)? {
-                        _serde::__private228::Some(__value) => __value,
-                        _serde::__private228::None => {
-                            return _serde::__private228::Err(
-                                _serde::de::Error::invalid_length(
-                                    2usize,
-                                    &"struct NetworkConfig_Data with 3 elements",
+                                    &"struct NetworkConfig_Data with 2 elements",
                                 ),
                             );
                         }
@@ -288,7 +265,6 @@ const _: () = {
                     _serde::__private228::Ok(NetworkConfig_Data {
                         host: __field0,
                         port: __field1,
-                        connected: __field2,
                     })
                 }
                 #[inline]
@@ -301,7 +277,6 @@ const _: () = {
                 {
                     let mut __field0: _serde::__private228::Option<String> = _serde::__private228::None;
                     let mut __field1: _serde::__private228::Option<u16> = _serde::__private228::None;
-                    let mut __field2: _serde::__private228::Option<bool> = _serde::__private228::None;
                     while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                         __Field,
                     >(&mut __map)? {
@@ -326,18 +301,6 @@ const _: () = {
                                     _serde::de::MapAccess::next_value::<u16>(&mut __map)?,
                                 );
                             }
-                            __Field::__field2 => {
-                                if _serde::__private228::Option::is_some(&__field2) {
-                                    return _serde::__private228::Err(
-                                        <__A::Error as _serde::de::Error>::duplicate_field(
-                                            "connected",
-                                        ),
-                                    );
-                                }
-                                __field2 = _serde::__private228::Some(
-                                    _serde::de::MapAccess::next_value::<bool>(&mut __map)?,
-                                );
-                            }
                             _ => {
                                 let _ = _serde::de::MapAccess::next_value::<
                                     _serde::de::IgnoredAny,
@@ -357,21 +320,14 @@ const _: () = {
                             _serde::__private228::de::missing_field("port")?
                         }
                     };
-                    let __field2 = match __field2 {
-                        _serde::__private228::Some(__field2) => __field2,
-                        _serde::__private228::None => {
-                            _serde::__private228::de::missing_field("connected")?
-                        }
-                    };
                     _serde::__private228::Ok(NetworkConfig_Data {
                         host: __field0,
                         port: __field1,
-                        connected: __field2,
                     })
                 }
             }
             #[doc(hidden)]
-            const FIELDS: &'static [&'static str] = &["host", "port", "connected"];
+            const FIELDS: &'static [&'static str] = &["host", "port"];
             _serde::Deserializer::deserialize_struct(
                 __deserializer,
                 "NetworkConfig_Data",
@@ -392,7 +348,6 @@ impl ::core::default::Default for NetworkConfig_Data {
         NetworkConfig_Data {
             host: ::core::default::Default::default(),
             port: ::core::default::Default::default(),
-            connected: ::core::default::Default::default(),
         }
     }
 }
@@ -404,12 +359,38 @@ impl ::core::clone::Clone for NetworkConfig_Data {
         NetworkConfig_Data {
             host: ::core::clone::Clone::clone(&self.host),
             port: ::core::clone::Clone::clone(&self.port),
-            connected: ::core::clone::Clone::clone(&self.connected),
         }
     }
 }
+#[automatically_derived]
+#[allow(non_camel_case_types)]
+impl ::core::fmt::Debug for NetworkConfig_Data {
+    #[inline]
+    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        ::core::fmt::Formatter::debug_struct_field2_finish(
+            f,
+            "NetworkConfig_Data",
+            "host",
+            &self.host,
+            "port",
+            &&self.port,
+        )
+    }
+}
 impl ::rpstate::store::migration::fields::RpStateFields for NetworkConfig_Data {
-    const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[];
+    const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
+        ::rpstate::store::migration::fields::FieldDescriptor {
+            name: "host",
+            type_hash: <String as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+        },
+        ::rpstate::store::migration::fields::FieldDescriptor {
+            name: "port",
+            type_hash: <u16 as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+        },
+    ];
+    const VERSION: u32 = 0u32;
+    const PARENT_PREFIX: &'static str = "net";
+    const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(
         ctx: &::rpstate::store::migration::MigrationContext,
     ) -> ::rpstate::store::Result<Self> {
@@ -436,19 +417,6 @@ impl ::rpstate::store::migration::fields::RpStateFields for NetworkConfig_Data {
                         }),
                     )
                 })?,
-            connected: ctx
-                .get::<bool>("connected")?
-                .ok_or_else(|| {
-                    ::rpstate::store::error::Error::Serialization(
-                        ::alloc::__export::must_use({
-                            ::alloc::fmt::format(
-                                format_args!(
-                                    "Field {0} missing during migration", "connected",
-                                ),
-                            )
-                        }),
-                    )
-                })?,
         })
     }
     fn save_struct(
@@ -457,7 +425,6 @@ impl ::rpstate::store::migration::fields::RpStateFields for NetworkConfig_Data {
     ) -> ::rpstate::store::Result<()> {
         ctx.set("host", &self.host)?;
         ctx.set("port", &self.port)?;
-        ctx.set("connected", &self.connected)?;
         Ok(())
     }
 }

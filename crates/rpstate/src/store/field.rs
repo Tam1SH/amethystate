@@ -251,10 +251,10 @@ mod tests {
 
         field.set(true).expect("Volatile set should work");
 
-        assert_eq!(field.get(), true);
+        assert!(field.get());
 
         assert!(*call_count.lock().unwrap() >= 1);
-        assert_eq!(*last_val.lock().unwrap(), true);
+        assert!(*last_val.lock().unwrap());
 
         let in_store: Option<bool> = store.get(&field_path).unwrap();
         assert!(

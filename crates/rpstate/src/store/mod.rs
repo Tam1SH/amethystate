@@ -20,11 +20,11 @@ pub mod shared;
 pub use error::Result;
 use std::sync::Arc;
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
-use crate::store::shared::WritableMode;
 use crate::Signal;
+use crate::store::shared::WritableMode;
 pub use field::{Field, FieldSubscription, StoreSubscription};
 
 pub type SubscriptionId = u64;

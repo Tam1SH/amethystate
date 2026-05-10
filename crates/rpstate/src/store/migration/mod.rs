@@ -141,3 +141,9 @@ impl Migrator {
         self
     }
 }
+
+impl Default for Migrator {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -1,24 +1,24 @@
 use crate::store::{
-    debouncer::Debouncer, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId,
-    SubscriptionKind,
+    Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId, SubscriptionKind,
+    debouncer::Debouncer,
 };
 use redb::{
     Database, ReadTransaction, ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction,
 };
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 
-use super::{error::Error, Result};
+use super::{Result, error::Error};
 use crate::store::config::StoreConfig;
 use crate::store::migration::set::MigrationSet;
 use crate::store::migration::{
     AppliedStep, ComponentOutcome, ComponentResult, MigrationContext, MigrationReport, Migrator,
     NaggingRecord, RawStorage,
 };
-use crate::store::shared::{matches_kind, DiffEntry, PrefixMeta, SubscriptionEntry};
-use rmp_serde::config::BytesMode;
+use crate::store::shared::{DiffEntry, PrefixMeta, SubscriptionEntry, matches_kind};
 use rmp_serde::Serializer;
+use rmp_serde::config::BytesMode;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
@@ -407,7 +407,7 @@ impl RedbStore {
         let mut history: Vec<DiffEntry> =
             txn.load_typed(TABLE_DIFF_LOG, prefix)?.unwrap_or_default();
 
-        if history.last().map_or(true, |l| l.new_hash != new_h) {
+        if history.last().is_none_or(|l| l.new_hash != new_h) {
             history.push(DiffEntry {
                 timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -602,7 +602,7 @@ impl Store for RedbStore {
                         .map_err(|e| Error::Serialization(e.to_string()))?
                         .unwrap_or_default();
 
-                    if history.last().map_or(true, |l| l.new_hash != hash) {
+                    if history.last().is_none_or(|l| l.new_hash != hash) {
                         history.push(DiffEntry {
                             timestamp: std::time::SystemTime::now()
                                 .duration_since(std::time::UNIX_EPOCH)
@@ -621,9 +621,9 @@ impl Store for RedbStore {
                 }
             }
 
-            let needs_meta_update = saved_meta.as_ref().map_or(true, |m| {
-                m.version != version || (m.version == version && m.hash == hash)
-            });
+            let needs_meta_update = saved_meta
+                .as_ref()
+                .is_none_or(|m| m.version != version || m.hash == hash);
 
             if needs_meta_update {
                 let new_meta = PrefixMeta { version, hash };

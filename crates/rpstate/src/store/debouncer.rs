@@ -34,10 +34,10 @@ impl Debouncer {
     }
 
     pub fn schedule(&self) {
-        if let Some(ref tx) = self.tx {
-            if let Err(e) = tx.send(()) {
-                warn!("failed to schedule debounced operation: channel closed ({e})");
-            }
+        if let Some(ref tx) = self.tx
+            && let Err(e) = tx.send(())
+        {
+            warn!("failed to schedule debounced operation: channel closed ({e})");
         }
     }
 

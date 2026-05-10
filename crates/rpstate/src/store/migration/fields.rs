@@ -1,5 +1,5 @@
-use crate::store::migration::MigrationContext;
 use crate::store::Result;
+use crate::store::migration::MigrationContext;
 
 pub struct FieldDescriptor {
     pub name: &'static str,

@@ -1,10 +1,10 @@
 use darling::util::SpannedValue;
-use darling::{ast::NestedMeta, FromField, FromMeta};
+use darling::{FromField, FromMeta, ast::NestedMeta};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{
-    parse_macro_input, Data, DataStruct, DeriveInput, Expr, Fields, Ident, Type, Visibility,
+    Data, DataStruct, DeriveInput, Expr, Fields, Ident, Type, Visibility, parse_macro_input,
 };
 
 #[derive(Debug, FromMeta)]

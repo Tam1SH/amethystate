@@ -178,7 +178,7 @@ mod tests {
 
         match result {
             Error::MigrationCycle(prefix) => {
-                assert!(vec!["a", "b", "c"].contains(&prefix.as_str()));
+                assert!(["a", "b", "c"].contains(&prefix.as_str()));
             }
             _ => panic!("Expected MigrationCycle error"),
         }

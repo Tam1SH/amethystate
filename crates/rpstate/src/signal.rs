@@ -2,10 +2,13 @@ use arc_swap::ArcSwap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+type SignalCallback<T> = Arc<dyn Fn(&T) + Send + Sync + 'static>;
+type SignalSubscribers<T> = Arc<Mutex<Vec<(u64, SignalCallback<T>)>>>;
+
 #[derive(Clone)]
 pub struct Signal<T> {
     pub(crate) value: Arc<ArcSwap<T>>,
-    pub(crate) subscribers: Arc<Mutex<Vec<(u64, Arc<dyn Fn(&T) + Send + Sync + 'static>)>>>,
+    pub(crate) subscribers: SignalSubscribers<T>,
     pub(crate) next_id: Arc<AtomicU64>,
 }
 
