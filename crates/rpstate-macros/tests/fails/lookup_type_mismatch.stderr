@@ -1,16 +1,16 @@
-error[E0277]: the trait bound `ReadOnly<u16>: TypeCheck<String>` is not satisfied
+error[E0277]: the trait bound `ReadOnly<u16>: TypeCheck<std::string::String>` is not satisfied
   --> tests/fails/lookup_type_mismatch.rs:11:22
    |
 11 |     #[state(lookup = "port", parent = NetworkState)]
-   |                      ^^^^^^ the trait `TypeCheck<String>` is not implemented for `ReadOnly<u16>`
+   |                      ^^^^^^ the trait `TypeCheck<std::string::String>` is not implemented for `ReadOnly<u16>`
    |
-help: the trait `TypeCheck<String>` is not implemented for `ReadOnly<u16>`
+help: the trait `TypeCheck<std::string::String>` is not implemented for `ReadOnly<u16>`
       but trait `TypeCheck<u16>` is implemented for it
   --> tests/fails/lookup_type_mismatch.rs:11:22
    |
 11 |     #[state(lookup = "port", parent = NetworkState)]
    |                      ^^^^^^
-   = help: for that trait implementation, expected `u16`, found `String`
+   = help: for that trait implementation, expected `u16`, found `std::string::String`
 note: required by a bound in `assert_field_type_matches_lookup`
   --> tests/fails/lookup_type_mismatch.rs:11:22
    |

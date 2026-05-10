@@ -71,12 +71,12 @@ pub struct NetworkState {
 
 #[rpstate(prefix = "ui")]
 pub struct UiState {
-    // Read-only link
-    #[state(lookup = "port", parent = NetworkState)]
+    // Read-write link
+    #[state(lookup = "port", parent = NetworkState, export_mut)]
     pub proxy_port: u16,
 
-    // Read-write link
-    #[state(lookup = "host", parent = NetworkState, export_mut)]
+    // Read-only link
+    #[state(lookup = "host", parent = NetworkState)]
     pub proxy_host: String,
 }
 ```

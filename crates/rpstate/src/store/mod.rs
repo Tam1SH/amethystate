@@ -22,7 +22,6 @@ use std::sync::Arc;
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use tracing::error;
 
 use crate::store::shared::WritableMode;
 use crate::Signal;

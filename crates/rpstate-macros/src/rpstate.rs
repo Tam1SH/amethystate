@@ -11,6 +11,10 @@ use syn::{
 struct MacroArgs {
     #[darling(default)]
     prefix: Option<String>,
+    #[darling(default)]
+    version: Option<u32>,
+    #[darling(default)]
+    migrations: bool,
 }
 
 #[derive(Debug, FromField)]
@@ -92,7 +96,14 @@ pub fn rpstate_impl(
         entries.push(entry);
     }
 
-    let expanded = generate_code(struct_vis, struct_name, attrs, macro_args.prefix, &entries);
+    let expanded = generate_code(
+        struct_vis,
+        struct_name,
+        attrs,
+        macro_args.prefix.clone(),
+        &entries,
+        macro_args,
+    );
 
     proc_macro::TokenStream::from(expanded)
 }
@@ -103,6 +114,7 @@ fn generate_code(
     attrs: &[syn::Attribute],
     prefix: Option<String>,
     entries: &[StoreFieldEntry],
+    macro_args: MacroArgs,
 ) -> TokenStream2 {
     let is_root = prefix.is_some();
 
@@ -120,6 +132,100 @@ fn generate_code(
             pub fn #mname() -> #wrapper<#ty> { ::std::unreachable!() }
         }
     });
+
+    let leaf_fields: Vec<_> = entries
+        .iter()
+        .filter(|e| !e.nested && e.lookup.is_none() && e.lookup_node.is_none() && !e.volatile)
+        .collect();
+
+    let data_struct_name = format_ident!("{}_Data", name);
+    let data_fields = leaf_fields.iter().map(|e| {
+        let fname = e.ident.as_ref().unwrap();
+        let ty = &e.ty;
+        quote! { pub #fname: #ty }
+    });
+
+    let version_val = macro_args.version.unwrap_or(0);
+
+    let field_descriptors = leaf_fields.iter().map(|e| {
+        let name = e.ident.as_ref().unwrap().to_string();
+        let ty = &e.ty;
+        quote! {
+            ::rpstate::store::migration::fields::FieldDescriptor {
+                name: #name,
+                type_hash: <#ty as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+            }
+        }
+    });
+
+    let load_fields = leaf_fields.iter().map(|e| {
+        let fname = e.ident.as_ref().unwrap();
+        let key = e.key.clone().unwrap_or_else(|| fname.to_string());
+        let ty = &e.ty;
+        quote! {
+        #fname: ctx.get::<#ty>(#key)?.ok_or_else(|| {
+            ::rpstate::store::error::Error::Serialization(format!("Field {} missing during migration", #key))
+        })?
+    }
+    });
+
+    let save_fields = leaf_fields.iter().map(|e| {
+        let fname = e.ident.as_ref().unwrap();
+        let key = e.key.clone().unwrap_or_else(|| fname.to_string());
+        quote! { ctx.set(#key, &self.#fname)?; }
+    });
+
+    let deps = entries
+        .iter()
+        .filter_map(|e| e.parent.as_ref())
+        .map(|p| quote! { <#p as ::rpstate::StateScope>::PREFIX })
+        .collect::<Vec<_>>();
+
+    let prefix_expr = prefix.clone().unwrap_or_default();
+    let fields_impl = quote! {
+        #[derive(::rpstate::serde::Serialize, ::rpstate::serde::Deserialize, Default, Clone, Debug)]
+        #[doc(hidden)]
+        #[allow(non_camel_case_types)]
+        pub struct #data_struct_name {
+            #(#data_fields,)*
+        }
+
+        impl ::rpstate::store::migration::fields::RpStateFields for #data_struct_name {
+            const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
+                #(#field_descriptors),*
+            ];
+            const VERSION: u32 = #version_val;
+            const PARENT_PREFIX: &'static str = #prefix_expr;
+            const MIGRATION_DEPS: &'static [&'static str] = &[ #(#deps),* ];
+
+            fn load_struct(ctx: &::rpstate::store::migration::MigrationContext) -> ::rpstate::store::Result<Self> {
+                Ok(Self { #(#load_fields,)* })
+            }
+
+            fn save_struct(&self, ctx: &mut ::rpstate::store::migration::MigrationContext) -> ::rpstate::store::Result<()> {
+                #(#save_fields)*
+                Ok(())
+            }
+        }
+
+        impl ::rpstate::store::shared::RpState for #name {
+            type Data = #data_struct_name;
+        }
+    };
+
+    let migrations_registry = if macro_args.migrations {
+        quote! {
+            impl ::rpstate::store::migration::registry::HasMigrations for #name {
+                const MIGRATION_DEPS: &'static [&'static str] = &[ #(#deps),* ];
+                fn migrations() -> ::rpstate::store::migration::Migrator {
+                    build_migrations()
+                }
+            }
+            ::rpstate::register_migrations!(#name);
+        }
+    } else {
+        quote!()
+    };
 
     let struct_fields = entries.iter().map(|e| {
         let fname = e.ident.as_ref().unwrap();
@@ -292,5 +398,7 @@ fn generate_code(
         #scope
         impl #name { #constructor #(#schema_methods)* #(#methods)* }
         #node_impl
+        #fields_impl
+        #migrations_registry
     }
 }

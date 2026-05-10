@@ -1,6 +1,6 @@
 use super::Migrator;
-use crate::store::error::Error;
 use crate::store::Result;
+use crate::store::error::Error;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;

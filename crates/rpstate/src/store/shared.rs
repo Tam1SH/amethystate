@@ -1,3 +1,4 @@
+use crate::store::migration::fields::RpStateFields;
 use crate::store::{StoreCallback, SubscriptionId};
 use crate::{DefaultStore, SubscriptionKind};
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,10 @@ pub struct Writable<T>(std::marker::PhantomData<T>);
 
 pub trait RpStateNode: Sized {
     fn new_node(store: &Arc<DefaultStore>, path: &str) -> crate::store::Result<Self>;
+}
+
+pub trait RpState {
+    type Data: RpStateFields + Serialize + for<'de> Deserialize<'de> + Clone + Send + Sync + 'static;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]

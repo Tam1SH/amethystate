@@ -19,5 +19,6 @@ redb = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
 thiserror.workspace = true
 petgraph.workspace = true
+inventory = "0.3.24"
 [dev-dependencies]
 proptest = "1.11.0"

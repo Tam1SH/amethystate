@@ -2,12 +2,11 @@ use crate::store::{
     debouncer::Debouncer, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId,
     SubscriptionKind,
 };
-use anyhow::{anyhow, Context};
 use redb::{
     Database, ReadTransaction, ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction,
 };
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 
 use super::{error::Error, Result};
@@ -22,6 +21,7 @@ use rmp_serde::config::BytesMode;
 use rmp_serde::Serializer;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
+use std::thread::JoinHandle;
 use std::{thread, time::Duration};
 use tracing::{error, info, warn};
 
@@ -37,10 +37,13 @@ pub struct RedbStore {
     debouncer: Debouncer,
     subscriptions: Arc<RwLock<Vec<SubscriptionEntry>>>,
     next_sub_id: AtomicU64,
+
+    watcher_tx: std::sync::mpsc::Sender<()>,
+    watcher_handle: Option<JoinHandle<()>>,
 }
 
 impl RedbStore {
-    pub fn open(config: StoreConfig) -> Result<Self> {
+    pub fn open(config: StoreConfig, migration_set: MigrationSet) -> Result<Self> {
         let db = Arc::new(Database::create(&config.path).map_err(map_db_err)?);
 
         let write_txn = db.begin_write().map_err(map_db_err)?;
@@ -57,6 +60,9 @@ impl RedbStore {
 
         let pending = Arc::new(Mutex::new(HashMap::<String, Option<Vec<u8>>>::new()));
         let subscriptions = Arc::new(RwLock::new(Vec::new()));
+        let (w_tx, w_rx) = std::sync::mpsc::channel();
+        let db_inner = db.clone();
+        let subs_inner = subscriptions.clone();
 
         let db_save = db.clone();
         let pending_save = pending.clone();
@@ -86,28 +92,67 @@ impl RedbStore {
             }
         });
 
+        let watcher_handle = thread::spawn(move || {
+            while w_rx.recv_timeout(Duration::from_millis(300)).is_err() {
+                let _ = Self::process_inbox(&db_inner, &subs_inner);
+            }
+        });
+
         let store = Self {
             db: db.clone(),
             pending,
             debouncer,
             subscriptions: subscriptions.clone(),
             next_sub_id: AtomicU64::new(1),
+            watcher_tx: w_tx,
+            watcher_handle: Some(watcher_handle),
         };
 
-        store.spawn_watcher();
+        let _ = store.run_migrations(migration_set)?;
 
         Ok(store)
     }
 
-    fn spawn_watcher(&self) {
-        let db = self.db.clone();
-        let subs = self.subscriptions.clone();
-        thread::spawn(move || {
-            loop {
-                thread::sleep(Duration::from_millis(300));
-                let _ = Self::process_inbox(&db, &subs);
+    pub fn close(&mut self) -> Result<()> {
+        info!("Closing RedbStore explicitly...");
+
+        let _ = self.watcher_tx.send(());
+        if let Some(handle) = self.watcher_handle.take() {
+            let _ = handle.join();
+        }
+
+        self.save_now()?;
+
+        Ok(())
+    }
+
+    pub fn save_now(&self) -> Result<()> {
+        let changes = {
+            let mut lock = self.pending.lock().map_err(|_| Error::Poisoned)?;
+            if lock.is_empty() {
+                return Ok(());
             }
-        });
+            std::mem::take(&mut *lock)
+        };
+
+        let txn = self.db.begin_write().map_err(map_db_err)?;
+        {
+            let mut table = txn.open_table(TABLE_DATA).map_err(map_db_err)?;
+            for (path, opt_bytes) in changes {
+                match opt_bytes {
+                    Some(b) => {
+                        table
+                            .insert(path.as_str(), b.as_slice())
+                            .map_err(map_db_err)?;
+                    }
+                    None => {
+                        table.remove(path.as_str()).map_err(map_db_err)?;
+                    }
+                }
+            }
+        }
+        txn.commit().map_err(map_db_err)?;
+        Ok(())
     }
 
     fn process_inbox(db: &Database, subs: &RwLock<Vec<SubscriptionEntry>>) -> Result<()> {
@@ -376,6 +421,12 @@ impl RedbStore {
             table.insert(prefix, bytes.as_slice()).map_err(map_db_err)?;
         }
         Ok(())
+    }
+}
+
+impl Drop for RedbStore {
+    fn drop(&mut self) {
+        let _ = self.close();
     }
 }
 
@@ -679,7 +730,7 @@ mod tests {
     #[test]
     fn test_set_get_immediate() {
         let path = unique_path("immediate");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         store.set("user.name", &"Alice".to_string()).unwrap();
 
@@ -690,7 +741,7 @@ mod tests {
     #[test]
     fn test_debouncer_persistence() {
         let path = unique_path("debounce");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         store.set("config.port", &8080u16).unwrap();
 
@@ -712,7 +763,7 @@ mod tests {
     #[test]
     fn test_local_reactivity() {
         let path = unique_path("reactivity");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         let hit = Arc::new(Mutex::new(false));
         let hit_inner = hit.clone();
@@ -733,7 +784,7 @@ mod tests {
     #[test]
     fn test_inbox_watcher_sync() {
         let path = unique_path("inbox");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         let (tx, rx) = std::sync::mpsc::channel();
         store.subscribe(
@@ -778,7 +829,7 @@ mod tests {
     #[test]
     fn test_delete_flow() {
         let path = unique_path("delete");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         store.set("temp.key", &1).unwrap();
         thread::sleep(Duration::from_millis(400));
@@ -796,7 +847,7 @@ mod tests {
     #[test]
     fn test_first_initialization() {
         let path = unique_path("init");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         store.evolve_prefix("ui", 1, 123).unwrap();
 
@@ -812,7 +863,7 @@ mod tests {
     #[test]
     fn test_migration_required_error() {
         let path = unique_path("mig_req");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         store.evolve_prefix("app", 1, 100).unwrap();
 
@@ -835,7 +886,7 @@ mod tests {
     #[test]
     fn test_downgrade_error() {
         let path = unique_path("downgrade");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         store.evolve_prefix("app", 5, 500).unwrap();
 
@@ -858,7 +909,7 @@ mod tests {
     #[test]
     fn test_nagging_does_not_update_meta() {
         let path = unique_path("nagging");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         store.evolve_prefix("net", 1, 100).unwrap();
 
@@ -882,7 +933,7 @@ mod tests {
     #[test]
     fn test_smart_recovery_decode() {
         let path = unique_path("recovery");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
         let garbage = vec![0x00, 0x01, 0x02];
 
         let result: String = store.decode(&garbage).unwrap();
@@ -894,7 +945,7 @@ mod tests {
         let path = unique_path("rollback");
         let mut cfg = StoreConfig::new(path);
         cfg.save_debounce = Duration::from_millis(50);
-        let store = RedbStore::open(cfg).unwrap();
+        let store = RedbStore::open(cfg, MigrationSet::default()).unwrap();
 
         store.set("net.ip", &"1.1.1.1".to_string()).unwrap();
         thread::sleep(Duration::from_millis(60));
@@ -921,7 +972,7 @@ mod tests {
     #[test]
     fn test_independent_components_success() {
         let path = unique_path("independent");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         let mset = MigrationSet::default()
             .add(
@@ -944,7 +995,7 @@ mod tests {
     #[test]
     fn test_idle_migration_skipped() {
         let path = unique_path("idle");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         let mset1 = MigrationSet::default().add(
             "app",
@@ -967,7 +1018,7 @@ mod tests {
     #[test]
     fn test_partial_migration_within_component() {
         let path = unique_path("partial");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         {
             let write_txn = store.db.begin_write().unwrap();
@@ -1016,7 +1067,7 @@ mod tests {
     #[test]
     fn test_multiple_steps_migration_order() {
         let path = unique_path("multi_steps_order");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         let mset = MigrationSet::default().add(
             "app",
@@ -1045,7 +1096,7 @@ mod tests {
     #[test]
     fn test_migration_resume_from_version() {
         let path = unique_path("resume_v");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         let mset1 = MigrationSet::default().add(
             "app",
@@ -1074,7 +1125,7 @@ mod tests {
     #[test]
     fn test_migration_gap_detection() {
         let path = unique_path("gap_failure");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         let mset = MigrationSet::default().add(
             "app",
@@ -1105,7 +1156,7 @@ mod tests {
     #[test]
     fn test_migration_gap_at_start() {
         let path = unique_path("gap_start");
-        let store = RedbStore::open(StoreConfig::new(path)).unwrap();
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         let mset =
             MigrationSet::default().add("app", Migrator::new().step(2, "v2", |_| Ok(())), &[]);
@@ -1125,5 +1176,63 @@ mod tests {
 
         assert_eq!(*reached_version, 0);
         assert_eq!(*expected_version, 1);
+    }
+
+    #[test]
+    fn test_deterministic_closure_and_reopen() {
+        let path = unique_path("closure");
+
+        {
+            let mut store =
+                RedbStore::open(StoreConfig::new(&path), MigrationSet::default()).unwrap();
+            store.set("test.key", &"hello".to_string()).unwrap();
+
+            let second_open = RedbStore::open(StoreConfig::new(&path), MigrationSet::default());
+            assert!(
+                second_open.is_err(),
+                "Should not be able to open DB twice simultaneously"
+            );
+
+            store.close().expect("Explicit close failed");
+        }
+
+        let store_reopened = RedbStore::open(StoreConfig::new(&path), MigrationSet::default())
+            .expect("Database should be available immediately after close");
+
+        let val: Option<String> = store_reopened.get("test.key").unwrap();
+        assert_eq!(val, Some("hello".to_string()));
+    }
+
+    #[test]
+    fn test_drop_behavior_is_deterministic() {
+        let path = unique_path("drop_logic");
+
+        {
+            let store = RedbStore::open(StoreConfig::new(&path), MigrationSet::default()).unwrap();
+            store.set("drop.test", &42u32).unwrap();
+        }
+
+        let store_reopened = RedbStore::open(StoreConfig::new(&path), MigrationSet::default())
+            .expect("Drop must release file lock deterministically");
+
+        assert_eq!(store_reopened.get::<u32>("drop.test").unwrap(), Some(42));
+    }
+
+    #[test]
+    fn test_close_saves_pending_data() {
+        let path = unique_path("save_on_close");
+
+        let mut config = StoreConfig::new(&path);
+        config.save_debounce = Duration::from_secs(3600);
+
+        {
+            let mut store = RedbStore::open(config, MigrationSet::default()).unwrap();
+            store.set("urgent.data", &true).unwrap();
+
+            store.close().unwrap();
+        }
+
+        let store = RedbStore::open(StoreConfig::new(&path), MigrationSet::default()).unwrap();
+        assert_eq!(store.get::<bool>("urgent.data").unwrap(), Some(true));
     }
 }

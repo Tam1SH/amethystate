@@ -8,7 +8,7 @@ error[E0308]: mismatched types
    |                      arguments to this function are incorrect
    |
    = note: expected struct `Writable<_>`
-              found struct `ReadOnly<String>`
+              found struct `ReadOnly<std::string::String>`
 note: function defined here
   --> tests/fails/lookup_write_violation.rs:11:22
    |

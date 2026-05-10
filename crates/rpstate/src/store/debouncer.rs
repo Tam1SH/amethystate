@@ -4,7 +4,8 @@ use std::time::Duration;
 use tracing::{debug, warn};
 
 pub struct Debouncer {
-    tx: mpsc::Sender<()>,
+    tx: Option<mpsc::Sender<()>>,
+    handle: Option<thread::JoinHandle<()>>,
 }
 
 impl Debouncer {
@@ -14,7 +15,7 @@ impl Debouncer {
     {
         let (tx, rx) = mpsc::channel::<()>();
 
-        thread::spawn(move || {
+        let handle = thread::spawn(move || {
             while rx.recv().is_ok() {
                 while let Ok(()) = rx.recv_timeout(interval) {
                     continue;
@@ -26,12 +27,31 @@ impl Debouncer {
             debug!("debouncer thread exiting (channel closed)");
         });
 
-        Self { tx }
+        Self {
+            tx: Some(tx),
+            handle: Some(handle),
+        }
     }
 
     pub fn schedule(&self) {
-        if let Err(e) = self.tx.send(()) {
-            warn!("failed to schedule debounced operation: channel closed ({e})");
+        if let Some(ref tx) = self.tx {
+            if let Err(e) = tx.send(()) {
+                warn!("failed to schedule debounced operation: channel closed ({e})");
+            }
         }
+    }
+
+    fn shutdown(&mut self) {
+        self.tx.take();
+
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl Drop for Debouncer {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }

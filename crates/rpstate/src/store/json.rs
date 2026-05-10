@@ -1,11 +1,11 @@
-use super::{Result, error::Error};
+use super::{error::Error, Result};
 use crate::store::config::StoreConfig;
 use crate::store::debouncer::Debouncer;
-use crate::store::shared::{SubscriptionEntry, matches_kind};
+use crate::store::shared::{matches_kind, SubscriptionEntry};
 use crate::store::{Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId, SubscriptionKind};
-use anyhow::{Context, anyhow, bail};
-use serde::Serialize;
+use anyhow::{anyhow, bail, Context};
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use serde_json::{Map, Value};
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
@@ -121,7 +121,7 @@ impl Store for JsonStore {
         }
     }
 
-    fn decode<T: DeserializeOwned>(&self, bytes: &[u8]) -> Result<T> {
+    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
         Ok(serde_json::from_slice(bytes).map_err(|e| Error::Serialization(e.to_string()))?)
     }
 
@@ -494,11 +494,6 @@ fn persist_atomic(path: &Path, map: &Map<String, Value>) -> Result<()> {
         .map_err(|e| Error::Serialization(e.to_string()))?;
 
     std::fs::write(&tmp, data)?;
-
-    if path.exists() {
-        std::fs::remove_file(path)?;
-    }
-
     std::fs::rename(&tmp, path)?;
 
     debug!("store persisted atomically");
@@ -508,7 +503,7 @@ fn persist_atomic(path: &Path, map: &Map<String, Value>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
     use std::sync::Mutex;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 

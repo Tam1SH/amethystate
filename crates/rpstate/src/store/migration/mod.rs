@@ -1,9 +1,15 @@
 use crate::store::Result;
 
 pub mod context;
+pub mod fields;
+pub mod migrate_from;
+pub mod registry;
 pub mod set;
+pub mod types;
 
 use crate::store::error::Error;
+use crate::store::migration::fields::RpStateFields;
+pub use crate::store::migration::migrate_from::MigrateFrom;
 pub use context::MigrationContext;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -69,6 +75,37 @@ pub struct Migrator {
 impl Migrator {
     pub fn new() -> Self {
         Self { steps: Vec::new() }
+    }
+
+    pub fn codegen_step<TOld, TNew>(self, version: u32) -> Self
+    where
+        TOld: RpStateFields + Send + Sync + 'static,
+        TNew: RpStateFields + MigrateFrom<TOld> + Send + Sync + 'static,
+    {
+        let mut desc = format!("v{} codegen:", version);
+        for (o, n) in TNew::RENAMES {
+            desc.push_str(&format!(" {}->{};", o, n));
+        }
+        for d in TNew::DROPPED {
+            desc.push_str(&format!(" dropped {};", d));
+        }
+
+        self.step(version, &desc, move |ctx| {
+            let old = TOld::load_struct(ctx)?;
+
+            let new_val = TNew::migrate(old)?;
+
+            for (old_name, _) in TNew::RENAMES {
+                ctx.delete(old_name)?;
+            }
+            for dropped_name in TNew::DROPPED {
+                ctx.delete(dropped_name)?;
+            }
+
+            new_val.save_struct(ctx)?;
+
+            Ok(())
+        })
     }
 
     pub fn step<F>(mut self, version: u32, description: &str, f: F) -> Self

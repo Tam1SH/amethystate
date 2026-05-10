@@ -2,8 +2,8 @@ use super::Result;
 use crate::signal::{Signal, SignalSubscription};
 use crate::store::shared::{AccessMode, ReadOnlyMode, WritableMode};
 use crate::store::{Store, SubscriptionId};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -119,10 +119,10 @@ mod tests {
     use super::*;
     use crate::signal::Signal;
     use crate::store::config::StoreConfig;
-    use crate::store::{json::JsonStore, StateScope, Store};
+    use crate::store::{StateScope, Store, json::JsonStore};
     use serde_json::json;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_store(suffix: &str) -> Arc<JsonStore> {

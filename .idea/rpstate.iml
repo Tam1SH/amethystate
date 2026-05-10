@@ -7,6 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-macros/examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-macros/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/rpstate/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />
