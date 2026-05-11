@@ -187,7 +187,7 @@ This allows you to insert logic that, for example, reads data from another node 
 migrated to its latest version:
 
 ```rust
-let store = StoreBuilder::new("./app.redb")
+    let store = StoreBuilder::new("./app.redb")
 .migrations( | m| {
 // 1. Pull in all automatic migrations defined via migrate! macros
 m.collect_codegen();
