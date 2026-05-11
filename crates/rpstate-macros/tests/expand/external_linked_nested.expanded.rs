@@ -396,36 +396,8 @@ impl ::rpstate::store::migration::fields::RpStateFields for ConnectionPool_Data 
         ctx: &::rpstate::store::migration::MigrationContext,
     ) -> ::rpstate::store::Result<Self> {
         Ok(Self {
-            max_connections: ctx
-                .get::<u32>("max_connections")?
-                .ok_or_else(|| {
-                    ::rpstate::store::error::Error::from(
-                        ::rpstate::store::codec::CodecError::Custom(
-                            ::alloc::__export::must_use({
-                                ::alloc::fmt::format(
-                                    format_args!(
-                                        "Field {0} missing during migration", "max_connections",
-                                    ),
-                                )
-                            }),
-                        ),
-                    )
-                })?,
-            timeout_secs: ctx
-                .get::<u32>("timeout_secs")?
-                .ok_or_else(|| {
-                    ::rpstate::store::error::Error::from(
-                        ::rpstate::store::codec::CodecError::Custom(
-                            ::alloc::__export::must_use({
-                                ::alloc::fmt::format(
-                                    format_args!(
-                                        "Field {0} missing during migration", "timeout_secs",
-                                    ),
-                                )
-                            }),
-                        ),
-                    )
-                })?,
+            max_connections: ctx.get::<u32>("max_connections")?.unwrap_or_else(|| 10),
+            timeout_secs: ctx.get::<u32>("timeout_secs")?.unwrap_or_else(|| 30),
         })
     }
     fn save_struct(

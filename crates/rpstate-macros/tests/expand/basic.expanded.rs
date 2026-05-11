@@ -325,19 +325,7 @@ impl ::rpstate::store::migration::fields::RpStateFields for AppConfig_Data {
         ctx: &::rpstate::store::migration::MigrationContext,
     ) -> ::rpstate::store::Result<Self> {
         Ok(Self {
-            port: ctx
-                .get::<u16>("port")?
-                .ok_or_else(|| {
-                    ::rpstate::store::error::Error::from(
-                        ::rpstate::store::codec::CodecError::Custom(
-                            ::alloc::__export::must_use({
-                                ::alloc::fmt::format(
-                                    format_args!("Field {0} missing during migration", "port"),
-                                )
-                            }),
-                        ),
-                    )
-                })?,
+            port: ctx.get::<u16>("port")?.unwrap_or_else(|| 8080),
         })
     }
     fn save_struct(
