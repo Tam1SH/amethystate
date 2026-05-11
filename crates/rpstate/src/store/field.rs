@@ -81,7 +81,7 @@ where
 {
     pub fn set(&self, value: TValue) -> Result<()> {
         if let Some(sub) = &self.store_sub {
-            sub.store.set(&self.path, &value)
+            sub.store.set_owned(self.path.clone(), &value)
         } else {
             self.signal.set(value);
             Ok(())

@@ -1,14 +1,45 @@
 # rpstate
 
-Type-safe reactive persistence with automated migrations and schema drift detection. Designed for GUI applications and
-oriented towards vertical-slice/feature-based architectures with compile-time verified relations.
+Type-safe reactive persistence with automated migrations and schema drift detection. Designed for GUI applications,
+with a focus on vertical-slice/feature-based architectures and compile-time verified relations.
 
-## Backends
+## Why?
 
-| Feature flag     | Backend                                 | Format      |
-|------------------|-----------------------------------------|-------------|
-| `redb` (default) | [redb](https://github.com/cberner/redb) | MessagePack |
-| `json`           | JSON file with file-watcher             | JSON        |
+GUI apps in Rust almost always end up in the same place: one `Arc<Mutex<AppState>>`, one lock on everything, and a
+struct that grows until you're afraid to open it. I haven't seen a single approach that solves this without either
+losing type safety or requiring every feature to know about the entire application upfront.
+
+`rpstate` is my attempt at something different. Each feature declares its own slice of state independently. References
+between slices are explicit and verified by the compiler—mistype a field name or get the type wrong and it's a compile
+error, not a runtime surprise.
+
+Persistence is built in, not bolted on. `.set()` writes to the in-memory buffer, fires reactive subscriptions, and
+schedules a debounced flush to disk—all in one call. There's no separate save layer to think about.
+
+Migrations I built because I got burned once: changed a struct, old data became unreadable, fixing it was miserable. I
+don't need them right now—but I know exactly what happens if they're not there when I do.
+
+## Alternatives
+
+|                                                | Persistence | Reactivity | Migrations | Typed fields |
+|------------------------------------------------|:-----------:|:----------:|:----------:|:------------:|
+| `Arc<Mutex<AppState>>`                         |      ❌      |     ❌      |     ❌      |      ✅       |
+| `rustato`                                      |      ❌      |     ✅      |     ❌      |      ✅       |
+| `reactive-state`                               |      ❌      |     ✅      |     ❌      |      ✅       |
+| `Config managers (confy, figment, twelf, etc)` |      ✅      |     ❌      |     ❌      |      ✅       |
+| `KV stores (redb, sled, etc)`                  |      ✅      |     ?      |     ❌      |      ❌       |
+| `tauri-plugin-store`                           |      ✅      |  partial   |     ❌      |      ❌       |
+| `redb` + `tokio::watch`                        |      ✅      |     ✅      |     ❌      |      ❌       |
+| `Traditional DBs (SQLite, etc)`                |      ✅      |   manual   |     ✅      |      ✅       |
+| **rpstate**                                    |      ✅      |     ✅      |     ✅      |      ✅       |
+
+Why not a traditional database (SQLite + ORM)? It comes down to **Collection-oriented vs. State-oriented** design.
+
+Databases are built to store and query collections of records (users, messages, logs). `rpstate` is built for
+application state—singleton feature slices with field-level reactive signals out of the box.
+
+If you need to manage lists of entities, use a database. If you need reactive, persistent GUI state without the
+boilerplate, use `rpstate`.
 
 ## A note on naming
 
@@ -23,7 +54,6 @@ use rpstate::{rpstate, DefaultStore};
 use rpstate::store::builder::StoreBuilder;
 use std::sync::Arc;
 
-// Define a state slice
 #[rpstate(prefix = "network")]
 pub struct NetworkState {
     #[state(default = "127.0.0.1".to_string())]
@@ -43,15 +73,15 @@ fn main() -> rpstate::Result<()> {
     // Read
     println!("{}", state.host().get()); // "127.0.0.1"
 
-    // Write (persists immediately to pending buffer, flushes to disk debounced)
-    state.set_port(9090)?;
+    // Write — persists to pending buffer immediately, flushes to disk debounced
+    state.port().set(9090)?;
 
     // Subscribe
     let _sub = state.port().subscribe(|p| {
         println!("port changed to {p}");
     });
 
-    state.set_port(3000)?; // triggers callback
+    state.port().set(3000)?; // triggers callback
 
     Ok(())
 }
@@ -59,7 +89,7 @@ fn main() -> rpstate::Result<()> {
 
 ## Cross-struct references
 
-Fields can share storage with another struct.
+Fields can share storage with another struct via `lookup`.
 
 ```rust
 #[rpstate(prefix = "net")]
@@ -73,7 +103,7 @@ pub struct NetworkState {
 
 #[rpstate(prefix = "ui")]
 pub struct UiState {
-    // Read-write link
+    // Read-write link to a single field
     #[state(lookup = "port", parent = NetworkState, export_mut)]
     pub proxy_port: u16,
 
@@ -83,7 +113,7 @@ pub struct UiState {
 }
 ```
 
-or
+`lookup_node` links an entire sub-struct, acting as a namespace for the reactive fields inside it:
 
 ```rust
 #[rpstate]
@@ -100,9 +130,9 @@ pub struct DatabaseState {
 
 #[rpstate(prefix = "ui.inspector")]
 pub struct InspectorState {
-    // Links the entire sub-struct as a reactive node
     #[state(lookup_node = "pool", parent = DatabaseState)]
     pub db_pool_view: ConnectionPool,
+    // Accessed as `state.db_pool_view().max_connections().get()`
 }
 ```
 
@@ -112,7 +142,8 @@ Writing a read-only link → `no method named 'perform_set' found for ReadOnly<T
 
 ## Volatile fields
 
-Fields marked `volatile` live in memory only and are never written to the store.
+Fields marked `volatile` live in memory only and are never written to the store. They reset to their default on every
+restart.
 
 ```rust
 #[rpstate(prefix = "app")]
@@ -121,7 +152,7 @@ pub struct AppState {
     pub port: u16,
 
     #[state(default = false, volatile)]
-    pub loading: bool,   // in-memory only
+    pub loading: bool,   // always starts as false, never persisted
 }
 ```
 
@@ -137,54 +168,91 @@ pub struct DatabaseConfig {
 #[rpstate(prefix = "sys")]
 pub struct SystemSettings {
     #[state(nested)]
-    pub db: DatabaseConfig,   // keys stored at "sys.db.host", etc.
+    pub db: DatabaseConfig,   // stored at "sys.db.host", etc.
 }
 ```
 
----
-
 ## Migrations
 
-The `rpstate` migration system manages persistent state evolution using a dependency graph between components. The
-migrator ensures that all transformations across different nodes are executed in the correct topological order.
+The migration system manages persistent state evolution using a dependency graph between components. All transformations
+are executed in the correct topological order.
 
-### What Migrates and What Doesn't
+### What migrates and what doesn't
 
-The migrator works exclusively with persistent data structures (the generated `_Data` types).
+The migrator works exclusively with persistent data (the generated `_Data` types).
 
-* **Included:** Regular fields and `nested` structures.
-* **Ignored:** Fields marked as `volatile`, `lookup`, or `lookup_node`. These are ephemeral or reactive links; they do
-  not exist in the node's physical storage and therefore do not affect the schema or migration process.
+- **Included:** Regular fields and `nested` structures.
+- **Ignored:** `volatile`, `lookup`, and `lookup_node` fields—they are ephemeral or reactive links and don't exist in
+  physical storage.
 
-### Automatic Steps (`migrate!`)
+### Automatic steps (`migrate!`)
 
-For standard `vN -> vN+1` transitions, the `migrate!` macro handles the heavy lifting:
-
-* **Mapping:** It transforms the old data structure into the new one.
-* **Renaming:** It automatically renames keys in the database if specified in the `rename` block.
-* **Cleanup:** It purges storage of old keys that were either renamed or removed in the new version, ensuring no "dead"
-  data remains.
+Define versioned structs in a `mod v1 { ... }` module, then describe the transformation with the `migrate!` macro.
+It handles field mapping, key renaming in the database, and cleanup of removed keys automatically.
 
 ```rust
-rpstate::migrate! {
+mod v1 {
+    use super::*;
+
+    #[rpstate(prefix = "app", version = 1)]
+    pub struct Config {
+        #[state(default = "localhost".to_string())]
+        pub host: String,
+    }
+}
+
+#[rpstate(prefix = "app", version = 2)]
+pub struct Config {
+    #[state(default = "localhost".to_string())]
+    pub address: String,
+
+    #[state(default = 8080)]
+    pub port: u16,
+}
+
+migrate! {
     v1::Config_Data => Config_Data,
     rename: [host => address],
     |old| {
         Ok(Self {
             address: old.host,
-            port: 9090, 
+            port: 9090,
         })
     }
 }
 ```
 
-### Interleaving and Topological Sorting
+For nested structs, use `migrate_field!` to delegate migration to a child node's own `migrate!` definition:
 
-One of the most powerful features is the ability to **interleave** automatic migrations (from macros) with manual steps
-containing custom logic. The migrator automatically resolves the execution order using topological sorting.
+```rust
+migrate! {
+    v1::SystemConfig_Data => SystemConfig_Data,
+    rename: [],
+    |old, ctx| {
+        Ok(Self {
+            net: migrate_field!(ctx, old.net),
+        })
+    }
+}
+```
 
-This allows you to insert logic that, for example, reads data from another node that is guaranteed to have already been
-migrated to its latest version:
+To run all auto-generated migrations on startup without any custom steps:
+
+```rust
+fn auto_migrations() -> rpstate::Result<()> {
+    let store = Arc::new(
+        StoreBuilder::new("./app.redb")
+            .collect_migrations()
+            .build()?
+    );
+    Ok(())
+}
+```
+
+### Interleaving automatic and manual steps
+
+Use `.migrations(|m| { ... })` to mix codegen migrations with custom logic. The migrator resolves execution order via
+topological sort, so you can safely read data from another node that is guaranteed to have already migrated:
 
 ```rust
 fn migrate() -> rpstate::Result<()> {
@@ -208,22 +276,23 @@ fn migrate() -> rpstate::Result<()> {
                 });
         })
         .build()?;
+    Ok(())
 }
 ```
 
-### Guarantees and Safety
+### Guarantees and safety
 
-1. **Component Atomicity:** Nodes linked by dependencies are grouped into "Weakly Connected Components" (WCC). All
-   migrations within a component are executed inside a single database transaction. A failure in one node rolls back the
-   entire group.
-2. **Gap Detection:** The migrator will fail to start if there is a gap in the version chain (e.g., the database is at
-   `v1`, but the code only provides logic for `v3` and above).
-3. **Downgrade Protection:** If the version stored in the database is higher than the version supported by the current
-   binary, the migrator will block execution to prevent data corruption.
-4. **Schema Drift Detection:** `rpstate` tracks type hashes for persistent fields. If you change a field type without
-   incrementing the version, the system can detect this "nagging" discrepancy.
+1. **Component atomicity:** Nodes linked by dependencies are grouped into Weakly Connected Components (WCC). All
+   migrations in a component run inside a single transaction. A failure in one node rolls back the entire group.
+2. **Gap detection:** If the database is at `v1` but the code only provides logic for `v3` and above, the migrator
+   fails immediately.
+3. **Downgrade protection:** If the version in the database is higher than what the current binary supports, the
+   migrator blocks execution to prevent data corruption.
+4. **Schema drift detection:** `rpstate` tracks type hashes for persistent fields. If you change a field type without
+   bumping the version, the system detects the discrepancy and records it.
 
 ## Status
 
-Early development. The storage layer, reactive fields, migration runner, proc-macro are working. CLI tooling are not yet
-implemented.
+Early development. The storage layer, reactive fields, migration runner, and proc-macro are all working. CLI tooling is
+not yet implemented.
+

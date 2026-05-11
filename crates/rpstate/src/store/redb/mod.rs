@@ -1,5 +1,8 @@
 use crate::store::codec::CodecError;
-use crate::store::{debouncer::Debouncer, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionEntry, SubscriptionId, SubscriptionKind};
+use crate::store::{
+    debouncer::Debouncer, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionEntry,
+    SubscriptionId, SubscriptionKind,
+};
 use error::RedbStoreError;
 use raw_storage::RedbRawStorage;
 use redb::{Database, ReadableDatabase, WriteTransaction};
@@ -13,11 +16,13 @@ use tables::{
 
 use super::Result;
 use crate::store::config::StoreConfig;
+use crate::store::migration::meta::{DiffEntry, PrefixMeta};
 use crate::store::migration::set::MigrationSet;
 use crate::store::migration::{
     AppliedStep, ComponentOutcome, ComponentResult, MigrationContext, MigrationError,
     MigrationReport, Migrator, NaggingRecord,
 };
+use bytes::Bytes;
 use rmp_serde::config::BytesMode;
 use rmp_serde::Serializer;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -25,16 +30,22 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
 use std::{thread, time::Duration};
 use tracing::{info, warn};
-use crate::store::migration::meta::{DiffEntry, PrefixMeta};
 
 pub mod error;
 mod events;
 mod raw_storage;
 mod tables;
 
+const BUF_SIZE: usize = 64 * 1024;
+
+thread_local! {
+    static SERIALIZATION_BUFFER: std::cell::RefCell<Vec<u8>> =
+        std::cell::RefCell::new(Vec::with_capacity(BUF_SIZE));
+}
+
 pub struct RedbStore {
     db: Arc<Database>,
-    pending: Arc<Mutex<HashMap<String, Option<Vec<u8>>>>>,
+    pending: Arc<Mutex<HashMap<Arc<str>, Option<Bytes>>>>,
     debouncer: Debouncer,
     subscriptions: Arc<RwLock<Vec<SubscriptionEntry>>>,
     next_sub_id: AtomicU64,
@@ -67,7 +78,7 @@ impl RedbStore {
         }
         write_txn.commit().map_err(RedbStoreError::from)?;
 
-        let pending = Arc::new(Mutex::new(HashMap::<String, Option<Vec<u8>>>::new()));
+        let pending = Arc::new(Mutex::new(HashMap::<Arc<str>, Option<Bytes>>::new()));
         let subscriptions = Arc::new(RwLock::new(Vec::new()));
         let (w_tx, w_rx) = std::sync::mpsc::channel();
         let db_inner = db.clone();
@@ -89,10 +100,10 @@ impl RedbStore {
                     for (path, opt_bytes) in changes {
                         match opt_bytes {
                             Some(b) => {
-                                table.insert(path.as_str(), b.as_slice()).ok();
+                                table.insert(&*path, &b[..]).ok();
                             }
                             None => {
-                                table.remove(path.as_str()).ok();
+                                table.remove(&*path).ok();
                             }
                         }
                     }
@@ -151,11 +162,11 @@ impl RedbStore {
                 match opt_bytes {
                     Some(b) => {
                         table
-                            .insert(path.as_str(), b.as_slice())
+                            .insert(&*path, &b[..])
                             .map_err(RedbStoreError::from)?;
                     }
                     None => {
-                        table.remove(path.as_str()).map_err(RedbStoreError::from)?;
+                        table.remove(&*path).map_err(RedbStoreError::from)?;
                     }
                 }
             }
@@ -453,20 +464,25 @@ impl Store for RedbStore {
         }
     }
 
-    fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
-        let mut bytes = Vec::new();
-        let mut ser = Serializer::new(&mut bytes).with_bytes(BytesMode::ForceAll);
+    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
+        let bytes = SERIALIZATION_BUFFER.with(|buf| {
+            let mut b = buf.borrow_mut();
+            b.clear();
+            let mut ser = Serializer::new(&mut *b).with_bytes(BytesMode::ForceAll);
+            value.serialize(&mut ser).map_err(CodecError::from)?;
 
-        value.serialize(&mut ser).map_err(CodecError::from)?;
+            Ok::<Bytes, RedbStoreError>(Bytes::copy_from_slice(&b))
+        })?;
+
         {
             let mut lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
-            lock.insert(path.to_string(), Some(bytes.clone()));
+            lock.insert(path.clone(), Some(bytes.clone()));
         }
 
         events::emit_local(
             &self.subscriptions,
             StoreEvent {
-                path: path.to_string(),
+                path: path.clone(),
                 op: StoreOp::Set,
                 old: None,
                 new: Some(bytes),
@@ -477,16 +493,20 @@ impl Store for RedbStore {
         Ok(())
     }
 
+    fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
+        self.set_owned(Arc::from(path), value)
+    }
+
     fn delete(&self, path: &str) -> Result<()> {
         {
             let mut lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
-            lock.insert(path.to_string(), None);
+            lock.insert(Arc::from(path), None);
         }
 
         events::emit_local(
             &self.subscriptions,
             StoreEvent {
-                path: path.to_string(),
+                path: Arc::from(path),
                 op: StoreOp::Delete,
                 old: None,
                 new: None,
@@ -640,7 +660,7 @@ mod tests {
             .recv_timeout(Duration::from_secs(2))
             .expect("Watcher should detect external change");
 
-        assert_eq!(event.path, "app.version");
+        assert_eq!(&*event.path, "app.version");
         assert_eq!(event.op, StoreOp::Set);
 
         let val: String = store.get("app.version").unwrap().unwrap();
@@ -1113,3 +1133,7 @@ mod tests {
         assert_eq!(ran.load(Ordering::SeqCst), 1);
     }
 }
+
+
+
+

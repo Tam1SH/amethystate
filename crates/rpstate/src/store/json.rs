@@ -7,6 +7,7 @@ use crate::store::codec::CodecError;
 use crate::store::config::StoreConfig;
 use crate::store::debouncer::Debouncer;
 use crate::store::{Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId, SubscriptionKind};
+use bytes::Bytes;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
@@ -56,17 +57,17 @@ impl Store for JsonStore {
             let old = set_at_path(&mut map, &path_str, json_value.clone())?;
 
             let old_bytes = old
-                .map(|v| serde_json::to_vec(&v))
-                .transpose()
-                .map_err(CodecError::from)?;
+            .map(|v| serde_json::to_vec(&v).map(Bytes::from))
+            .transpose()
+            .map_err(CodecError::from)?;
 
-            let new_bytes = serde_json::to_vec(&json_value).map_err(CodecError::from)?;
+            let new_bytes = Bytes::from(serde_json::to_vec(&json_value).map_err(CodecError::from)?);
 
             (old_bytes, new_bytes)
         };
 
         self.emit(StoreEvent {
-            path: path_str,
+            path: Arc::from(path_str),
             op: StoreOp::Set,
             old: old_bytes,
             new: Some(new_bytes),
@@ -84,13 +85,13 @@ impl Store for JsonStore {
 
             let old = delete_at_path(&mut guard, &path_str)?;
 
-            old.map(|v| serde_json::to_vec(&v))
+            old.map(|v| serde_json::to_vec(&v).map(Bytes::from))
                 .transpose()
                 .map_err(CodecError::from)?
         };
 
         self.emit(StoreEvent {
-            path: path_str,
+            path: Arc::from(path_str),
             op: StoreOp::Delete,
             old: old_bytes,
             new: None,
@@ -242,20 +243,20 @@ impl JsonStore {
             let new = get_at_path(&guard, split_path(&path_str)).cloned();
 
             let old_bytes = old
-                .map(|v| serde_json::to_vec(&v))
-                .transpose()
-                .map_err(CodecError::from)?;
+            .map(|v| serde_json::to_vec(&v).map(Bytes::from))
+            .transpose()
+            .map_err(CodecError::from)?;
 
             let new_bytes = new
-                .map(|v| serde_json::to_vec(&v))
-                .transpose()
-                .map_err(CodecError::from)?;
+            .map(|v| serde_json::to_vec(&v).map(Bytes::from))
+            .transpose()
+            .map_err(CodecError::from)?;
 
             (old_bytes, new_bytes)
         };
 
         self.emit(StoreEvent {
-            path: path_str,
+            path: Arc::from(path_str),
             op: StoreOp::Patch,
             old: old_bytes,
             new: new_bytes,
@@ -366,22 +367,22 @@ fn collect_diff(
             }
         }
         (None, Some(nv)) => events.push(StoreEvent {
-            path: path.to_string(),
+            path: Arc::from(path),
             op: StoreOp::Set,
             old: None,
-            new: serde_json::to_vec(nv).ok(),
+            new: serde_json::to_vec(nv).ok().map(Bytes::from),
         }),
         (Some(ov), None) => events.push(StoreEvent {
-            path: path.to_string(),
+            path: Arc::from(path),
             op: StoreOp::Delete,
-            old: serde_json::to_vec(ov).ok(),
+            old: serde_json::to_vec(ov).ok().map(Bytes::from),
             new: None,
         }),
         (Some(ov), Some(nv)) => events.push(StoreEvent {
-            path: path.to_string(),
+            path: Arc::from(path),
             op: StoreOp::Set,
-            old: serde_json::to_vec(ov).ok(),
-            new: serde_json::to_vec(nv).ok(),
+            old: serde_json::to_vec(ov).ok().map(Bytes::from),
+            new: serde_json::to_vec(nv).ok().map(Bytes::from),
         }),
         _ => {}
     }
@@ -562,17 +563,17 @@ mod tests {
 
         let cap = any_hits.clone();
         store.on_any(move |evt| {
-            cap.lock().unwrap().push(evt.path.clone());
+            cap.lock().unwrap().push(evt.path.to_string());
         });
 
         let cap = exact_hits.clone();
         store.on_path(Arc::from("ui.theme.dark"), move |evt| {
-            cap.lock().unwrap().push(evt.path.clone());
+            cap.lock().unwrap().push(evt.path.to_string());
         });
 
         let cap = prefix_hits.clone();
         store.on_prefix(Arc::from("ui.theme"), move |evt| {
-            cap.lock().unwrap().push(evt.path.clone());
+            cap.lock().unwrap().push(evt.path.to_string());
         });
 
         store
@@ -790,3 +791,6 @@ mod tests {
         }
     }
 }
+
+
+

@@ -9,6 +9,7 @@ pub use json::JsonStore;
 #[cfg(feature = "redb")]
 pub use redb::RedbStore;
 
+pub mod access;
 pub mod builder;
 pub mod codec;
 pub mod config;
@@ -16,18 +17,17 @@ pub mod debouncer;
 pub mod error;
 pub mod field;
 pub mod migration;
-pub mod access;
 pub mod node;
 
 pub use error::Result;
 use std::sync::Arc;
-
-use serde::Serialize;
-use serde::de::DeserializeOwned;
+use bytes::Bytes;
 
 use crate::Signal;
 use access::WritableMode;
 pub use field::{Field, FieldSubscription, StoreSubscription};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 pub type SubscriptionId = u64;
 pub type StoreCallback = Arc<dyn Fn(&StoreEvent) + Send + Sync + 'static>;
@@ -41,10 +41,10 @@ pub enum StoreOp {
 
 #[derive(Debug, Clone)]
 pub struct StoreEvent {
-    pub path: String,
+    pub path: Arc<str>,
     pub op: StoreOp,
-    pub old: Option<Vec<u8>>,
-    pub new: Option<Vec<u8>>,
+    pub old: Option<Bytes>,
+    pub new: Option<Bytes>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +57,10 @@ pub enum SubscriptionKind {
 pub trait Store: Send + Sync + 'static {
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>>;
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()>;
+    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
+        self.set(&path, value)
+    }
+
     fn delete(&self, path: &str) -> Result<()>;
     fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId;
     fn unsubscribe(&self, id: SubscriptionId);
@@ -145,6 +149,7 @@ where
     })
 }
 
+#[derive(Clone)]
 pub struct SubscriptionEntry {
     pub id: SubscriptionId,
     pub kind: SubscriptionKind,
@@ -163,3 +168,4 @@ pub fn matches_kind(kind: &SubscriptionKind, path: &str) -> bool {
         }
     }
 }
+

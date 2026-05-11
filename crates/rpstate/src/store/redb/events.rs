@@ -1,7 +1,9 @@
 use super::error::RedbResult;
 use super::tables::{TABLE_DATA, TABLE_LOG};
 use crate::store::{matches_kind, StoreEvent, StoreOp, SubscriptionEntry};
+use bytes::Bytes;
 use redb::{Database, ReadableTable};
+use std::sync::Arc;
 use std::sync::RwLock;
 
 pub(super) fn process_inbox(
@@ -23,14 +25,14 @@ pub(super) fn process_inbox(
             let current_val = data_table.get(path)?;
 
             events.push(StoreEvent {
-                path: path.to_string(),
+                path: Arc::from(path),
                 op: if current_val.is_some() {
                     StoreOp::Set
                 } else {
                     StoreOp::Delete
                 },
                 old: None,
-                new: current_val.map(|v| v.value().to_vec()),
+                new: current_val.map(|v| Bytes::copy_from_slice(v.value())),
             });
 
             to_delete.push(id.value());
@@ -62,3 +64,4 @@ pub(super) fn emit_local(subs_lock: &RwLock<Vec<SubscriptionEntry>>, event: Stor
         cb(&event);
     }
 }
+

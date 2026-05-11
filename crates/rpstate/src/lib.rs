@@ -12,6 +12,7 @@ pub use inventory;
 pub use serde;
 pub use store::access::ReadOnlyMode;
 pub use store::access::WritableMode;
+
 #[cfg(feature = "json")]
 pub use store::JsonStore;
 

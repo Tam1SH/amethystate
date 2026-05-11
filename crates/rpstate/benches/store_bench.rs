@@ -1,0 +1,65 @@
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use rayon::prelude::*;
+use rpstate::store::builder::StoreBuilder;
+use rpstate::store::redb::RedbStore;
+use rpstate::store::Store;
+use serde::Serialize;
+use std::hint::black_box;
+use std::sync::Arc;
+
+#[derive(Serialize)]
+struct BenchData {
+    id: u64,
+    name: String,
+    payload: Vec<u8>,
+}
+
+fn setup_store() -> Arc<RedbStore> {
+    let path = std::env::temp_dir().join(format!("bench_{}.redb", rand::random::<u32>()));
+    if path.exists() {
+        std::fs::remove_file(&path).ok();
+    }
+
+    Arc::new(
+        StoreBuilder::new(&path)
+            .debounce(100_000)
+            .build_redb()
+            .unwrap(),
+    )
+}
+
+fn bench_set_load(c: &mut Criterion) {
+    let store = setup_store();
+    let threads_counts = [1, 4];
+
+    let mut group = c.benchmark_group("RedbStore_Set_Contention");
+
+    for threads in threads_counts {
+        let data = BenchData {
+            id: 1,
+            name: "benchmark_key_value_long_string".to_string(),
+            payload: vec![0u8; 128],
+        };
+
+        group.bench_with_input(BenchmarkId::new("hot_key", threads), &threads, |b, &t| {
+            b.iter(|| {
+                (0..t).collect::<Vec<_>>().into_par_iter().for_each(|_| {
+                    black_box(store.set("global.hot_key", &data).unwrap());
+                });
+            });
+        });
+
+        group.bench_with_input(BenchmarkId::new("wide_keys", threads), &threads, |b, &t| {
+            b.iter(|| {
+                (0..t).collect::<Vec<_>>().into_par_iter().for_each(|i| {
+                    let key = format!("path.node_{}", i);
+                    black_box(store.set(&key, &data).unwrap());
+                });
+            });
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, bench_set_load);
+criterion_main!(benches);
