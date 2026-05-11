@@ -1,8 +1,7 @@
 use crate::rpstate::model::StoreFieldEntry;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
-use syn::spanned::Spanned;
-use syn::{Expr, Ident, Visibility};
+use syn::{Ident, Visibility};
 
 pub(crate) fn schema_methods(
     entries: &[StoreFieldEntry],
@@ -12,13 +11,13 @@ pub(crate) fn schema_methods(
         let mname = format_ident!("__schema_field_{}", fname, span = fname.span());
         let ty = &e.ty;
         let wrapper = if e.export_mut {
-            quote!(::rpstate::store::shared::Writable)
+            quote!(::rpstate::store::access::Writable)
         } else {
-            quote!(::rpstate::store::shared::ReadOnly)
+            quote!(::rpstate::store::access::ReadOnly)
         };
         quote_spanned! { fname.span() =>
             #[doc(hidden)]
-            pub fn #mname() -> #wrapper<#ty> { ::std::unreachable!() }
+            pub fn #mname(&self) -> #wrapper<#ty> { ::std::unreachable!() }
         }
     })
 }
@@ -60,7 +59,7 @@ pub(crate) fn methods(entries: &[StoreFieldEntry]) -> impl Iterator<Item = Token
 pub(crate) fn node_impl(name: &Ident, is_root: bool) -> TokenStream2 {
     if is_root {
         quote! {
-            impl ::rpstate::store::shared::RpStateNode for #name {
+            impl ::rpstate::store::node::RpStateNode for #name {
                 fn new_node(store: &::std::sync::Arc<::rpstate::DefaultStore>, _path: &str) -> ::rpstate::store::Result<Self> {
                     Self::new(store)
                 }
@@ -68,7 +67,7 @@ pub(crate) fn node_impl(name: &Ident, is_root: bool) -> TokenStream2 {
         }
     } else {
         quote! {
-            impl ::rpstate::store::shared::RpStateNode for #name {
+            impl ::rpstate::store::node::RpStateNode for #name {
                 fn new_node(store: &::std::sync::Arc<::rpstate::DefaultStore>, path: &str) -> ::rpstate::store::Result<Self> {
                     Self::new(store, path)
                 }
@@ -93,19 +92,16 @@ pub(crate) fn constructor(is_root: bool, init_fields: &[TokenStream2]) -> TokenS
 
 pub(crate) fn lookup_chain(
     target: &darling::util::SpannedValue<String>,
-    parent: &Expr,
+    parent: &syn::Expr,
 ) -> TokenStream2 {
-    let target_span = target.span();
     let target_str = target.to_string();
     let parts: Vec<&str> = target_str.split('.').collect();
-    let mut chain = quote_spanned!(parent.span()=> #parent);
-    for (i, p) in parts.iter().enumerate() {
-        let m = format_ident!("__schema_field_{}", p, span = target_span);
-        chain = if i == 0 {
-            quote_spanned!(target_span=> #chain::#m())
-        } else {
-            quote_spanned!(target_span=> #chain.#m())
-        };
+
+    let mut chain = quote! { unsafe { (&*::core::ptr::null::<#parent>()) } };
+
+    for p in parts {
+        let m = format_ident!("__schema_field_{}", p);
+        chain = quote! { #chain.#m() };
     }
     chain
 }
@@ -113,12 +109,12 @@ pub(crate) fn lookup_chain(
 pub(crate) fn field_mode(e: &StoreFieldEntry) -> TokenStream2 {
     if e.lookup.is_some() {
         if e.export_mut {
-            quote!(::rpstate::store::shared::WritableMode)
+            quote!(::rpstate::store::access::WritableMode)
         } else {
-            quote!(::rpstate::store::shared::ReadOnlyMode)
+            quote!(::rpstate::store::access::ReadOnlyMode)
         }
     } else {
-        quote!(::rpstate::store::shared::WritableMode)
+        quote!(::rpstate::store::access::WritableMode)
     }
 }
 

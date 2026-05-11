@@ -1,7 +1,7 @@
 use rpstate_macros::rpstate;
 pub struct NetworkState {
-    pub port: ::rpstate::Field<u16, ::rpstate::store::shared::WritableMode>,
-    pub host: ::rpstate::Field<String, ::rpstate::store::shared::WritableMode>,
+    pub port: ::rpstate::Field<u16, ::rpstate::store::access::WritableMode>,
+    pub host: ::rpstate::Field<String, ::rpstate::store::access::WritableMode>,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for NetworkState {
@@ -34,23 +34,23 @@ impl NetworkState {
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_port() -> ::rpstate::store::shared::Writable<u16> {
+    pub fn __schema_field_port(&self) -> ::rpstate::store::access::Writable<u16> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     #[doc(hidden)]
-    pub fn __schema_field_host() -> ::rpstate::store::shared::ReadOnly<String> {
+    pub fn __schema_field_host(&self) -> ::rpstate::store::access::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn port(&self) -> ::rpstate::Field<u16, ::rpstate::store::shared::WritableMode> {
+    pub fn port(&self) -> ::rpstate::Field<u16, ::rpstate::store::access::WritableMode> {
         self.port.clone()
     }
     pub fn host(
         &self,
-    ) -> ::rpstate::Field<String, ::rpstate::store::shared::WritableMode> {
+    ) -> ::rpstate::Field<String, ::rpstate::store::access::WritableMode> {
         self.host.clone()
     }
 }
-impl ::rpstate::store::shared::RpStateNode for NetworkState {
+impl ::rpstate::store::node::RpStateNode for NetworkState {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         _path: &str,
@@ -362,6 +362,11 @@ impl ::core::fmt::Debug for NetworkState_Data {
         )
     }
 }
+impl ::rpstate::store::migration::types::RpType for NetworkState_Data {
+    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+        "NetworkState_Data".as_bytes(),
+    );
+}
 impl ::rpstate::store::migration::fields::RpStateFields for NetworkState_Data {
     const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
         ::rpstate::store::migration::fields::FieldDescriptor {
@@ -377,7 +382,7 @@ impl ::rpstate::store::migration::fields::RpStateFields for NetworkState_Data {
     const PARENT_PREFIX: &'static str = "net";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(
-        ctx: &::rpstate::store::migration::MigrationContext,
+        ctx: &mut ::rpstate::store::migration::MigrationContext,
     ) -> ::rpstate::store::Result<Self> {
         Ok(Self {
             port: ctx.get::<u16>("port")?.unwrap_or_else(|| 8080),
@@ -393,12 +398,12 @@ impl ::rpstate::store::migration::fields::RpStateFields for NetworkState_Data {
         Ok(())
     }
 }
-impl ::rpstate::store::shared::RpState for NetworkState {
+impl ::rpstate::store::node::RpState for NetworkState {
     type Data = NetworkState_Data;
 }
 pub struct UiState {
-    pub proxy_port: ::rpstate::Field<u16, ::rpstate::store::shared::ReadOnlyMode>,
-    pub proxy_host: ::rpstate::Field<String, ::rpstate::store::shared::ReadOnlyMode>,
+    pub proxy_port: ::rpstate::Field<u16, ::rpstate::store::access::ReadOnlyMode>,
+    pub proxy_host: ::rpstate::Field<String, ::rpstate::store::access::ReadOnlyMode>,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for UiState {
@@ -421,13 +426,16 @@ impl UiState {
             proxy_port: {
                 const _: fn() = || {
                     trait TypeCheck<T> {}
-                    impl<T> TypeCheck<T> for ::rpstate::store::shared::ReadOnly<T> {}
-                    impl<T> TypeCheck<T> for ::rpstate::store::shared::Writable<T> {}
+                    impl<T> TypeCheck<T> for ::rpstate::store::access::ReadOnly<T> {}
+                    impl<T> TypeCheck<T> for ::rpstate::store::access::Writable<T> {}
                     fn assert_field_type_matches_lookup<T, M: TypeCheck<T>>(_: M) {}
                     assert_field_type_matches_lookup::<
                         u16,
                         _,
-                    >(NetworkState::__schema_field_port());
+                    >(
+                        unsafe { (&*::core::ptr::null::<NetworkState>()) }
+                            .__schema_field_port(),
+                    );
                 };
                 let path = ::alloc::__export::must_use({
                     ::alloc::fmt::format(
@@ -440,7 +448,7 @@ impl UiState {
                 ::rpstate::store::field_with_path::<
                     u16,
                     _,
-                    ::rpstate::store::shared::ReadOnlyMode,
+                    ::rpstate::store::access::ReadOnlyMode,
                 >(
                     store,
                     ::std::sync::Arc::from(path),
@@ -450,13 +458,16 @@ impl UiState {
             proxy_host: {
                 const _: fn() = || {
                     trait TypeCheck<T> {}
-                    impl<T> TypeCheck<T> for ::rpstate::store::shared::ReadOnly<T> {}
-                    impl<T> TypeCheck<T> for ::rpstate::store::shared::Writable<T> {}
+                    impl<T> TypeCheck<T> for ::rpstate::store::access::ReadOnly<T> {}
+                    impl<T> TypeCheck<T> for ::rpstate::store::access::Writable<T> {}
                     fn assert_field_type_matches_lookup<T, M: TypeCheck<T>>(_: M) {}
                     assert_field_type_matches_lookup::<
                         String,
                         _,
-                    >(NetworkState::__schema_field_host());
+                    >(
+                        unsafe { (&*::core::ptr::null::<NetworkState>()) }
+                            .__schema_field_host(),
+                    );
                 };
                 let path = ::alloc::__export::must_use({
                     ::alloc::fmt::format(
@@ -469,7 +480,7 @@ impl UiState {
                 ::rpstate::store::field_with_path::<
                     String,
                     _,
-                    ::rpstate::store::shared::ReadOnlyMode,
+                    ::rpstate::store::access::ReadOnlyMode,
                 >(
                     store,
                     ::std::sync::Arc::from(path),
@@ -479,25 +490,27 @@ impl UiState {
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_proxy_port() -> ::rpstate::store::shared::ReadOnly<u16> {
+    pub fn __schema_field_proxy_port(&self) -> ::rpstate::store::access::ReadOnly<u16> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     #[doc(hidden)]
-    pub fn __schema_field_proxy_host() -> ::rpstate::store::shared::ReadOnly<String> {
+    pub fn __schema_field_proxy_host(
+        &self,
+    ) -> ::rpstate::store::access::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn proxy_port(
         &self,
-    ) -> ::rpstate::Field<u16, ::rpstate::store::shared::ReadOnlyMode> {
+    ) -> ::rpstate::Field<u16, ::rpstate::store::access::ReadOnlyMode> {
         self.proxy_port.clone()
     }
     pub fn proxy_host(
         &self,
-    ) -> ::rpstate::Field<String, ::rpstate::store::shared::ReadOnlyMode> {
+    ) -> ::rpstate::Field<String, ::rpstate::store::access::ReadOnlyMode> {
         self.proxy_host.clone()
     }
 }
-impl ::rpstate::store::shared::RpStateNode for UiState {
+impl ::rpstate::store::node::RpStateNode for UiState {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         _path: &str,
@@ -709,6 +722,11 @@ impl ::core::fmt::Debug for UiState_Data {
         ::core::fmt::Formatter::write_str(f, "UiState_Data")
     }
 }
+impl ::rpstate::store::migration::types::RpType for UiState_Data {
+    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+        "UiState_Data".as_bytes(),
+    );
+}
 impl ::rpstate::store::migration::fields::RpStateFields for UiState_Data {
     const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[];
     const VERSION: u32 = 0u32;
@@ -718,7 +736,7 @@ impl ::rpstate::store::migration::fields::RpStateFields for UiState_Data {
         <NetworkState as ::rpstate::StateScope>::PREFIX,
     ];
     fn load_struct(
-        ctx: &::rpstate::store::migration::MigrationContext,
+        ctx: &mut ::rpstate::store::migration::MigrationContext,
     ) -> ::rpstate::store::Result<Self> {
         Ok(Self {})
     }
@@ -729,7 +747,7 @@ impl ::rpstate::store::migration::fields::RpStateFields for UiState_Data {
         Ok(())
     }
 }
-impl ::rpstate::store::shared::RpState for UiState {
+impl ::rpstate::store::node::RpState for UiState {
     type Data = UiState_Data;
 }
 fn main() {}

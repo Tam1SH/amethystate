@@ -1,6 +1,6 @@
 use rpstate_macros::rpstate;
 pub struct DatabaseConfig {
-    pub host: ::rpstate::Field<String, ::rpstate::store::shared::WritableMode>,
+    pub host: ::rpstate::Field<String, ::rpstate::store::access::WritableMode>,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for DatabaseConfig {
@@ -29,16 +29,16 @@ impl DatabaseConfig {
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_host() -> ::rpstate::store::shared::ReadOnly<String> {
+    pub fn __schema_field_host(&self) -> ::rpstate::store::access::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn host(
         &self,
-    ) -> ::rpstate::Field<String, ::rpstate::store::shared::WritableMode> {
+    ) -> ::rpstate::Field<String, ::rpstate::store::access::WritableMode> {
         self.host.clone()
     }
 }
-impl ::rpstate::store::shared::RpStateNode for DatabaseConfig {
+impl ::rpstate::store::node::RpStateNode for DatabaseConfig {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         path: &str,
@@ -304,6 +304,11 @@ impl ::core::fmt::Debug for DatabaseConfig_Data {
         )
     }
 }
+impl ::rpstate::store::migration::types::RpType for DatabaseConfig_Data {
+    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+        "DatabaseConfig_Data".as_bytes(),
+    );
+}
 impl ::rpstate::store::migration::fields::RpStateFields for DatabaseConfig_Data {
     const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
         ::rpstate::store::migration::fields::FieldDescriptor {
@@ -315,7 +320,7 @@ impl ::rpstate::store::migration::fields::RpStateFields for DatabaseConfig_Data 
     const PARENT_PREFIX: &'static str = "";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(
-        ctx: &::rpstate::store::migration::MigrationContext,
+        ctx: &mut ::rpstate::store::migration::MigrationContext,
     ) -> ::rpstate::store::Result<Self> {
         Ok(Self {
             host: ctx.get::<String>("host")?.unwrap_or_else(|| "localhost".to_string()),
@@ -329,7 +334,7 @@ impl ::rpstate::store::migration::fields::RpStateFields for DatabaseConfig_Data 
         Ok(())
     }
 }
-impl ::rpstate::store::shared::RpState for DatabaseConfig {
+impl ::rpstate::store::node::RpState for DatabaseConfig {
     type Data = DatabaseConfig_Data;
 }
 pub struct SystemSettings {
@@ -352,18 +357,31 @@ impl SystemSettings {
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
     ) -> ::rpstate::store::Result<Self> {
         Ok(Self {
-            db: ::std::sync::Arc::new(DatabaseConfig::new(store, "db")?),
+            db: ::std::sync::Arc::new(
+                DatabaseConfig::new(
+                    store,
+                    &::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!(
+                                "{0}.{1}", < Self as ::rpstate::StateScope >::PREFIX, "db",
+                            ),
+                        )
+                    }),
+                )?,
+            ),
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_db() -> ::rpstate::store::shared::ReadOnly<DatabaseConfig> {
+    pub fn __schema_field_db(
+        &self,
+    ) -> ::rpstate::store::access::ReadOnly<DatabaseConfig> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn db(&self) -> ::std::sync::Arc<DatabaseConfig> {
         self.db.clone()
     }
 }
-impl ::rpstate::store::shared::RpStateNode for SystemSettings {
+impl ::rpstate::store::node::RpStateNode for SystemSettings {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         _path: &str,
@@ -373,7 +391,9 @@ impl ::rpstate::store::shared::RpStateNode for SystemSettings {
 }
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
-pub struct SystemSettings_Data {}
+pub struct SystemSettings_Data {
+    pub db: <DatabaseConfig as ::rpstate::store::node::RpState>::Data,
+}
 #[doc(hidden)]
 #[allow(
     non_upper_case_globals,
@@ -393,10 +413,15 @@ const _: () = {
         where
             __S: _serde::Serializer,
         {
-            let __serde_state = _serde::Serializer::serialize_struct(
+            let mut __serde_state = _serde::Serializer::serialize_struct(
                 __serializer,
                 "SystemSettings_Data",
-                false as usize,
+                false as usize + 1,
+            )?;
+            _serde::ser::SerializeStruct::serialize_field(
+                &mut __serde_state,
+                "db",
+                &self.db,
             )?;
             _serde::ser::SerializeStruct::end(__serde_state)
         }
@@ -423,6 +448,7 @@ const _: () = {
             #[allow(non_camel_case_types)]
             #[doc(hidden)]
             enum __Field {
+                __field0,
                 __ignore,
             }
             #[doc(hidden)]
@@ -447,6 +473,7 @@ const _: () = {
                     __E: _serde::de::Error,
                 {
                     match __value {
+                        0u64 => _serde::__private228::Ok(__Field::__field0),
                         _ => _serde::__private228::Ok(__Field::__ignore),
                     }
                 }
@@ -458,6 +485,7 @@ const _: () = {
                     __E: _serde::de::Error,
                 {
                     match __value {
+                        "db" => _serde::__private228::Ok(__Field::__field0),
                         _ => _serde::__private228::Ok(__Field::__ignore),
                     }
                 }
@@ -469,6 +497,7 @@ const _: () = {
                     __E: _serde::de::Error,
                 {
                     match __value {
+                        b"db" => _serde::__private228::Ok(__Field::__field0),
                         _ => _serde::__private228::Ok(__Field::__ignore),
                     }
                 }
@@ -508,12 +537,27 @@ const _: () = {
                 #[inline]
                 fn visit_seq<__A>(
                     self,
-                    _: __A,
+                    mut __seq: __A,
                 ) -> _serde::__private228::Result<Self::Value, __A::Error>
                 where
                     __A: _serde::de::SeqAccess<'de>,
                 {
-                    _serde::__private228::Ok(SystemSettings_Data {})
+                    let __field0 = match _serde::de::SeqAccess::next_element::<
+                        <DatabaseConfig as ::rpstate::store::node::RpState>::Data,
+                    >(&mut __seq)? {
+                        _serde::__private228::Some(__value) => __value,
+                        _serde::__private228::None => {
+                            return _serde::__private228::Err(
+                                _serde::de::Error::invalid_length(
+                                    0usize,
+                                    &"struct SystemSettings_Data with 1 element",
+                                ),
+                            );
+                        }
+                    };
+                    _serde::__private228::Ok(SystemSettings_Data {
+                        db: __field0,
+                    })
                 }
                 #[inline]
                 fn visit_map<__A>(
@@ -523,10 +567,25 @@ const _: () = {
                 where
                     __A: _serde::de::MapAccess<'de>,
                 {
+                    let mut __field0: _serde::__private228::Option<
+                        <DatabaseConfig as ::rpstate::store::node::RpState>::Data,
+                    > = _serde::__private228::None;
                     while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                         __Field,
                     >(&mut __map)? {
                         match __key {
+                            __Field::__field0 => {
+                                if _serde::__private228::Option::is_some(&__field0) {
+                                    return _serde::__private228::Err(
+                                        <__A::Error as _serde::de::Error>::duplicate_field("db"),
+                                    );
+                                }
+                                __field0 = _serde::__private228::Some(
+                                    _serde::de::MapAccess::next_value::<
+                                        <DatabaseConfig as ::rpstate::store::node::RpState>::Data,
+                                    >(&mut __map)?,
+                                );
+                            }
                             _ => {
                                 let _ = _serde::de::MapAccess::next_value::<
                                     _serde::de::IgnoredAny,
@@ -534,11 +593,19 @@ const _: () = {
                             }
                         }
                     }
-                    _serde::__private228::Ok(SystemSettings_Data {})
+                    let __field0 = match __field0 {
+                        _serde::__private228::Some(__field0) => __field0,
+                        _serde::__private228::None => {
+                            _serde::__private228::de::missing_field("db")?
+                        }
+                    };
+                    _serde::__private228::Ok(SystemSettings_Data {
+                        db: __field0,
+                    })
                 }
             }
             #[doc(hidden)]
-            const FIELDS: &'static [&'static str] = &[];
+            const FIELDS: &'static [&'static str] = &["db"];
             _serde::Deserializer::deserialize_struct(
                 __deserializer,
                 "SystemSettings_Data",
@@ -556,7 +623,9 @@ const _: () = {
 impl ::core::default::Default for SystemSettings_Data {
     #[inline]
     fn default() -> SystemSettings_Data {
-        SystemSettings_Data {}
+        SystemSettings_Data {
+            db: ::core::default::Default::default(),
+        }
     }
 }
 #[automatically_derived]
@@ -564,7 +633,9 @@ impl ::core::default::Default for SystemSettings_Data {
 impl ::core::clone::Clone for SystemSettings_Data {
     #[inline]
     fn clone(&self) -> SystemSettings_Data {
-        SystemSettings_Data {}
+        SystemSettings_Data {
+            db: ::core::clone::Clone::clone(&self.db),
+        }
     }
 }
 #[automatically_derived]
@@ -572,27 +643,54 @@ impl ::core::clone::Clone for SystemSettings_Data {
 impl ::core::fmt::Debug for SystemSettings_Data {
     #[inline]
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-        ::core::fmt::Formatter::write_str(f, "SystemSettings_Data")
+        ::core::fmt::Formatter::debug_struct_field1_finish(
+            f,
+            "SystemSettings_Data",
+            "db",
+            &&self.db,
+        )
     }
 }
+impl ::rpstate::store::migration::types::RpType for SystemSettings_Data {
+    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+        "SystemSettings_Data".as_bytes(),
+    );
+}
 impl ::rpstate::store::migration::fields::RpStateFields for SystemSettings_Data {
-    const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[];
+    const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
+        ::rpstate::store::migration::fields::FieldDescriptor {
+            name: "db",
+            type_hash: 0xDEADBEEF
+                ^ <<DatabaseConfig as ::rpstate::store::node::RpState>::Data as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+        },
+    ];
     const VERSION: u32 = 0u32;
     const PARENT_PREFIX: &'static str = "sys";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(
-        ctx: &::rpstate::store::migration::MigrationContext,
+        ctx: &mut ::rpstate::store::migration::MigrationContext,
     ) -> ::rpstate::store::Result<Self> {
-        Ok(Self {})
+        Ok(Self {
+            db: {
+                let mut sub_ctx = ctx.scoped("db");
+                <<DatabaseConfig as ::rpstate::store::node::RpState>::Data as ::rpstate::store::migration::fields::RpStateFields>::load_struct(
+                    &mut sub_ctx,
+                )?
+            },
+        })
     }
     fn save_struct(
         &self,
         ctx: &mut ::rpstate::store::migration::MigrationContext,
     ) -> ::rpstate::store::Result<()> {
+        {
+            let mut sub_ctx = ctx.scoped("db");
+            self.db.save_struct(&mut sub_ctx)?;
+        }
         Ok(())
     }
 }
-impl ::rpstate::store::shared::RpState for SystemSettings {
+impl ::rpstate::store::node::RpState for SystemSettings {
     type Data = SystemSettings_Data;
 }
 fn main() {}

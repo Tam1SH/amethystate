@@ -1,8 +1,9 @@
-use super::RawStorage;
-use crate::store::Result;
+use super::{MigrateFrom, RawStorage};
 use crate::store::codec::CodecError;
-use serde::Serialize;
+use crate::store::migration::fields::RpStateFields;
+use crate::store::Result;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 pub struct MigrationContext<'a> {
     prefix: String,
@@ -12,6 +13,26 @@ pub struct MigrationContext<'a> {
 impl<'a> MigrationContext<'a> {
     pub fn new(prefix: String, storage: &'a mut dyn RawStorage) -> Self {
         Self { prefix, storage }
+    }
+
+    pub fn nested<TOld, TNew>(&mut self, key: &str, old_data: TOld) -> Result<TNew>
+    where
+        TOld: RpStateFields,
+        TNew: MigrateFrom<TOld> + RpStateFields,
+    {
+        let mut sub_ctx = self.scoped(key);
+
+        let new_data = TNew::migrate(old_data, &mut sub_ctx)?;
+
+        for old_f in TOld::FIELDS {
+            let is_renamed = TNew::RENAMES.iter().any(|(ok, _)| *ok == old_f.name);
+            let is_kept = TNew::FIELDS.iter().any(|nf| nf.name == old_f.name);
+
+            if is_renamed || !is_kept {
+                sub_ctx.delete(old_f.name)?;
+            }
+        }
+        Ok(new_data)
     }
 
     pub fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
@@ -30,7 +51,7 @@ impl<'a> MigrationContext<'a> {
     }
 
     pub fn delete(&mut self, key: &str) -> Result<()> {
-        self.storage.delete(&self.scoped(key))
+        self.storage.delete(&self.scoped_path(key))
     }
 
     pub fn rename(&mut self, from: &str, to: &str) -> Result<()> {
@@ -113,14 +134,21 @@ impl<'a> MigrationContext<'a> {
     }
 
     pub fn get_raw(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        self.storage.get(&self.scoped(key))
+        self.storage.get(&self.scoped_path(key))
     }
 
     pub fn set_raw(&mut self, key: &str, value: &[u8]) -> Result<()> {
-        self.storage.set(&self.scoped(key), value)
+        self.storage.set(&self.scoped_path(key), value)
     }
 
-    fn scoped(&self, key: &str) -> String {
+    pub fn scoped(&mut self, sub_prefix: &str) -> MigrationContext<'_> {
+        MigrationContext {
+            prefix: self.scoped_path(sub_prefix),
+            storage: self.storage,
+        }
+    }
+
+    fn scoped_path(&self, key: &str) -> String {
         if self.prefix.is_empty() {
             key.to_string()
         } else {

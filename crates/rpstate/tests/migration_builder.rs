@@ -69,10 +69,8 @@ fn migration_builder_mixes_codegen_and_manual_steps() {
         StoreBuilder::new(&path)
             .migrations(|m| {
                 m.collect_codegen();
-                m.for_prefix("hybrid_profile").step(
-                    3,
-                    "derive initials after codegen migration",
-                    |ctx| {
+                m.for_node::<Profile>()
+                    .step(3, "derive initials after codegen migration", |ctx| {
                         let display_name = ctx
                             .get::<String>("display_name")?
                             .expect("codegen step should create display_name");
@@ -82,8 +80,7 @@ fn migration_builder_mixes_codegen_and_manual_steps() {
                             .collect::<String>();
                         ctx.set("initials", &initials)?;
                         Ok(())
-                    },
-                );
+                    });
             })
             .build()
             .unwrap(),

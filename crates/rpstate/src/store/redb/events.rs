@@ -1,7 +1,6 @@
 use super::error::RedbResult;
 use super::tables::{TABLE_DATA, TABLE_LOG};
-use crate::store::shared::{SubscriptionEntry, matches_kind};
-use crate::store::{StoreEvent, StoreOp};
+use crate::store::{matches_kind, StoreEvent, StoreOp, SubscriptionEntry};
 use redb::{Database, ReadableTable};
 use std::sync::RwLock;
 

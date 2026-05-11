@@ -1,8 +1,8 @@
 use rpstate_macros::rpstate;
 pub struct NetworkConfig {
-    pub host: ::rpstate::Field<String, ::rpstate::store::shared::WritableMode>,
-    pub port: ::rpstate::Field<u16, ::rpstate::store::shared::WritableMode>,
-    pub connected: ::rpstate::Field<bool, ::rpstate::store::shared::WritableMode>,
+    pub host: ::rpstate::Field<String, ::rpstate::store::access::WritableMode>,
+    pub port: ::rpstate::Field<u16, ::rpstate::store::access::WritableMode>,
+    pub connected: ::rpstate::Field<bool, ::rpstate::store::access::WritableMode>,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for NetworkConfig {
@@ -34,38 +34,47 @@ impl NetworkConfig {
                 ::rpstate::DefaultStore,
             >(store, "port", 8080)?,
             connected: ::rpstate::Field::new_volatile(
-                ::std::sync::Arc::from("connected".to_string()),
+                ::std::sync::Arc::from(
+                    ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!(
+                                "{0}.{1}", < Self as ::rpstate::StateScope >::PREFIX,
+                                "connected",
+                            ),
+                        )
+                    }),
+                ),
                 false,
             ),
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_host() -> ::rpstate::store::shared::ReadOnly<String> {
+    pub fn __schema_field_host(&self) -> ::rpstate::store::access::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     #[doc(hidden)]
-    pub fn __schema_field_port() -> ::rpstate::store::shared::ReadOnly<u16> {
+    pub fn __schema_field_port(&self) -> ::rpstate::store::access::ReadOnly<u16> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     #[doc(hidden)]
-    pub fn __schema_field_connected() -> ::rpstate::store::shared::ReadOnly<bool> {
+    pub fn __schema_field_connected(&self) -> ::rpstate::store::access::ReadOnly<bool> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn host(
         &self,
-    ) -> ::rpstate::Field<String, ::rpstate::store::shared::WritableMode> {
+    ) -> ::rpstate::Field<String, ::rpstate::store::access::WritableMode> {
         self.host.clone()
     }
-    pub fn port(&self) -> ::rpstate::Field<u16, ::rpstate::store::shared::WritableMode> {
+    pub fn port(&self) -> ::rpstate::Field<u16, ::rpstate::store::access::WritableMode> {
         self.port.clone()
     }
     pub fn connected(
         &self,
-    ) -> ::rpstate::Field<bool, ::rpstate::store::shared::WritableMode> {
+    ) -> ::rpstate::Field<bool, ::rpstate::store::access::WritableMode> {
         self.connected.clone()
     }
 }
-impl ::rpstate::store::shared::RpStateNode for NetworkConfig {
+impl ::rpstate::store::node::RpStateNode for NetworkConfig {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         _path: &str,
@@ -377,6 +386,11 @@ impl ::core::fmt::Debug for NetworkConfig_Data {
         )
     }
 }
+impl ::rpstate::store::migration::types::RpType for NetworkConfig_Data {
+    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+        "NetworkConfig_Data".as_bytes(),
+    );
+}
 impl ::rpstate::store::migration::fields::RpStateFields for NetworkConfig_Data {
     const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
         ::rpstate::store::migration::fields::FieldDescriptor {
@@ -392,7 +406,7 @@ impl ::rpstate::store::migration::fields::RpStateFields for NetworkConfig_Data {
     const PARENT_PREFIX: &'static str = "net";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(
-        ctx: &::rpstate::store::migration::MigrationContext,
+        ctx: &mut ::rpstate::store::migration::MigrationContext,
     ) -> ::rpstate::store::Result<Self> {
         Ok(Self {
             host: ctx.get::<String>("host")?.unwrap_or_else(|| "127.0.0.1".to_string()),
@@ -408,7 +422,7 @@ impl ::rpstate::store::migration::fields::RpStateFields for NetworkConfig_Data {
         Ok(())
     }
 }
-impl ::rpstate::store::shared::RpState for NetworkConfig {
+impl ::rpstate::store::node::RpState for NetworkConfig {
     type Data = NetworkConfig_Data;
 }
 impl ::rpstate::store::migration::registry::HasMigrations for NetworkConfig {

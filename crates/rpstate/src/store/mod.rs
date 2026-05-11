@@ -16,7 +16,8 @@ pub mod debouncer;
 pub mod error;
 pub mod field;
 pub mod migration;
-pub mod shared;
+pub mod access;
+pub mod node;
 
 pub use error::Result;
 use std::sync::Arc;
@@ -25,7 +26,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::Signal;
-use crate::store::shared::WritableMode;
+use access::WritableMode;
 pub use field::{Field, FieldSubscription, StoreSubscription};
 
 pub type SubscriptionId = u64;
@@ -106,7 +107,7 @@ pub fn field_with_path<TValue, S, M>(
 where
     S: Store,
     TValue: Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
-    M: shared::AccessMode,
+    M: access::AccessMode,
 {
     if store.get::<TValue>(&path)?.is_none() {
         store.set(&path, &default)?;
@@ -142,4 +143,23 @@ where
         })),
         _mode: std::marker::PhantomData,
     })
+}
+
+pub struct SubscriptionEntry {
+    pub id: SubscriptionId,
+    pub kind: SubscriptionKind,
+    pub callback: StoreCallback,
+}
+
+pub fn matches_kind(kind: &SubscriptionKind, path: &str) -> bool {
+    match kind {
+        SubscriptionKind::Any => true,
+        SubscriptionKind::ExactPath(p) => **p == *path,
+        SubscriptionKind::Prefix(prefix) => {
+            *path == **prefix
+                || path
+                    .strip_prefix(&**prefix)
+                    .is_some_and(|t| t.starts_with('.'))
+        }
+    }
 }

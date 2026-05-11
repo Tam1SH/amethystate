@@ -2,12 +2,13 @@ use super::Result;
 use crate::store::config::StoreConfig;
 #[cfg(feature = "json")]
 use crate::store::json::JsonStore;
+use crate::store::migration::registry::{MigrationDependency, MigrationStepEntry};
+use crate::store::migration::set::MigrationSet;
 use crate::store::migration::MigrationContext;
 use crate::store::migration::Migrator;
-use crate::store::migration::registry::MigrationStepEntry;
-use crate::store::migration::set::MigrationSet;
 #[cfg(feature = "redb")]
 use crate::store::redb::RedbStore;
+use crate::StateScope;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -118,11 +119,15 @@ impl MigrationBuilder {
             }
 
             for dep in merged_deps {
-                self.for_prefix(prefix).depends_on(dep);
+                self.for_prefix(prefix).depends_on_raw(dep);
             }
         }
 
         self
+    }
+
+    pub fn for_node<T: StateScope>(&mut self) -> PrefixMigrationBuilder<'_> {
+        self.for_prefix(T::PREFIX)
     }
 
     pub fn for_prefix(&mut self, prefix: impl Into<String>) -> PrefixMigrationBuilder<'_> {
@@ -153,12 +158,18 @@ impl MigrationBuilder {
 }
 
 impl PrefixMigrationBuilder<'_> {
-    pub fn depends_on(&mut self, dependency: impl Into<String>) -> &mut Self {
+    pub fn depends_on_raw(&mut self, dependency: impl Into<String>) -> &mut Self {
         let dependency = dependency.into();
         self.builder
             .prefix_plan(&self.prefix)
             .dependencies
             .insert(dependency);
+        self
+    }
+
+    pub fn depends_on<D: MigrationDependency>(&mut self) -> &mut Self {
+        let plan = self.builder.prefix_plan(&self.prefix);
+        D::register(&mut plan.dependencies);
         self
     }
 

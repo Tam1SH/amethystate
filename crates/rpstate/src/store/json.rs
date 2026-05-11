@@ -2,11 +2,10 @@
 pub mod error;
 
 use self::error::{JsonResult, JsonStoreError};
-use super::Result;
+use super::{matches_kind, Result, SubscriptionEntry};
 use crate::store::codec::CodecError;
 use crate::store::config::StoreConfig;
 use crate::store::debouncer::Debouncer;
-use crate::store::shared::{SubscriptionEntry, matches_kind};
 use crate::store::{Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId, SubscriptionKind};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -497,7 +496,7 @@ fn persist_atomic(path: &Path, map: &Map<String, Value>) -> JsonResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 

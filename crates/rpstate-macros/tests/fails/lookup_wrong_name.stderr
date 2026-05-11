@@ -1,20 +1,7 @@
-error[E0599]: no associated item named `__schema_field_porrt` found for struct `NetworkState` in the current scope
-  --> tests/fails/lookup_wrong_name.rs:11:22
-   |
- 3 | #[rpstate(prefix = "net")]
-   | -------------------------- associated item `__schema_field_porrt` not found for this struct
-...
-11 |     #[state(lookup = "porrt", parent = NetworkState)]
-   |                      ^^^^^^^ associated item not found in `NetworkState`
-   |
-note: if you're trying to build a new `NetworkState`, consider using `NetworkState::new` which returns `Result<NetworkState, rpstate::store::error::Error>`
-  --> tests/fails/lookup_wrong_name.rs:3:1
-   |
- 3 | #[rpstate(prefix = "net")]
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
-   = note: this error originates in the attribute macro `rpstate` (in Nightly builds, run with -Z macro-backtrace for more info)
-help: there is an associated function `__schema_field_port` with a similar name
-   |
-11 -     #[state(lookup = "porrt", parent = NetworkState)]
-11 +     #[state(lookup = __schema_field_port, parent = NetworkState)]
-   |
+error[E0599]: no method named `__schema_field_porrt` found for reference `&NetworkState` in the current scope
+ --> tests/fails/lookup_wrong_name.rs:9:1
+  |
+9 | #[rpstate(prefix = "ui")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `rpstate` (in Nightly builds, run with -Z macro-backtrace for more info)

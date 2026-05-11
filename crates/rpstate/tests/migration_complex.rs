@@ -298,9 +298,10 @@ fn complex_hybrid_migrations_handle_dependency_tree_and_rollback() {
             .migrations(|m| {
                 m.collect_codegen();
 
-                m.for_prefix("complex_profile")
-                    .depends_on("complex_identity")
-                    .step(2, "split full name and snapshot plan", |ctx| {
+                m.for_node::<Profile>().depends_on::<Identity>().step(
+                    2,
+                    "split full name and snapshot plan",
+                    |ctx| {
                         let full_name = ctx
                             .get::<String>("full_name")?
                             .expect("seed should contain profile full_name");
@@ -321,11 +322,13 @@ fn complex_hybrid_migrations_handle_dependency_tree_and_rollback() {
                         ctx.delete("full_name")?;
                         ctx.delete("age_text")?;
                         Ok(())
-                    });
+                    },
+                );
 
-                m.for_prefix("complex_workspace")
-                    .depends_on("complex_profile")
-                    .step(3, "derive welcome title after profile migration", |ctx| {
+                m.for_node::<Workspace>().depends_on::<Profile>().step(
+                    3,
+                    "derive welcome title after profile migration",
+                    |ctx| {
                         let name = ctx
                             .get::<String>("name")?
                             .expect("workspace codegen migration should create name");
@@ -335,11 +338,13 @@ fn complex_hybrid_migrations_handle_dependency_tree_and_rollback() {
                         let welcome_title = format!("{name} for {first_name}");
                         ctx.set("welcome_title", &welcome_title)?;
                         Ok(())
-                    });
+                    },
+                );
 
-                m.for_prefix("complex_ui")
-                    .depends_on("complex_workspace")
-                    .step(2, "flatten panel state and normalize sidebar", |ctx| {
+                m.for_node::<Ui>().depends_on::<Workspace>().step(
+                    2,
+                    "flatten panel state and normalize sidebar",
+                    |ctx| {
                         let sidebar_px = ctx.get::<u16>("sidebar_px")?.unwrap_or(0);
                         let width_px = ctx.get::<u16>("width_px")?.unwrap_or(1);
                         let sidebar_ratio = sidebar_px as f32 / width_px as f32;
@@ -351,11 +356,13 @@ fn complex_hybrid_migrations_handle_dependency_tree_and_rollback() {
                         ctx.delete("width_px")?;
                         ctx.delete("panels.left.visible")?;
                         Ok(())
-                    });
+                    },
+                );
 
-                m.for_prefix("complex_shortcuts")
-                    .depends_on("complex_workspace")
-                    .step(2, "parse legacy shortcut bindings", |ctx| {
+                m.for_node::<Shortcuts>().depends_on::<Workspace>().step(
+                    2,
+                    "parse legacy shortcut bindings",
+                    |ctx| {
                         let legacy = ctx
                             .get::<Vec<String>>("legacy_bindings")?
                             .unwrap_or_default();
@@ -370,29 +377,28 @@ fn complex_hybrid_migrations_handle_dependency_tree_and_rollback() {
                         ctx.set("bindings", &bindings)?;
                         ctx.delete("legacy_bindings")?;
                         Ok(())
-                    });
-
-                m.for_prefix("complex_broken_root").step(
-                    2,
-                    "stage broken branch mutation",
-                    |ctx| {
-                        ctx.set("original", &"mutated".to_string())?;
-                        ctx.set("staged", &true)?;
-                        Ok(())
                     },
                 );
 
-                m.for_prefix("complex_broken_child")
-                    .depends_on("complex_broken_root")
-                    .step(2, "fail broken branch", |_| {
-                        Err(MigrationError::Custom("intentional failure".into()).into())
+                m.for_node::<BrokenRoot>()
+                    .step(2, "stage broken branch mutation", |ctx| {
+                        ctx.set("original", &"mutated".to_string())?;
+                        ctx.set("staged", &true)?;
+                        Ok(())
                     });
+
+                m.for_node::<BrokenChild>().depends_on::<BrokenRoot>().step(
+                    2,
+                    "fail broken branch",
+                    |_| Err(MigrationError::Custom("intentional failure".into()).into()),
+                );
             })
             .build()
             .unwrap(),
     );
 
     let identity = Identity::new(&store).unwrap();
+    // AI-Doxxed-Driven Development
     assert_eq!(identity.username().get(), "ignat");
     assert_eq!(identity.plan().get(), "professional");
     assert_eq!(identity.created_at_ms().get(), 1_700_000_000_000);

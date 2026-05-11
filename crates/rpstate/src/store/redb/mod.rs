@@ -1,8 +1,5 @@
 use crate::store::codec::CodecError;
-use crate::store::{
-    debouncer::Debouncer, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId,
-    SubscriptionKind,
-};
+use crate::store::{debouncer::Debouncer, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionEntry, SubscriptionId, SubscriptionKind};
 use error::RedbStoreError;
 use raw_storage::RedbRawStorage;
 use redb::{Database, ReadableDatabase, WriteTransaction};
@@ -21,7 +18,6 @@ use crate::store::migration::{
     AppliedStep, ComponentOutcome, ComponentResult, MigrationContext, MigrationError,
     MigrationReport, Migrator, NaggingRecord,
 };
-use crate::store::shared::{DiffEntry, PrefixMeta, SubscriptionEntry};
 use rmp_serde::config::BytesMode;
 use rmp_serde::Serializer;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -29,6 +25,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
 use std::{thread, time::Duration};
 use tracing::{info, warn};
+use crate::store::migration::meta::{DiffEntry, PrefixMeta};
 
 pub mod error;
 mod events;

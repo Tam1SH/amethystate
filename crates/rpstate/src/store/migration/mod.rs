@@ -3,15 +3,14 @@ use crate::store::Result;
 pub mod context;
 pub mod error;
 pub mod fields;
+pub mod meta;
 pub mod migrate_from;
 pub mod registry;
 pub mod set;
 pub mod types;
 
 use crate::store::error::Error;
-use crate::store::migration::fields::RpStateFields;
 pub use crate::store::migration::migrate_from::MigrateFrom;
-use crate::store::shared::RpState;
 pub use context::MigrationContext;
 pub use error::MigrationError;
 
