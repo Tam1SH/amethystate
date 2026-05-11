@@ -114,24 +114,23 @@ impl<TValue: Debug + 'static, S: Store> Debug for Field<TValue, S> {
 }
 
 #[cfg(test)]
-#[cfg(feature = "json")]
 mod tests {
     use super::*;
     use crate::signal::Signal;
     use crate::store::config::StoreConfig;
-    use crate::store::{json::JsonStore, StateScope, Store};
-    use serde_json::json;
+    use crate::store::{StateScope, Store};
+    use crate::{DefaultStore, SubscriptionKind};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn unique_store(suffix: &str) -> Arc<JsonStore> {
+    fn unique_store(suffix: &str) -> Arc<DefaultStore> {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let path = std::env::temp_dir().join(format!("rpstate-reactive-{suffix}-{nanos}.json"));
-        Arc::new(JsonStore::open(StoreConfig::new(path)).unwrap())
+        Arc::new(DefaultStore::open(StoreConfig::new(path), Default::default()).unwrap())
     }
 
     struct UiScope;
@@ -142,7 +141,7 @@ mod tests {
     #[test]
     fn field_get_set_and_subscribe() {
         let store = unique_store("field-int");
-        let field = crate::store::field::<UiScope, i32, JsonStore>(&store, "font_size", 14)
+        let field = crate::store::field::<UiScope, i32, DefaultStore>(&store, "font_size", 14)
             .expect("field should be created");
 
         assert_eq!(field.get(), 14);
@@ -166,7 +165,7 @@ mod tests {
         let store = unique_store("field-debug");
         let signal = Arc::new(Signal::new("test_val".to_string()));
         let sub_id = store.subscribe(crate::store::SubscriptionKind::Any, Arc::new(|_| {}));
-        let field: Field<String, JsonStore> = Field {
+        let field: Field<String, DefaultStore> = Field {
             signal,
             path: Arc::from("debug.path"),
             store_sub: Some(Arc::new(StoreSubscription {
@@ -188,25 +187,38 @@ mod tests {
     fn store_subscription_drop_unsubscribes() {
         let store = unique_store("drop-unsub");
         let calls = Arc::new(AtomicUsize::new(0));
+        let signal = Arc::new(Signal::new("test_val".to_string()));
 
         let cap = calls.clone();
-        let sub_id = store.on_path(Arc::from("test.field"), move |_| {
-            cap.fetch_add(1, Ordering::SeqCst);
-        });
 
         {
-            let _sub = StoreSubscription {
-                store: store.clone(),
-                id: sub_id,
+            let sub_id = store.subscribe(
+                SubscriptionKind::Prefix(Arc::from("test.field")),
+                Arc::new(move |_| {
+                    cap.fetch_add(1, Ordering::SeqCst);
+                }),
+            );
+
+            let field: Field<String, DefaultStore, WritableMode> = Field {
+                signal,
+                path: Arc::from("test.field"),
+                store_sub: Some(Arc::new(StoreSubscription {
+                    store: store.clone(),
+                    id: sub_id,
+                })),
+                _mode: Default::default(),
             };
-            store.set("test.field", &json!("hello")).unwrap();
+
+            field.set((&"hello").parse().unwrap()).unwrap();
             assert_eq!(calls.load(Ordering::SeqCst), 1);
+            store.set("test.field", &"world").unwrap();
+            assert_eq!(calls.load(Ordering::SeqCst), 2);
         }
 
-        store.set("test.field", &json!("world")).unwrap();
+        store.set("test.field", &"world").unwrap();
         assert_eq!(
             calls.load(Ordering::SeqCst),
-            1,
+            2,
             "callback must not fire after drop"
         );
     }
@@ -216,7 +228,7 @@ mod tests {
         let store = unique_store("as-signal");
         let signal = Arc::new(Signal::new(100i32));
         let sub_id = store.subscribe(crate::store::SubscriptionKind::Any, Arc::new(|_| {}));
-        let field: Field<i32, JsonStore> = Field {
+        let field: Field<i32, DefaultStore> = Field {
             signal: signal.clone(),
             path: Arc::from("some.path"),
             store_sub: Some(Arc::new(StoreSubscription {
@@ -236,7 +248,8 @@ mod tests {
 
         let field_path: Arc<str> = Arc::from("ui.temp_spinner");
 
-        let field = Field::<bool, JsonStore, WritableMode>::new_volatile(field_path.clone(), false);
+        let field =
+            Field::<bool, DefaultStore, WritableMode>::new_volatile(field_path.clone(), false);
 
         let call_count = Arc::new(Mutex::new(0));
         let last_val = Arc::new(Mutex::new(false));
