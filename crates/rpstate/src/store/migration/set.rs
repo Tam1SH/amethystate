@@ -1,6 +1,6 @@
 use super::Migrator;
 use crate::store::Result;
-use crate::store::error::Error;
+use crate::store::migration::MigrationError;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -103,7 +103,7 @@ impl MigrationSet {
                     .map(|idx| sub_graph[idx].clone())
                     .collect()
             })
-            .map_err(|cycle| Error::MigrationCycle(sub_graph[cycle.node_id()].clone()))
+            .map_err(|cycle| MigrationError::Cycle(sub_graph[cycle.node_id()].clone()).into())
     }
 
     pub(crate) fn get_migrator(&self, prefix: &str) -> Option<&Migrator> {
@@ -114,6 +114,7 @@ impl MigrationSet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::store::error::Error;
 
     fn dummy_migrator() -> Migrator {
         Migrator::new()
@@ -177,7 +178,7 @@ mod tests {
         let result = set.topo_sort_component(comp).unwrap_err();
 
         match result {
-            Error::MigrationCycle(prefix) => {
+            Error::Migration(MigrationError::Cycle(prefix)) => {
                 assert!(["a", "b", "c"].contains(&prefix.as_str()));
             }
             _ => panic!("Expected MigrationCycle error"),

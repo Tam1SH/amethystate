@@ -1,4 +1,9 @@
-use super::{Result, error::Error};
+#[path = "json/error.rs"]
+pub mod error;
+
+use self::error::{JsonResult, JsonStoreError};
+use super::Result;
+use crate::store::codec::CodecError;
 use crate::store::config::StoreConfig;
 use crate::store::debouncer::Debouncer;
 use crate::store::shared::{SubscriptionEntry, matches_kind};
@@ -31,35 +36,32 @@ impl Debug for JsonStore {
 
 impl Store for JsonStore {
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
-        let guard = self.map.read().map_err(|_| Error::Poisoned)?;
+        let guard = self.map.read().map_err(|_| JsonStoreError::Poisoned)?;
 
         match get_at_path(&guard, split_path(path)) {
             Some(v) => Ok(Some(
-                serde_json::from_value(v.clone())
-                    .map_err(|e| Error::Serialization(e.to_string()))?,
+                serde_json::from_value(v.clone()).map_err(CodecError::from)?,
             )),
             None => Ok(None),
         }
     }
 
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
-        let json_value =
-            serde_json::to_value(value).map_err(|e| Error::Serialization(e.to_string()))?;
+        let json_value = serde_json::to_value(value).map_err(CodecError::from)?;
 
         let path_str = normalize_path(path)?;
 
         let (old_bytes, new_bytes) = {
-            let mut map = self.map.write().map_err(|_| Error::Poisoned)?;
+            let mut map = self.map.write().map_err(|_| JsonStoreError::Poisoned)?;
 
             let old = set_at_path(&mut map, &path_str, json_value.clone())?;
 
             let old_bytes = old
                 .map(|v| serde_json::to_vec(&v))
                 .transpose()
-                .map_err(|e| Error::Serialization(e.to_string()))?;
+                .map_err(CodecError::from)?;
 
-            let new_bytes =
-                serde_json::to_vec(&json_value).map_err(|e| Error::Serialization(e.to_string()))?;
+            let new_bytes = serde_json::to_vec(&json_value).map_err(CodecError::from)?;
 
             (old_bytes, new_bytes)
         };
@@ -79,13 +81,13 @@ impl Store for JsonStore {
         let path_str = normalize_path(path)?;
 
         let old_bytes = {
-            let mut guard = self.map.write().map_err(|_| Error::Poisoned)?;
+            let mut guard = self.map.write().map_err(|_| JsonStoreError::Poisoned)?;
 
             let old = delete_at_path(&mut guard, &path_str)?;
 
             old.map(|v| serde_json::to_vec(&v))
                 .transpose()
-                .map_err(|e| Error::Serialization(e.to_string()))?
+                .map_err(CodecError::from)?
         };
 
         self.emit(StoreEvent {
@@ -120,13 +122,7 @@ impl Store for JsonStore {
     }
 
     fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
-        serde_json::from_slice(bytes).map_err(|e| Error::Serialization(e.to_string()))
-    }
-
-    fn evolve_prefix(&self, _prefix: &str, _version: u32, _hash: u64) -> Result<()> {
-        Err(Error::Backend(
-            "JSON backend migrations are not implemented".to_string(),
-        ))
+        serde_json::from_slice(bytes).map_err(|e| CodecError::from(e).into())
     }
 }
 
@@ -231,12 +227,12 @@ impl JsonStore {
         let patch_obj = patch
             .as_object()
             .cloned()
-            .ok_or_else(|| Error::InvalidPath("patch must be an object".to_string()))?;
+            .ok_or(JsonStoreError::PatchMustBeObject)?;
 
         let path_str = normalize_path(path)?;
 
         let (old_bytes, new_bytes) = {
-            let mut guard = self.map.write().map_err(|_| Error::Poisoned)?;
+            let mut guard = self.map.write().map_err(|_| JsonStoreError::Poisoned)?;
 
             let old = get_at_path(&guard, split_path(&path_str)).cloned();
 
@@ -249,12 +245,12 @@ impl JsonStore {
             let old_bytes = old
                 .map(|v| serde_json::to_vec(&v))
                 .transpose()
-                .map_err(|e| Error::Serialization(e.to_string()))?;
+                .map_err(CodecError::from)?;
 
             let new_bytes = new
                 .map(|v| serde_json::to_vec(&v))
                 .transpose()
-                .map_err(|e| Error::Serialization(e.to_string()))?;
+                .map_err(CodecError::from)?;
 
             (old_bytes, new_bytes)
         };
@@ -300,15 +296,14 @@ impl JsonStore {
         self.subscribe(SubscriptionKind::Prefix(prefix), Arc::new(cb))
     }
 
-    fn load_map(path: &Path) -> Result<Map<String, Value>> {
+    fn load_map(path: &Path) -> JsonResult<Map<String, Value>> {
         let raw = std::fs::read(path)?;
 
-        let value: Value =
-            serde_json::from_slice(&raw).map_err(|e| Error::Serialization(e.to_string()))?;
+        let value: Value = serde_json::from_slice(&raw).map_err(CodecError::from)?;
 
         match value {
             Value::Object(map) => Ok(map),
-            _ => Err(Error::Backend("root must be an object".to_string())),
+            _ => Err(JsonStoreError::RootMustBeObject),
         }
     }
 
@@ -393,14 +388,14 @@ fn collect_diff(
     }
 }
 
-fn normalize_path(path: &str) -> Result<String> {
+fn normalize_path(path: &str) -> JsonResult<String> {
     let normalized = path
         .split('.')
         .filter(|s| !s.trim().is_empty())
         .collect::<Vec<_>>()
         .join(".");
     if normalized.is_empty() {
-        return Err(Error::InvalidPath("empty path".to_string()));
+        return Err(JsonStoreError::EmptyPath);
     }
     Ok(normalized)
 }
@@ -418,7 +413,11 @@ fn get_at_path<'a>(map: &'a Map<String, Value>, parts: Vec<&str>) -> Option<&'a 
     Some(current)
 }
 
-fn set_at_path(map: &mut Map<String, Value>, path: &str, value: Value) -> Result<Option<Value>> {
+fn set_at_path(
+    map: &mut Map<String, Value>,
+    path: &str,
+    value: Value,
+) -> JsonResult<Option<Value>> {
     let (parent, key) = walk_mut(map, path, true)?;
     Ok(parent.insert(key, value))
 }
@@ -426,7 +425,7 @@ fn set_at_path(map: &mut Map<String, Value>, path: &str, value: Value) -> Result
 fn ensure_object_at_path<'a>(
     map: &'a mut Map<String, Value>,
     path: &str,
-) -> Result<&'a mut Map<String, Value>> {
+) -> JsonResult<&'a mut Map<String, Value>> {
     let (parent, key) = walk_mut(map, path, true)?;
     let target = parent
         .entry(key)
@@ -434,10 +433,10 @@ fn ensure_object_at_path<'a>(
 
     target
         .as_object_mut()
-        .ok_or_else(|| Error::InvalidPath("Target is not an object".into()))
+        .ok_or(JsonStoreError::TargetNotObject)
 }
 
-fn delete_at_path(map: &mut Map<String, Value>, path: &str) -> Result<Option<Value>> {
+fn delete_at_path(map: &mut Map<String, Value>, path: &str) -> JsonResult<Option<Value>> {
     let (parent, key) = walk_mut(map, path, false)?;
     Ok(parent.remove(&key))
 }
@@ -446,11 +445,9 @@ fn walk_mut<'a>(
     root: &'a mut Map<String, Value>,
     path: &str,
     create_missing: bool,
-) -> Result<(&'a mut Map<String, Value>, String)> {
+) -> JsonResult<(&'a mut Map<String, Value>, String)> {
     let parts = split_path(path);
-    let (last, heads) = parts
-        .split_last()
-        .ok_or_else(|| Error::InvalidPath("Path cannot be empty".to_string()))?;
+    let (last, heads) = parts.split_last().ok_or(JsonStoreError::EmptyPath)?;
 
     let mut current = root;
     for &key in heads {
@@ -461,12 +458,12 @@ fn walk_mut<'a>(
         } else {
             current
                 .get_mut(key)
-                .ok_or_else(|| Error::InvalidPath(format!("Path segment '{}' not found", key)))?
+                .ok_or_else(|| JsonStoreError::PathSegmentMissing(key.to_string()))?
         };
 
         current = entry
             .as_object_mut()
-            .ok_or_else(|| Error::InvalidPath(format!("Segment '{}' is not an object", key)))?;
+            .ok_or_else(|| JsonStoreError::PathSegmentNotObject(key.to_string()))?;
     }
 
     Ok((current, last.to_string()))
@@ -483,13 +480,12 @@ fn merge_objects(target: &mut Map<String, Value>, patch: &Map<String, Value>) {
     }
 }
 
-fn persist_atomic(path: &Path, map: &Map<String, Value>) -> Result<()> {
+fn persist_atomic(path: &Path, map: &Map<String, Value>) -> JsonResult<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     let tmp = path.with_extension("tmp");
-    let data = serde_json::to_vec_pretty(&Value::Object(map.clone()))
-        .map_err(|e| Error::Serialization(e.to_string()))?;
+    let data = serde_json::to_vec_pretty(&Value::Object(map.clone())).map_err(CodecError::from)?;
 
     std::fs::write(&tmp, data)?;
     std::fs::rename(&tmp, path)?;
@@ -748,11 +744,11 @@ mod tests {
                     assert!(!norm.ends_with('.'), "Should not end with a dot: {}", norm);
                     assert!(!norm.contains(".."), "Should not contain double dots: {}", norm);
                 }
-                Err(Error::InvalidPath(_)) => {
+                Err(JsonStoreError::EmptyPath) => {
                     let only_dots = dirty_path.chars().all(|c| c == '.');
                     assert!(only_dots || dirty_path.trim().is_empty());
                 }
-                Err(_) => panic!("Expected InvalidPath error only"),
+                Err(_) => panic!("Expected EmptyPath error only"),
             }
         }
 

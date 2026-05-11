@@ -1,6 +1,6 @@
 use super::RawStorage;
 use crate::store::Result;
-use crate::store::error::Error;
+use crate::store::codec::CodecError;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -18,14 +18,14 @@ impl<'a> MigrationContext<'a> {
         let raw = self.get_raw(key)?;
         match raw {
             Some(bytes) => Ok(Some(
-                rmp_serde::from_slice(&bytes).map_err(|e| Error::Serialization(e.to_string()))?,
+                rmp_serde::from_slice(&bytes).map_err(CodecError::from)?,
             )),
             None => Ok(None),
         }
     }
 
     pub fn set<T: Serialize>(&mut self, key: &str, value: &T) -> Result<()> {
-        let bytes = rmp_serde::to_vec(value).map_err(|e| Error::Serialization(e.to_string()))?;
+        let bytes = rmp_serde::to_vec(value).map_err(CodecError::from)?;
         self.set_raw(key, &bytes)
     }
 
@@ -101,14 +101,14 @@ impl<'a> MigrationContext<'a> {
         let raw = self.storage.get(full_key)?;
         match raw {
             Some(bytes) => Ok(Some(
-                rmp_serde::from_slice(&bytes).map_err(|e| Error::Serialization(e.to_string()))?,
+                rmp_serde::from_slice(&bytes).map_err(CodecError::from)?,
             )),
             None => Ok(None),
         }
     }
 
     pub fn global_set<T: Serialize>(&mut self, full_key: &str, value: &T) -> Result<()> {
-        let bytes = rmp_serde::to_vec(value).map_err(|e| Error::Serialization(e.to_string()))?;
+        let bytes = rmp_serde::to_vec(value).map_err(CodecError::from)?;
         self.storage.set(full_key, &bytes)
     }
 

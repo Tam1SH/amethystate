@@ -383,23 +383,27 @@ impl ::rpstate::store::migration::fields::RpStateFields for NetworkState_Data {
             port: ctx
                 .get::<u16>("port")?
                 .ok_or_else(|| {
-                    ::rpstate::store::error::Error::Serialization(
-                        ::alloc::__export::must_use({
-                            ::alloc::fmt::format(
-                                format_args!("Field {0} missing during migration", "port"),
-                            )
-                        }),
+                    ::rpstate::store::error::Error::from(
+                        ::rpstate::store::codec::CodecError::Custom(
+                            ::alloc::__export::must_use({
+                                ::alloc::fmt::format(
+                                    format_args!("Field {0} missing during migration", "port"),
+                                )
+                            }),
+                        ),
                     )
                 })?,
             host: ctx
                 .get::<String>("host")?
                 .ok_or_else(|| {
-                    ::rpstate::store::error::Error::Serialization(
-                        ::alloc::__export::must_use({
-                            ::alloc::fmt::format(
-                                format_args!("Field {0} missing during migration", "host"),
-                            )
-                        }),
+                    ::rpstate::store::error::Error::from(
+                        ::rpstate::store::codec::CodecError::Custom(
+                            ::alloc::__export::must_use({
+                                ::alloc::fmt::format(
+                                    format_args!("Field {0} missing during migration", "host"),
+                                )
+                            }),
+                        ),
                     )
                 })?,
         })

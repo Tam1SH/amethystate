@@ -1,47 +1,22 @@
+use crate::store::codec::CodecError;
+use crate::store::migration::MigrationError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Codec(#[from] CodecError),
 
-    #[error("Serialization failed: {0}")]
-    Serialization(String),
+    #[cfg(feature = "json")]
+    #[error(transparent)]
+    Json(#[from] crate::store::json::error::JsonStoreError),
 
-    #[error("Backend error: {0}")]
-    Backend(String),
+    #[cfg(feature = "redb")]
+    #[error(transparent)]
+    Redb(#[from] crate::store::redb::error::RedbStoreError),
 
-    #[error("Path error: {0}")]
-    InvalidPath(String),
-
-    #[error("Concurrency error: lock poisoned")]
-    Poisoned,
-
-    #[error("Migration required for [{prefix}]: DB v{db_version}, Code v{code_version}")]
-    MigrationRequired {
-        prefix: String,
-        db_version: u32,
-        code_version: u32,
-    },
-
-    #[error(
-        "Migration chain gap for [{prefix}]: reached v{reached_version}, expected v{expected_version}"
-    )]
-    MigrationGap {
-        prefix: String,
-        reached_version: u32,
-        expected_version: u32,
-    },
-
-    #[error("Migration cycle detected at prefix: {0}")]
-    MigrationCycle(String),
-
-    #[error("Downgrade detected for [{prefix}]: DB v{db_version}, Code v{code_version}")]
-    Downgrade {
-        prefix: String,
-        db_version: u32,
-        code_version: u32,
-    },
+    #[error(transparent)]
+    Migration(#[from] MigrationError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

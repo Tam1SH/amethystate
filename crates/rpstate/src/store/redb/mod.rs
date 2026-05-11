@@ -1,35 +1,39 @@
+use crate::store::codec::CodecError;
 use crate::store::{
-    Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId, SubscriptionKind,
-    debouncer::Debouncer,
+    debouncer::Debouncer, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId,
+    SubscriptionKind,
 };
-use redb::{
-    Database, ReadTransaction, ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction,
-};
-use serde::Serialize;
+use error::RedbStoreError;
+use raw_storage::RedbRawStorage;
+use redb::{Database, ReadableDatabase, WriteTransaction};
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::collections::HashMap;
+use tables::{
+    TableReader, TableWriter, TABLE_DATA, TABLE_DIFF_LOG, TABLE_LOG, TABLE_META,
+    TABLE_MIGRATION_LOG,
+};
 
-use super::{Result, error::Error};
+use super::Result;
 use crate::store::config::StoreConfig;
 use crate::store::migration::set::MigrationSet;
 use crate::store::migration::{
-    AppliedStep, ComponentOutcome, ComponentResult, MigrationContext, MigrationReport, Migrator,
-    NaggingRecord, RawStorage,
+    AppliedStep, ComponentOutcome, ComponentResult, MigrationContext, MigrationError,
+    MigrationReport, Migrator, NaggingRecord,
 };
-use crate::store::shared::{DiffEntry, PrefixMeta, SubscriptionEntry, matches_kind};
-use rmp_serde::Serializer;
+use crate::store::shared::{DiffEntry, PrefixMeta, SubscriptionEntry};
 use rmp_serde::config::BytesMode;
+use rmp_serde::Serializer;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
 use std::{thread, time::Duration};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
-const TABLE_DATA: TableDefinition<&str, &[u8]> = TableDefinition::new("data");
-const TABLE_LOG: TableDefinition<u64, &str> = TableDefinition::new("inbox_log");
-const TABLE_META: TableDefinition<&str, &[u8]> = TableDefinition::new("metadata");
-const TABLE_DIFF_LOG: TableDefinition<&str, &[u8]> = TableDefinition::new("diff_log");
-const TABLE_MIGRATION_LOG: TableDefinition<&str, &[u8]> = TableDefinition::new("migration_log");
+pub mod error;
+mod events;
+mod raw_storage;
+mod tables;
 
 pub struct RedbStore {
     db: Arc<Database>,
@@ -44,19 +48,27 @@ pub struct RedbStore {
 
 impl RedbStore {
     pub fn open(config: StoreConfig, migration_set: MigrationSet) -> Result<Self> {
-        let db = Arc::new(Database::create(&config.path).map_err(map_db_err)?);
+        let db = Arc::new(Database::create(&config.path).map_err(RedbStoreError::from)?);
 
-        let write_txn = db.begin_write().map_err(map_db_err)?;
+        let write_txn = db.begin_write().map_err(RedbStoreError::from)?;
         {
-            let _ = write_txn.open_table(TABLE_DATA).map_err(map_db_err)?;
-            let _ = write_txn.open_table(TABLE_LOG).map_err(map_db_err)?;
-            let _ = write_txn.open_table(TABLE_META).map_err(map_db_err)?;
-            let _ = write_txn.open_table(TABLE_DIFF_LOG).map_err(map_db_err)?;
+            let _ = write_txn
+                .open_table(TABLE_DATA)
+                .map_err(RedbStoreError::from)?;
+            let _ = write_txn
+                .open_table(TABLE_LOG)
+                .map_err(RedbStoreError::from)?;
+            let _ = write_txn
+                .open_table(TABLE_META)
+                .map_err(RedbStoreError::from)?;
+            let _ = write_txn
+                .open_table(TABLE_DIFF_LOG)
+                .map_err(RedbStoreError::from)?;
             let _ = write_txn
                 .open_table(TABLE_MIGRATION_LOG)
-                .map_err(map_db_err)?;
+                .map_err(RedbStoreError::from)?;
         }
-        write_txn.commit().map_err(map_db_err)?;
+        write_txn.commit().map_err(RedbStoreError::from)?;
 
         let pending = Arc::new(Mutex::new(HashMap::<String, Option<Vec<u8>>>::new()));
         let subscriptions = Arc::new(RwLock::new(Vec::new()));
@@ -94,7 +106,7 @@ impl RedbStore {
 
         let watcher_handle = thread::spawn(move || {
             while w_rx.recv_timeout(Duration::from_millis(300)).is_err() {
-                let _ = Self::process_inbox(&db_inner, &subs_inner);
+                let _ = events::process_inbox(&db_inner, &subs_inner);
             }
         });
 
@@ -128,90 +140,34 @@ impl RedbStore {
 
     pub fn save_now(&self) -> Result<()> {
         let changes = {
-            let mut lock = self.pending.lock().map_err(|_| Error::Poisoned)?;
+            let mut lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
             if lock.is_empty() {
                 return Ok(());
             }
             std::mem::take(&mut *lock)
         };
 
-        let txn = self.db.begin_write().map_err(map_db_err)?;
+        let txn = self.db.begin_write().map_err(RedbStoreError::from)?;
         {
-            let mut table = txn.open_table(TABLE_DATA).map_err(map_db_err)?;
+            let mut table = txn.open_table(TABLE_DATA).map_err(RedbStoreError::from)?;
             for (path, opt_bytes) in changes {
                 match opt_bytes {
                     Some(b) => {
                         table
                             .insert(path.as_str(), b.as_slice())
-                            .map_err(map_db_err)?;
+                            .map_err(RedbStoreError::from)?;
                     }
                     None => {
-                        table.remove(path.as_str()).map_err(map_db_err)?;
+                        table.remove(path.as_str()).map_err(RedbStoreError::from)?;
                     }
                 }
             }
         }
-        txn.commit().map_err(map_db_err)?;
+        txn.commit().map_err(RedbStoreError::from)?;
         Ok(())
     }
 
-    fn process_inbox(db: &Database, subs: &RwLock<Vec<SubscriptionEntry>>) -> Result<()> {
-        let write_txn = db.begin_write().map_err(map_db_err)?;
-        let mut events = Vec::new();
-
-        {
-            let mut log_table = write_txn.open_table(TABLE_LOG).map_err(map_db_err)?;
-            let data_table = write_txn.open_table(TABLE_DATA).map_err(map_db_err)?;
-
-            let mut to_delete = Vec::new();
-            for result in log_table.iter().map_err(map_db_err)? {
-                let (id, path_guard) = result.map_err(map_db_err)?;
-                let path = path_guard.value();
-
-                let current_val = data_table.get(path).map_err(map_db_err)?;
-
-                events.push(StoreEvent {
-                    path: path.to_string(),
-                    op: if current_val.is_some() {
-                        StoreOp::Set
-                    } else {
-                        StoreOp::Delete
-                    },
-                    old: None,
-                    new: current_val.map(|v| v.value().to_vec()),
-                });
-
-                to_delete.push(id.value());
-            }
-
-            for id in to_delete {
-                log_table.remove(id).map_err(map_db_err)?;
-            }
-        }
-        write_txn.commit().map_err(map_db_err)?;
-
-        for event in events {
-            Self::emit_local(subs, event);
-        }
-
-        Ok(())
-    }
-
-    fn emit_local(subs_lock: &RwLock<Vec<SubscriptionEntry>>, event: StoreEvent) {
-        let callbacks = {
-            let guard = subs_lock.read().unwrap();
-            guard
-                .iter()
-                .filter(|s| matches_kind(&s.kind, &event.path))
-                .map(|s| s.callback.clone())
-                .collect::<Vec<_>>()
-        };
-        for cb in callbacks {
-            cb(&event);
-        }
-    }
-
-    pub fn run_migrations(&self, mset: MigrationSet) -> Result<MigrationReport> {
+    fn run_migrations_impl(&self, mset: MigrationSet) -> Result<MigrationReport> {
         let mut report = MigrationReport::default();
         let components = mset.find_components();
 
@@ -248,7 +204,7 @@ impl RedbStore {
     }
 
     fn component_needs_work(&self, prefixes: &[String], mset: &MigrationSet) -> Result<bool> {
-        let read_txn = self.db.begin_read().map_err(map_db_err)?;
+        let read_txn = self.db.begin_read().map_err(RedbStoreError::from)?;
 
         for prefix in prefixes {
             let meta: Option<PrefixMeta> = read_txn.load_typed(TABLE_META, prefix)?;
@@ -257,7 +213,7 @@ impl RedbStore {
             let current_h = meta.as_ref().map(|m| m.hash).unwrap_or(0);
             let (target_v, target_h) = mset.get_target(prefix);
 
-            if target_v > current_v || (target_v == current_v && target_h != current_h) {
+            if target_v != current_v || target_h != 0 && target_h != current_h {
                 return Ok(true);
             }
         }
@@ -269,12 +225,12 @@ impl RedbStore {
         prefixes: &[String],
         mset: &MigrationSet,
     ) -> Result<(Vec<AppliedStep>, Vec<NaggingRecord>)> {
-        let write_txn = self.db.begin_write().map_err(map_db_err)?;
+        let write_txn = self.db.begin_write().map_err(RedbStoreError::from)?;
         let mut all_steps = Vec::new();
         let mut all_nagging = Vec::new();
 
         {
-            let mut storage = RedbRawStorage { txn: &write_txn };
+            let mut storage = RedbRawStorage::new(&write_txn);
             for prefix in prefixes {
                 let (steps, nagging) =
                     self.migrate_prefix(prefix, &write_txn, mset, &mut storage)?;
@@ -283,7 +239,7 @@ impl RedbStore {
             }
         }
 
-        write_txn.commit().map_err(map_db_err)?;
+        write_txn.commit().map_err(RedbStoreError::from)?;
         Ok((all_steps, all_nagging))
     }
     fn migrate_prefix(
@@ -295,15 +251,45 @@ impl RedbStore {
     ) -> Result<(Vec<AppliedStep>, Vec<NaggingRecord>)> {
         let (target_v, target_hash) = mset.get_target(prefix);
 
-        let mut meta: PrefixMeta = txn.load_typed(TABLE_META, prefix)?.unwrap_or_default();
+        let meta_opt: Option<PrefixMeta> = txn.load_typed(TABLE_META, prefix)?;
+
+        let mut meta = match meta_opt {
+            Some(m) => m,
+            None => {
+                let start_v = mset
+                    .get_migrator(prefix)
+                    .and_then(|m| m.steps.iter().map(|s| s.target_version()).min())
+                    .map(|v| v.saturating_sub(1))
+                    .unwrap_or(target_v);
+
+                if start_v == target_v {
+                    txn.save_typed(
+                        TABLE_META,
+                        prefix,
+                        &PrefixMeta {
+                            version: target_v,
+                            hash: target_hash,
+                        },
+                    )?;
+                    return Ok((vec![], vec![]));
+                }
+
+                PrefixMeta {
+                    version: start_v,
+                    hash: 0,
+                }
+            }
+        };
+
         let mut nagging = Vec::new();
 
         if target_v < meta.version {
-            return Err(Error::Downgrade {
+            return Err(MigrationError::Downgrade {
                 prefix: prefix.to_string(),
                 db_version: meta.version,
                 code_version: target_v,
-            });
+            }
+            .into());
         }
 
         if target_hash != 0 && target_v == meta.version && target_hash != meta.hash {
@@ -338,11 +324,12 @@ impl RedbStore {
         }
 
         if meta.version < target_v {
-            return Err(Error::MigrationGap {
+            return Err(MigrationError::Gap {
                 prefix: prefix.to_string(),
                 reached_version: meta.version,
                 expected_version: target_v,
-            });
+            }
+            .into());
         }
 
         Ok((applied_steps, nagging))
@@ -370,11 +357,12 @@ impl RedbStore {
             }
 
             if sv != meta.version + 1 {
-                return Err(Error::MigrationGap {
+                return Err(MigrationError::Gap {
                     prefix: prefix.to_string(),
                     reached_version: meta.version,
                     expected_version: meta.version + 1,
-                });
+                }
+                .into());
             }
 
             step.run(&mut ctx)?;
@@ -403,7 +391,9 @@ impl RedbStore {
         old_h: u64,
         new_h: u64,
     ) -> Result<()> {
-        let mut table = txn.open_table(TABLE_DIFF_LOG).map_err(map_db_err)?;
+        let mut table = txn
+            .open_table(TABLE_DIFF_LOG)
+            .map_err(RedbStoreError::from)?;
         let mut history: Vec<DiffEntry> =
             txn.load_typed(TABLE_DIFF_LOG, prefix)?.unwrap_or_default();
 
@@ -416,9 +406,10 @@ impl RedbStore {
                 old_hash: old_h,
                 new_hash: new_h,
             });
-            let bytes =
-                rmp_serde::to_vec(&history).map_err(|e| Error::Serialization(e.to_string()))?;
-            table.insert(prefix, bytes.as_slice()).map_err(map_db_err)?;
+            let bytes = rmp_serde::to_vec(&history).map_err(CodecError::from)?;
+            table
+                .insert(prefix, bytes.as_slice())
+                .map_err(RedbStoreError::from)?;
         }
         Ok(())
     }
@@ -430,53 +421,35 @@ impl Drop for RedbStore {
     }
 }
 
-struct RedbRawStorage<'a> {
-    txn: &'a redb::WriteTransaction,
-}
-
-impl<'a> RawStorage for RedbRawStorage<'a> {
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        let table = self.txn.open_table(TABLE_DATA).map_err(map_db_err)?;
-        Ok(table
-            .get(key)
-            .map_err(map_db_err)?
-            .map(|v| v.value().to_vec()))
-    }
-    fn set(&mut self, key: &str, value: &[u8]) -> Result<()> {
-        let mut table = self.txn.open_table(TABLE_DATA).map_err(map_db_err)?;
-        table.insert(key, value).map_err(map_db_err)?;
-        Ok(())
-    }
-    fn delete(&mut self, key: &str) -> Result<()> {
-        let mut table = self.txn.open_table(TABLE_DATA).map_err(map_db_err)?;
-        table.remove(key).map_err(map_db_err)?;
-        Ok(())
+impl SchemaAwareStore for RedbStore {
+    fn run_migrations(&self, mset: MigrationSet) -> Result<MigrationReport> {
+        self.run_migrations_impl(mset)
     }
 }
 
 impl Store for RedbStore {
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
         {
-            let lock = self.pending.lock().map_err(|_| Error::Poisoned)?;
+            let lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
             if let Some(opt_bytes) = lock.get(path) {
                 return match opt_bytes {
                     Some(bytes) => Ok(Some(
-                        rmp_serde::from_slice(bytes)
-                            .map_err(|e| Error::Serialization(e.to_string()))?,
+                        rmp_serde::from_slice(bytes).map_err(CodecError::from)?,
                     )),
                     None => Ok(None),
                 };
             }
         }
 
-        let read_txn = self.db.begin_read().map_err(map_db_err)?;
-        let table = read_txn.open_table(TABLE_DATA).map_err(map_db_err)?;
-        match table.get(path).map_err(map_db_err)? {
+        let read_txn = self.db.begin_read().map_err(RedbStoreError::from)?;
+        let table = read_txn
+            .open_table(TABLE_DATA)
+            .map_err(RedbStoreError::from)?;
+        match table.get(path).map_err(RedbStoreError::from)? {
             Some(access_guard) => {
                 let bytes = access_guard.value();
                 Ok(Some(
-                    rmp_serde::from_slice(bytes)
-                        .map_err(|e| Error::Serialization(e.to_string()))?,
+                    rmp_serde::from_slice(bytes).map_err(CodecError::from)?,
                 ))
             }
             None => Ok(None),
@@ -487,15 +460,13 @@ impl Store for RedbStore {
         let mut bytes = Vec::new();
         let mut ser = Serializer::new(&mut bytes).with_bytes(BytesMode::ForceAll);
 
-        value
-            .serialize(&mut ser)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        value.serialize(&mut ser).map_err(CodecError::from)?;
         {
-            let mut lock = self.pending.lock().map_err(|_| Error::Poisoned)?;
+            let mut lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
             lock.insert(path.to_string(), Some(bytes.clone()));
         }
 
-        Self::emit_local(
+        events::emit_local(
             &self.subscriptions,
             StoreEvent {
                 path: path.to_string(),
@@ -511,11 +482,11 @@ impl Store for RedbStore {
 
     fn delete(&self, path: &str) -> Result<()> {
         {
-            let mut lock = self.pending.lock().map_err(|_| Error::Poisoned)?;
+            let mut lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
             lock.insert(path.to_string(), None);
         }
 
-        Self::emit_local(
+        events::emit_local(
             &self.subscriptions,
             StoreEvent {
                 path: path.to_string(),
@@ -555,164 +526,12 @@ impl Store for RedbStore {
             }
         }
     }
-
-    fn evolve_prefix(&self, prefix: &str, version: u32, hash: u64) -> Result<()> {
-        let write_txn = self.db.begin_write().map_err(map_db_err)?;
-
-        {
-            let mut meta_table = write_txn.open_table(TABLE_META).map_err(map_db_err)?;
-
-            let saved_meta: Option<PrefixMeta> = meta_table
-                .get(prefix)
-                .map_err(map_db_err)?
-                .map(|m| rmp_serde::from_slice(m.value()))
-                .transpose()
-                .map_err(|e| Error::Serialization(e.to_string()))?;
-
-            if let Some(meta) = saved_meta.as_ref() {
-                if version < meta.version {
-                    return Err(Error::Downgrade {
-                        prefix: prefix.to_string(),
-                        db_version: meta.version,
-                        code_version: version,
-                    });
-                }
-
-                if version > meta.version {
-                    return Err(Error::MigrationRequired {
-                        prefix: prefix.to_string(),
-                        db_version: meta.version,
-                        code_version: version,
-                    });
-                } else if hash != meta.hash {
-                    error!(
-                        target: "rpstate",
-                        "SCHEMA DIFF TRACE: Section [{}] (hash {} -> {}). Undocumented mutation!",
-                        prefix, meta.hash, hash
-                    );
-
-                    let mut diff_table =
-                        write_txn.open_table(TABLE_DIFF_LOG).map_err(map_db_err)?;
-
-                    let mut history: Vec<DiffEntry> = diff_table
-                        .get(prefix)
-                        .map_err(map_db_err)?
-                        .map(|m| rmp_serde::from_slice(m.value()))
-                        .transpose()
-                        .map_err(|e| Error::Serialization(e.to_string()))?
-                        .unwrap_or_default();
-
-                    if history.last().is_none_or(|l| l.new_hash != hash) {
-                        history.push(DiffEntry {
-                            timestamp: std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap()
-                                .as_secs(),
-                            old_hash: meta.hash,
-                            new_hash: hash,
-                        });
-
-                        let b = rmp_serde::to_vec(&history)
-                            .map_err(|e| Error::Serialization(e.to_string()))?;
-                        diff_table
-                            .insert(prefix, b.as_slice())
-                            .map_err(map_db_err)?;
-                    }
-                }
-            }
-
-            let needs_meta_update = saved_meta
-                .as_ref()
-                .is_none_or(|m| m.version != version || m.hash == hash);
-
-            if needs_meta_update {
-                let new_meta = PrefixMeta { version, hash };
-
-                let b = rmp_serde::to_vec(&new_meta)
-                    .map_err(|e| Error::Serialization(e.to_string()))?;
-
-                meta_table
-                    .insert(prefix, b.as_slice())
-                    .map_err(map_db_err)?;
-            }
-        }
-
-        write_txn.commit().map_err(map_db_err)?;
-        Ok(())
-    }
-}
-
-fn map_db_err(e: impl std::fmt::Display) -> Error {
-    Error::Backend(e.to_string())
-}
-
-pub trait TableReader {
-    fn load_typed<T: DeserializeOwned>(
-        &self,
-        table_def: TableDefinition<&str, &[u8]>,
-        key: &str,
-    ) -> Result<Option<T>>;
-}
-
-pub trait TableWriter {
-    fn save_typed<T: Serialize>(
-        &self,
-        table_def: TableDefinition<&str, &[u8]>,
-        key: &str,
-        val: &T,
-    ) -> Result<()>;
-}
-
-fn deserialize_from_table<T: DeserializeOwned>(
-    table: impl redb::ReadableTable<&'static str, &'static [u8]>,
-    key: &str,
-) -> Result<Option<T>> {
-    table
-        .get(key)
-        .map_err(map_db_err)?
-        .map(|v| rmp_serde::from_slice(v.value()).map_err(|e| Error::Serialization(e.to_string())))
-        .transpose()
-}
-
-impl TableReader for ReadTransaction {
-    fn load_typed<T: DeserializeOwned>(
-        &self,
-        table_def: TableDefinition<&str, &[u8]>,
-        key: &str,
-    ) -> Result<Option<T>> {
-        let table = self.open_table(table_def).map_err(map_db_err)?;
-        deserialize_from_table(table, key)
-    }
-}
-
-impl TableReader for WriteTransaction {
-    fn load_typed<T: DeserializeOwned>(
-        &self,
-        table_def: TableDefinition<&str, &[u8]>,
-        key: &str,
-    ) -> Result<Option<T>> {
-        let table = self.open_table(table_def).map_err(map_db_err)?;
-        deserialize_from_table(table, key)
-    }
-}
-
-impl TableWriter for WriteTransaction {
-    fn save_typed<T: Serialize>(
-        &self,
-        table_def: TableDefinition<&str, &[u8]>,
-        key: &str,
-        val: &T,
-    ) -> Result<()> {
-        let mut table = self.open_table(table_def).map_err(map_db_err)?;
-        let bytes = rmp_serde::to_vec(val).map_err(|e| Error::Serialization(e.to_string()))?;
-        table.insert(key, bytes.as_slice()).map_err(map_db_err)?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::store::error::Error;
     use crate::store::migration::Migrator;
     use redb::ReadableTableMetadata;
     use std::path::PathBuf;
@@ -725,6 +544,18 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("rpstate-redb-{suffix}-{nanos}.redb"))
+    }
+
+    fn write_prefix_meta(store: &RedbStore, prefix: &str, version: u32, hash: u64) {
+        let write_txn = store.db.begin_write().unwrap();
+        {
+            let mut meta_table = write_txn.open_table(TABLE_META).unwrap();
+            let meta = PrefixMeta { version, hash };
+            meta_table
+                .insert(prefix, rmp_serde::to_vec(&meta).unwrap().as_slice())
+                .unwrap();
+        }
+        write_txn.commit().unwrap();
     }
 
     #[test]
@@ -849,7 +680,11 @@ mod tests {
         let path = unique_path("init");
         let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
-        store.evolve_prefix("ui", 1, 123).unwrap();
+        let mset =
+            MigrationSet::default().add("ui", Migrator::new().step(1, "init", |_| Ok(())), &[]);
+        let report = store.run_migrations(mset).unwrap();
+
+        assert!(!report.has_failures());
 
         let read_txn = store.db.begin_read().unwrap();
         let meta_table = read_txn.open_table(TABLE_META).unwrap();
@@ -857,30 +692,69 @@ mod tests {
             rmp_serde::from_slice(meta_table.get("ui").unwrap().unwrap().value()).unwrap();
 
         assert_eq!(meta.version, 1);
-        assert_eq!(meta.hash, 123);
+        assert_eq!(meta.hash, 0);
     }
 
     #[test]
-    fn test_migration_required_error() {
+    fn test_missing_migration_step_does_not_advance_meta() {
         let path = unique_path("mig_req");
         let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
-        store.evolve_prefix("app", 1, 100).unwrap();
+        write_prefix_meta(&store, "app", 1, 100);
 
-        let result = store.evolve_prefix("app", 2, 200);
+        let mset =
+            MigrationSet::default().add("app", Migrator::new().step(3, "v3", |_| Ok(())), &[]);
 
-        match result {
-            Err(Error::MigrationRequired {
-                prefix,
-                db_version,
-                code_version,
-            }) => {
-                assert_eq!(prefix, "app");
-                assert_eq!(db_version, 1);
-                assert_eq!(code_version, 2);
-            }
-            _ => panic!("Expected MigrationRequired error, got {:?}", result),
-        }
+        let report = store.run_migrations(mset).unwrap();
+        let ComponentOutcome::Failed { error } = &report.components[0].outcome else {
+            panic!("Expected failed migration component");
+        };
+
+        let Error::Migration(MigrationError::Gap {
+            prefix,
+            reached_version,
+            expected_version,
+        }) = error
+        else {
+            panic!("Expected migration gap, got {error:?}");
+        };
+        assert_eq!(prefix, "app");
+        assert_eq!(*reached_version, 1);
+        assert_eq!(*expected_version, 2);
+
+        let read_txn = store.db.begin_read().unwrap();
+        let meta_table = read_txn.open_table(TABLE_META).unwrap();
+        let meta: PrefixMeta =
+            rmp_serde::from_slice(meta_table.get("app").unwrap().unwrap().value()).unwrap();
+        assert_eq!(meta.version, 1);
+        assert_eq!(meta.hash, 100);
+    }
+
+    #[test]
+    fn test_hashless_target_ignores_saved_hash() {
+        let path = unique_path("hashless");
+        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
+
+        write_prefix_meta(&store, "net", 1, 100);
+
+        let mset =
+            MigrationSet::default().add("net", Migrator::new().step(1, "init", |_| Ok(())), &[]);
+        let report = store.run_migrations(mset).unwrap();
+
+        assert!(matches!(
+            report.components[0].outcome,
+            ComponentOutcome::Skipped
+        ));
+
+        let read_txn = store.db.begin_read().unwrap();
+        let meta_table = read_txn.open_table(TABLE_META).unwrap();
+        let meta: PrefixMeta =
+            rmp_serde::from_slice(meta_table.get("net").unwrap().unwrap().value()).unwrap();
+        assert_eq!(meta.version, 1);
+        assert_eq!(meta.hash, 100);
+
+        let diff_table = read_txn.open_table(TABLE_DIFF_LOG).unwrap();
+        assert!(diff_table.get("net").unwrap().is_none());
     }
 
     #[test]
@@ -888,46 +762,28 @@ mod tests {
         let path = unique_path("downgrade");
         let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
-        store.evolve_prefix("app", 5, 500).unwrap();
+        write_prefix_meta(&store, "app", 5, 500);
 
-        let result = store.evolve_prefix("app", 4, 400);
+        let mset =
+            MigrationSet::default().add("app", Migrator::new().step(4, "v4", |_| Ok(())), &[]);
+        let report = store.run_migrations(mset).unwrap();
 
-        match result {
-            Err(Error::Downgrade {
+        let ComponentOutcome::Failed { error } = &report.components[0].outcome else {
+            panic!("Expected failed migration component");
+        };
+
+        match error {
+            Error::Migration(MigrationError::Downgrade {
                 prefix,
                 db_version,
                 code_version,
             }) => {
                 assert_eq!(prefix, "app");
-                assert_eq!(db_version, 5);
-                assert_eq!(code_version, 4);
+                assert_eq!(*db_version, 5);
+                assert_eq!(*code_version, 4);
             }
-            _ => panic!("Expected Downgrade error, got {:?}", result),
+            _ => panic!("Expected Downgrade error, got {:?}", error),
         }
-    }
-
-    #[test]
-    fn test_nagging_does_not_update_meta() {
-        let path = unique_path("nagging");
-        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
-
-        store.evolve_prefix("net", 1, 100).unwrap();
-
-        store.evolve_prefix("net", 1, 200).unwrap();
-
-        let read_txn = store.db.begin_read().unwrap();
-        let meta_table = read_txn.open_table(TABLE_META).unwrap();
-        let meta: PrefixMeta =
-            rmp_serde::from_slice(meta_table.get("net").unwrap().unwrap().value()).unwrap();
-
-        assert_eq!(meta.hash, 100);
-
-        let diff_table = read_txn.open_table(TABLE_DIFF_LOG).unwrap();
-        let history: Vec<DiffEntry> =
-            rmp_serde::from_slice(diff_table.get("net").unwrap().unwrap().value()).unwrap();
-        assert_eq!(history.len(), 1);
-        assert_eq!(history[0].old_hash, 100);
-        assert_eq!(history[0].new_hash, 200);
     }
 
     #[test]
@@ -958,7 +814,9 @@ mod tests {
             )
             .add(
                 "ui",
-                Migrator::new().step(1, "fail", |_| Err(Error::Backend("crash".into()))),
+                Migrator::new().step(1, "fail", |_| {
+                    Err(MigrationError::Custom("crash".into()).into())
+                }),
                 &["net"],
             );
 
@@ -982,7 +840,9 @@ mod tests {
             )
             .add(
                 "b",
-                Migrator::new().step(1, "fail", |_| Err(Error::Backend("err".into()))),
+                Migrator::new().step(1, "fail", |_| {
+                    Err(MigrationError::Custom("err".into()).into())
+                }),
                 &[],
             );
 
@@ -1020,19 +880,7 @@ mod tests {
         let path = unique_path("partial");
         let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
-        {
-            let write_txn = store.db.begin_write().unwrap();
-            let mut meta_table = write_txn.open_table(TABLE_META).unwrap();
-            let meta = PrefixMeta {
-                version: 1,
-                hash: 0,
-            };
-            meta_table
-                .insert("a", rmp_serde::to_vec(&meta).unwrap().as_slice())
-                .unwrap();
-            drop(meta_table);
-            write_txn.commit().unwrap();
-        }
+        write_prefix_meta(&store, "a", 1, 0);
 
         let a_calls = Arc::new(AtomicUsize::new(0));
         let b_calls = Arc::new(AtomicUsize::new(0));
@@ -1140,42 +988,17 @@ mod tests {
             panic!("a")
         };
 
-        let Error::MigrationGap {
+        let Error::Migration(MigrationError::Gap {
             prefix,
             reached_version,
             expected_version,
-        } = error
+        }) = error
         else {
             panic!("b")
         };
         assert_eq!(prefix, "app");
         assert_eq!(*reached_version, 1);
         assert_eq!(*expected_version, 2);
-    }
-
-    #[test]
-    fn test_migration_gap_at_start() {
-        let path = unique_path("gap_start");
-        let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
-
-        let mset =
-            MigrationSet::default().add("app", Migrator::new().step(2, "v2", |_| Ok(())), &[]);
-
-        let report = store.run_migrations(mset).unwrap();
-        let ComponentOutcome::Failed { error } = &report.components[0].outcome else {
-            panic!()
-        };
-        let Error::MigrationGap {
-            reached_version,
-            expected_version,
-            ..
-        } = error
-        else {
-            panic!()
-        };
-
-        assert_eq!(*reached_version, 0);
-        assert_eq!(*expected_version, 1);
     }
 
     #[test]
@@ -1234,5 +1057,62 @@ mod tests {
 
         let store = RedbStore::open(StoreConfig::new(&path), MigrationSet::default()).unwrap();
         assert_eq!(store.get::<bool>("urgent.data").unwrap(), Some(true));
+    }
+
+    #[test]
+    fn test_fresh_db_runs_migration_steps() {
+        let path = unique_path("fresh_runs_steps");
+        let store = RedbStore::open(StoreConfig::new(&path), MigrationSet::default()).unwrap();
+
+        let mset = MigrationSet::default().add(
+            "app",
+            Migrator::new()
+                .step(1, "init", |ctx| ctx.set("v", &1u32))
+                .step(2, "next", |ctx| {
+                    let v: u32 = ctx.get("v")?.unwrap();
+                    ctx.set("v", &(v + 1))
+                }),
+            &[],
+        );
+
+        let report = store.run_migrations(mset).unwrap();
+        assert!(!report.has_failures());
+        assert_eq!(store.get::<u32>("app.v").unwrap(), Some(2));
+    }
+
+    #[test]
+    fn test_fresh_db_no_migrator_is_skipped() {
+        let path = unique_path("fresh_no_migrator");
+        let store = RedbStore::open(StoreConfig::new(&path), MigrationSet::default()).unwrap();
+
+        let mset = MigrationSet::default().add("app", Migrator::new(), &[]);
+        let report = store.run_migrations(mset).unwrap();
+
+        assert!(!report.has_failures());
+        assert!(matches!(
+            report.components[0].outcome,
+            ComponentOutcome::Skipped
+        ));
+    }
+
+    #[test]
+    fn test_fresh_db_step_is_not_skipped() {
+        let path = unique_path("fresh_not_skipped");
+        let store = RedbStore::open(StoreConfig::new(&path), MigrationSet::default()).unwrap();
+
+        let ran = Arc::new(AtomicUsize::new(0));
+        let ran_cap = ran.clone();
+
+        let mset = MigrationSet::default().add(
+            "app",
+            Migrator::new().step(1, "init", move |_| {
+                ran_cap.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }),
+            &[],
+        );
+
+        store.run_migrations(mset).unwrap();
+        assert_eq!(ran.load(Ordering::SeqCst), 1);
     }
 }

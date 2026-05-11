@@ -1,5 +1,5 @@
 use rpstate::store::builder::StoreBuilder;
-use rpstate::{Store, migrate};
+use rpstate::{migrate, Store};
 use rpstate_macros::rpstate;
 use std::sync::Arc;
 
@@ -41,8 +41,9 @@ fn test_decentralized_codegen_migration() {
     }
 
     {
-        let store = StoreBuilder::new(&path).build().unwrap();
-        store.set("app.host", &"10.0.0.1".to_string()).unwrap();
+        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
+        let config = v1::Config::new(&store).unwrap();
+        config.host().set("10.0.0.1".to_string()).unwrap();
     }
 
     let store = Arc::new(

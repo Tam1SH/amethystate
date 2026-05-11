@@ -61,16 +61,12 @@ macro_rules! migrate {
     (
         $old:path => $new:path,
         rename: [$($old_f:ident => $new_f:ident),* $(,)?]
-        $(, drop: [$($drop_f:ident),* $(,)?])?
         $(, convert: [$($conv_f:ident : $conv_old:ty => $conv_new:ty),* $(,)?])?
         , |$old_val:ident| $logic_block:block
     ) => {
         impl $crate::store::migration::migrate_from::MigrateFrom<$old> for $new {
             const RENAMES: &'static [(&'static str, &'static str)] = &[
                 $((stringify!($old_f), stringify!($new_f))),*
-            ];
-            const DROPPED: &'static [&'static str] = &[
-                $($(stringify!($drop_f)),*)?
             ];
             const CONVERTS: &'static [(&'static str, u64, u64)] = &[
                 $($( (
@@ -87,19 +83,6 @@ macro_rules! migrate {
 
         $crate::inventory::submit! {
             $crate::store::migration::registry::MigrationStepEntry {
-                prefix: <$old as $crate::store::migration::fields::RpStateFields>::PARENT_PREFIX,
-                target_version: <$old as $crate::store::migration::fields::RpStateFields>::VERSION,
-                dependencies: <$old as $crate::store::migration::fields::RpStateFields>::MIGRATION_DEPS,
-                description: concat!(
-                    "baseline v",
-                    stringify!(<$old as $crate::store::migration::fields::RpStateFields>::VERSION)
-                ),
-                run: |_ctx| Ok(())
-            }
-        }
-
-        $crate::inventory::submit! {
-            $crate::store::migration::registry::MigrationStepEntry {
                 prefix: <$new as $crate::store::migration::fields::RpStateFields>::PARENT_PREFIX,
                 target_version: <$new as $crate::store::migration::fields::RpStateFields>::VERSION,
                 dependencies: <$new as $crate::store::migration::fields::RpStateFields>::MIGRATION_DEPS,
@@ -111,8 +94,18 @@ macro_rules! migrate {
                     let old_data = <$old as RpStateFields>::load_struct(ctx)?;
                     let new_data = <$new as MigrateFrom<$old>>::migrate(old_data)?;
 
-                    for (old_k, _) in <$new as MigrateFrom<$old>>::RENAMES { ctx.delete(old_k)?; }
-                    for drop_k in <$new as MigrateFrom<$old>>::DROPPED { ctx.delete(drop_k)?; }
+                    for field in <$old as RpStateFields>::FIELDS {
+                        let is_renamed = <$new as MigrateFrom<$old>>::RENAMES
+                            .iter()
+                            .any(|(old_k, _)| *old_k == field.name);
+                        let is_kept = <$new as RpStateFields>::FIELDS
+                            .iter()
+                            .any(|f| f.name == field.name);
+
+                        if is_renamed || !is_kept {
+                            ctx.delete(field.name)?;
+                        }
+                    }
 
                     new_data.save_struct(ctx)?;
                     Ok(())

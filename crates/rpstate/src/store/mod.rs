@@ -10,6 +10,7 @@ pub use json::JsonStore;
 pub use redb::RedbStore;
 
 pub mod builder;
+pub mod codec;
 pub mod config;
 pub mod debouncer;
 pub mod error;
@@ -59,7 +60,13 @@ pub trait Store: Send + Sync + 'static {
     fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId;
     fn unsubscribe(&self, id: SubscriptionId);
     fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T>;
-    fn evolve_prefix(&self, prefix: &str, version: u32, hash: u64) -> Result<()>;
+}
+
+pub trait SchemaAwareStore: Store {
+    fn run_migrations(
+        &self,
+        mset: migration::set::MigrationSet,
+    ) -> Result<migration::MigrationReport>;
 }
 
 pub trait StateScope {
