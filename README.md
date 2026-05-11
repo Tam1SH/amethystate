@@ -187,26 +187,28 @@ This allows you to insert logic that, for example, reads data from another node 
 migrated to its latest version:
 
 ```rust
+fn migrate() -> rpstate::Result<()> {
     let store = StoreBuilder::new("./app.redb")
-.migrations( | m| {
-// 1. Pull in all automatic migrations defined via migrate! macros
-m.collect_codegen();
+        .migrations(|m| {
+            // 1. Pull in all automatic migrations defined via migrate! macros
+            m.collect_codegen();
 
-// 2. Interleave a manual custom step
-m.for_node::< Profile > ()
-.depends_on::< Identity> () // Tell the migrator about the dependency
-.step(3, "Complex cross-node logic", | ctx | {
-// Identity has already migrated at this point.
-// We can safely pull its up-to-date global data.
-let identity_plan = ctx.global_get::< String >("identity.plan") ?.unwrap();
+            // 2. Interleave a manual custom step
+            m.for_node::<Profile>()
+                .depends_on::<Identity>() // Tell the migrator about the dependency
+                .step(3, "Complex cross-node logic", |ctx| {
+                    // Identity has already migrated at this point.
+                    // We can safely pull its up-to-date global data.
+                    let identity_plan = ctx.global_get::<String>("identity.plan")?.unwrap();
 
-let name: String = ctx.get("display_name")?.unwrap();
-ctx.set("initials", & name.chars().next().unwrap_or_default().to_string()) ?;
-ctx.set("synced_plan", &identity_plan) ?;
-Ok(())
-});
-})
-.build() ?;
+                    let name: String = ctx.get("display_name")?.unwrap();
+                    ctx.set("initials", &name.chars().next().unwrap_or_default().to_string())?;
+                    ctx.set("synced_plan", &identity_plan)?;
+                    Ok(())
+                });
+        })
+        .build()?;
+}
 ```
 
 ### Guarantees and Safety
