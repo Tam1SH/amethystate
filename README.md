@@ -1,18 +1,20 @@
 # rpstate
 
-Type-safe reactive persistence with automated migrations and schema drift detection. Designed for GUI applications and oriented towards vertical-slice/feature-based architectures with compile-time verified relations.
+Type-safe reactive persistence with automated migrations and schema drift detection. Designed for GUI applications and
+oriented towards vertical-slice/feature-based architectures with compile-time verified relations.
 
 ## Backends
 
-| Feature flag | Backend | Format |
-|---|---|---|
+| Feature flag     | Backend                                 | Format      |
+|------------------|-----------------------------------------|-------------|
 | `redb` (default) | [redb](https://github.com/cberner/redb) | MessagePack |
-| `json` | JSON file with file-watcher | JSON |
+| `json`           | JSON file with file-watcher             | JSON        |
 
 ## A note on naming
 
-rpstate stands for Reactive Persistent State. When I was checking for name availability, putting the R first was a very conscious and deliberate choice. One search for the alternative anagram was enough to convince me that "managing your internal state" should remain a strictly technical endeavor. 🥴
-
+rpstate stands for Reactive Persistent State. When I was checking for name availability, putting the R first was a very
+conscious and deliberate choice. One search for the alternative anagram was enough to convince me that "managing your
+internal state" should remain a strictly technical endeavor. 🥴
 
 ## Quick start
 
@@ -80,7 +82,9 @@ pub struct UiState {
     pub proxy_host: String,
 }
 ```
+
 or
+
 ```rust
 #[rpstate]
 pub struct ConnectionPool {
@@ -101,10 +105,10 @@ pub struct InspectorState {
     pub db_pool_view: ConnectionPool,
 }
 ```
+
 Wrong field name → `no associated item named '__schema_field_porrt'` at compile time.  
 Wrong type → `TypeCheck<String>` is not implemented for `ReadOnly<u16>` at compile time.  
 Writing a read-only link → `no method named 'perform_set' found for ReadOnly<T>` at compile time.
-
 
 ## Volatile fields
 
@@ -120,7 +124,6 @@ pub struct AppState {
     pub loading: bool,   // in-memory only
 }
 ```
-
 
 ## Nested structs
 
@@ -138,7 +141,87 @@ pub struct SystemSettings {
 }
 ```
 
+---
+
+## Migrations
+
+The `rpstate` migration system manages persistent state evolution using a dependency graph between components. The
+migrator ensures that all transformations across different nodes are executed in the correct topological order.
+
+### What Migrates and What Doesn't
+
+The migrator works exclusively with persistent data structures (the generated `_Data` types).
+
+* **Included:** Regular fields and `nested` structures.
+* **Ignored:** Fields marked as `volatile`, `lookup`, or `lookup_node`. These are ephemeral or reactive links; they do
+  not exist in the node's physical storage and therefore do not affect the schema or migration process.
+
+### Automatic Steps (`migrate!`)
+
+For standard `vN -> vN+1` transitions, the `migrate!` macro handles the heavy lifting:
+
+* **Mapping:** It transforms the old data structure into the new one.
+* **Renaming:** It automatically renames keys in the database if specified in the `rename` block.
+* **Cleanup:** It purges storage of old keys that were either renamed or removed in the new version, ensuring no "dead"
+  data remains.
+
+```rust
+rpstate::migrate! {
+    v1::Config_Data => Config_Data,
+    rename: [host => address],
+    |old| {
+        Ok(Self {
+            address: old.host,
+            port: 9090, 
+        })
+    }
+}
+```
+
+### Interleaving and Topological Sorting
+
+One of the most powerful features is the ability to **interleave** automatic migrations (from macros) with manual steps
+containing custom logic. The migrator automatically resolves the execution order using topological sorting.
+
+This allows you to insert logic that, for example, reads data from another node that is guaranteed to have already been
+migrated to its latest version:
+
+```rust
+let store = StoreBuilder::new("./app.redb")
+.migrations( | m| {
+// 1. Pull in all automatic migrations defined via migrate! macros
+m.collect_codegen();
+
+// 2. Interleave a manual custom step
+m.for_node::< Profile > ()
+.depends_on::< Identity> () // Tell the migrator about the dependency
+.step(3, "Complex cross-node logic", | ctx | {
+// Identity has already migrated at this point.
+// We can safely pull its up-to-date global data.
+let identity_plan = ctx.global_get::< String >("identity.plan") ?.unwrap();
+
+let name: String = ctx.get("display_name")?.unwrap();
+ctx.set("initials", & name.chars().next().unwrap_or_default().to_string()) ?;
+ctx.set("synced_plan", &identity_plan) ?;
+Ok(())
+});
+})
+.build() ?;
+```
+
+### Guarantees and Safety
+
+1. **Component Atomicity:** Nodes linked by dependencies are grouped into "Weakly Connected Components" (WCC). All
+   migrations within a component are executed inside a single database transaction. A failure in one node rolls back the
+   entire group.
+2. **Gap Detection:** The migrator will fail to start if there is a gap in the version chain (e.g., the database is at
+   `v1`, but the code only provides logic for `v3` and above).
+3. **Downgrade Protection:** If the version stored in the database is higher than the version supported by the current
+   binary, the migrator will block execution to prevent data corruption.
+4. **Schema Drift Detection:** `rpstate` tracks type hashes for persistent fields. If you change a field type without
+   incrementing the version, the system can detect this "nagging" discrepancy.
 
 ## Status
 
-Early development. The storage layer, reactive fields, proc-macro are working. Migration runner, CLI tooling are not yet implemented.
+Early development. The storage layer, reactive fields, migration runner, proc-macro are working. CLI tooling are not yet
+implemented.
