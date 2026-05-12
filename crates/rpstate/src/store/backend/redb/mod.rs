@@ -5,12 +5,12 @@ use crate::store::{
 use error::RedbStoreError;
 use raw_storage::RedbRawStorage;
 use redb::{Database, ReadableDatabase, WriteTransaction};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::collections::HashMap;
 use tables::{
-    TABLE_DATA, TABLE_DIFF_LOG, TABLE_LOG, TABLE_META, TABLE_MIGRATION_LOG, TableReader,
-    TableWriter,
+    TableReader, TableWriter, TABLE_DATA, TABLE_DIFF_LOG, TABLE_LOG, TABLE_META,
+    TABLE_MIGRATION_LOG,
 };
 
 use crate::store::config::StoreConfig;
@@ -22,8 +22,8 @@ use crate::migration::set::MigrationSet;
 use crate::migration::{AppliedStep, ComponentOutcome, ComponentResult, NaggingRecord};
 use crate::store::util::debouncer::Debouncer;
 use bytes::Bytes;
-use rmp_serde::Serializer;
 use rmp_serde::config::BytesMode;
+use rmp_serde::Serializer;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
@@ -677,12 +677,12 @@ mod tests {
         let store = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
 
         store.set("temp.key", &1).unwrap();
-        thread::sleep(Duration::from_millis(400));
 
+        store.save_now().unwrap();
         store.delete("temp.key").unwrap();
         assert_eq!(store.get::<i32>("temp.key").unwrap(), None);
 
-        thread::sleep(Duration::from_millis(400));
+        store.save_now().unwrap();
 
         let read_txn = store.db.begin_read().unwrap();
         let table = read_txn.open_table(TABLE_DATA).unwrap();
