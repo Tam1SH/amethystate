@@ -1,5 +1,7 @@
 use crate::Result;
+use tracing::{info, warn};
 
+pub mod builder;
 pub mod context;
 pub mod error;
 pub mod fields;
@@ -12,6 +14,28 @@ pub mod types;
 use crate::error::Error;
 pub use context::MigrationContext;
 pub use error::MigrationError;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SchemaDiff {
+    pub added: Vec<meta::StoredFieldEntry>,
+    pub removed: Vec<meta::StoredFieldEntry>,
+    pub type_changed: Vec<FieldTypeChange>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FieldTypeChange {
+    pub name: String,
+    pub old_type: String,
+    pub new_type: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct NaggingRecord {
+    pub prefix: String,
+    pub old_hash: u64,
+    pub new_hash: u64,
+    pub diff: Option<SchemaDiff>,
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AppliedStep {
@@ -33,13 +57,6 @@ pub struct ComponentResult {
     pub nagging: Vec<NaggingRecord>,
 }
 
-#[derive(Debug, Clone)]
-pub struct NaggingRecord {
-    pub prefix: String,
-    pub old_hash: u64,
-    pub new_hash: u64,
-}
-
 #[derive(Debug)]
 pub enum ComponentOutcome {
     Committed { steps: Vec<AppliedStep> },
@@ -52,6 +69,53 @@ impl MigrationReport {
         self.components
             .iter()
             .any(|c| matches!(c.outcome, ComponentOutcome::Failed { .. }))
+    }
+    pub fn has_drift(&self) -> bool {
+        self.components.iter().any(|c| !c.nagging.is_empty())
+    }
+
+    pub fn log_to_tracing(&self) {
+        for comp in &self.components {
+            for nag in &comp.nagging {
+                warn!("⚠️  Schema drift detected in prefix '{}'", nag.prefix);
+                if let Some(diff) = &nag.diff {
+                    for f in &diff.added {
+                        warn!("  + field '{}': {}", f.name, f.type_name);
+                    }
+                    for f in &diff.removed {
+                        warn!("  - field '{}' (exists in DB, missing in code)", f.name);
+                    }
+                    for c in &diff.type_changed {
+                        warn!("  ~ field '{}': {} -> {}", c.name, c.old_type, c.new_type);
+                    }
+                }
+                warn!(
+                    "  Suggestion: increment version and write a migration if these changes are intentional."
+                );
+            }
+
+            match &comp.outcome {
+                ComponentOutcome::Committed { steps } => {
+                    for step in steps {
+                        info!(
+                            "✅ Applied: {} v{} ({})",
+                            step.prefix,
+                            step.target_version,
+                            step.description.as_deref().unwrap_or("no description")
+                        );
+                    }
+                }
+                ComponentOutcome::Failed { error } => {
+                    tracing::error!("❌ Component {:?} failed: {}", comp.prefixes, error);
+                    tracing::error!(
+                        "   Transaction rolled back. Data for these prefixes remains unchanged."
+                    );
+                }
+                ComponentOutcome::Skipped => {
+                    tracing::debug!("⏩ Component {:?} is up to date", comp.prefixes);
+                }
+            }
+        }
     }
 }
 

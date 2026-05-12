@@ -308,15 +308,18 @@ impl ::rpstate::migration::types::RpType for DatabaseConfig_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "DatabaseConfig_Data".as_bytes(),
     );
+    const TYPE_NAME: &'static str = "DatabaseConfig_Data";
 }
 impl ::rpstate::migration::fields::RpStateFields for DatabaseConfig_Data {
     const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
         ::rpstate::migration::fields::FieldDescriptor {
             name: "host",
             type_hash: <String as ::rpstate::migration::types::RpType>::TYPE_HASH,
+            type_name: "stringify!(String)",
         },
     ];
     const VERSION: u32 = 0u32;
+    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
@@ -651,6 +654,7 @@ impl ::rpstate::migration::types::RpType for SystemSettings_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "SystemSettings_Data".as_bytes(),
     );
+    const TYPE_NAME: &'static str = "SystemSettings_Data";
 }
 impl ::rpstate::migration::fields::RpStateFields for SystemSettings_Data {
     const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
@@ -658,9 +662,11 @@ impl ::rpstate::migration::fields::RpStateFields for SystemSettings_Data {
             name: "db",
             type_hash: 0xDEADBEEF
                 ^ <<DatabaseConfig as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
+            type_name: "stringify!(DatabaseConfig)",
         },
     ];
     const VERSION: u32 = 0u32;
+    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "sys";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {

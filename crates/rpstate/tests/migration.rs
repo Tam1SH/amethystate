@@ -46,12 +46,10 @@ fn test_decentralized_codegen_migration() {
         config.host().set("10.0.0.1".to_string()).unwrap();
     }
 
-    let store = Arc::new(
-        StoreBuilder::new(&path)
-            .collect_migrations()
-            .build()
-            .unwrap(),
-    );
+    let (store, _) = StoreBuilder::new(&path)
+        .collect_migrations()
+        .build()
+        .unwrap();
 
     let config = Config::new(&store).expect("Failed to create Config");
 

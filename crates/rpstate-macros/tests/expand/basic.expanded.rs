@@ -326,15 +326,18 @@ impl ::rpstate::migration::types::RpType for AppConfig_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "AppConfig_Data".as_bytes(),
     );
+    const TYPE_NAME: &'static str = "AppConfig_Data";
 }
 impl ::rpstate::migration::fields::RpStateFields for AppConfig_Data {
     const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
         ::rpstate::migration::fields::FieldDescriptor {
             name: "port",
             type_hash: <u16 as ::rpstate::migration::types::RpType>::TYPE_HASH,
+            type_name: "stringify!(u16)",
         },
     ];
     const VERSION: u32 = 0u32;
+    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "app";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {

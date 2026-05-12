@@ -501,7 +501,11 @@ mod tests {
     use super::*;
     use serde_json::{Value, json};
     use std::sync::Mutex;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    fn decode_event_value(bytes: Option<&Bytes>) -> Option<Value> {
+        bytes.map(|b| serde_json::from_slice(b).expect("Valid JSON in event"))
+    }
 
     fn unique_test_path(suffix: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -611,109 +615,109 @@ mod tests {
         assert_eq!(*hit_count.lock().unwrap(), 1);
     }
 
-    // #[test]
-    // fn file_watch_emits_set_for_external_change() {
-    //     let path = unique_test_path("watch-set");
-    //     std::fs::write(
-    //         &path,
-    //         serde_json::to_vec_pretty(&json!({
-    //             "rpstate": { "watch_interval_ms": 50 },
-    //             "ui": { "theme": { "dark": false } }
-    //         }))
-    //         .unwrap(),
-    //     )
-    //     .expect("seed file should be written");
-    //
-    //     let store = make_store(path.to_str().unwrap());
-    //     let (tx, rx) = std::sync::mpsc::channel::<StoreEvent>();
-    //
-    //     store.on_path(Arc::from("ui.theme.dark"), move |evt| {
-    //         let _ = tx.send(evt.clone());
-    //     });
-    //
-    //     std::fs::write(
-    //         &path,
-    //         serde_json::to_vec_pretty(&json!({
-    //             "rpstate": { "watch_interval_ms": 50 },
-    //             "ui": { "theme": { "dark": true } }
-    //         }))
-    //         .unwrap(),
-    //     )
-    //     .expect("updated file should be written");
-    //
-    //     let event = rx
-    //         .recv_timeout(Duration::from_secs(3))
-    //         .expect("watcher should emit set event");
-    //
-    //     assert_eq!(event.path, "ui.theme.dark");
-    //     assert_eq!(event.op, StoreOp::Set);
-    //     assert_eq!(decode_event_value(event.old.as_ref()), Some(json!(false)));
-    //     assert_eq!(decode_event_value(event.new.as_ref()), Some(json!(true)));
-    // }
-    //
-    // #[test]
-    // fn file_watch_emits_delete_for_external_removal() {
-    //     let path = unique_test_path("watch-delete");
-    //     std::fs::write(
-    //         &path,
-    //         serde_json::to_vec_pretty(&json!({
-    //             "rpstate": { "watch_interval_ms": 50 },
-    //             "ui": { "theme": { "dark": true } }
-    //         }))
-    //         .unwrap(),
-    //     )
-    //     .expect("seed file should be written");
-    //
-    //     let store = make_store(path.to_str().unwrap());
-    //     let (tx, rx) = std::sync::mpsc::channel::<StoreEvent>();
-    //
-    //     store.on_path(Arc::from("ui.theme.dark"), move |evt| {
-    //         let _ = tx.send(evt.clone());
-    //     });
-    //
-    //     std::fs::write(
-    //         &path,
-    //         serde_json::to_vec_pretty(&json!({
-    //             "rpstate": { "watch_interval_ms": 50 },
-    //             "ui": { "theme": {} }
-    //         }))
-    //         .unwrap(),
-    //     )
-    //     .expect("updated file should be written");
-    //
-    //     let event = rx
-    //         .recv_timeout(Duration::from_secs(3))
-    //         .expect("watcher should emit delete event");
-    //
-    //     assert_eq!(event.path, "ui.theme.dark");
-    //     assert_eq!(event.op, StoreOp::Delete);
-    //     assert_eq!(decode_event_value(event.old.as_ref()), Some(json!(true)));
-    //     assert_eq!(event.new, None);
-    // }
-    //
-    // #[test]
-    // fn snapshot_and_save_now() {
-    //     let path = unique_test_path("snapshot");
-    //     let store = make_store(path.to_str().unwrap());
-    //
-    //     store.set("app.version", &json!("1.0.0")).unwrap();
-    //     store.set("app.debug", &true).unwrap();
-    //
-    //     let snap = store.snapshot();
-    //     assert_eq!(snap.len(), 1);
-    //     assert_eq!(snap["app"]["version"], "1.0.0");
-    //
-    //     if path.exists() {
-    //         std::fs::remove_file(&path).unwrap();
-    //     }
-    //
-    //     store.save_now().unwrap();
-    //
-    //     assert!(path.exists());
-    //     let content = std::fs::read_to_string(&path).unwrap();
-    //     let disk: Value = serde_json::from_str(&content).unwrap();
-    //     assert_eq!(disk["app"]["version"], "1.0.0");
-    // }
+    #[test]
+    fn file_watch_emits_set_for_external_change() {
+        let path = unique_test_path("watch-set");
+        std::fs::write(
+            &path,
+            serde_json::to_vec_pretty(&json!({
+                "rpstate": { "watch_interval_ms": 50 },
+                "ui": { "theme": { "dark": false } }
+            }))
+            .unwrap(),
+        )
+        .expect("seed file should be written");
+
+        let store = JsonStore::open(StoreConfig::new(path.clone())).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel::<StoreEvent>();
+
+        store.on_path(Arc::from("ui.theme.dark"), move |evt| {
+            let _ = tx.send(evt.clone());
+        });
+
+        std::fs::write(
+            &path,
+            serde_json::to_vec_pretty(&json!({
+                "rpstate": { "watch_interval_ms": 50 },
+                "ui": { "theme": { "dark": true } }
+            }))
+            .unwrap(),
+        )
+        .expect("updated file should be written");
+
+        let event = rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("watcher should emit set event");
+
+        assert_eq!(&*event.path, "ui.theme.dark");
+        assert_eq!(event.op, StoreOp::Set);
+        assert_eq!(decode_event_value(event.old.as_ref()), Some(json!(false)));
+        assert_eq!(decode_event_value(event.new.as_ref()), Some(json!(true)));
+    }
+
+    #[test]
+    fn file_watch_emits_delete_for_external_removal() {
+        let path = unique_test_path("watch-delete");
+        std::fs::write(
+            &path,
+            serde_json::to_vec_pretty(&json!({
+                "rpstate": { "watch_interval_ms": 50 },
+                "ui": { "theme": { "dark": true } }
+            }))
+            .unwrap(),
+        )
+        .expect("seed file should be written");
+
+        let store = JsonStore::open(StoreConfig::new(path.clone())).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel::<StoreEvent>();
+
+        store.on_path(Arc::from("ui.theme.dark"), move |evt| {
+            let _ = tx.send(evt.clone());
+        });
+
+        std::fs::write(
+            &path,
+            serde_json::to_vec_pretty(&json!({
+                "rpstate": { "watch_interval_ms": 50 },
+                "ui": { "theme": {} }
+            }))
+            .unwrap(),
+        )
+        .expect("updated file should be written");
+
+        let event = rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("watcher should emit delete event");
+
+        assert_eq!(&*event.path, "ui.theme.dark");
+        assert_eq!(event.op, StoreOp::Delete);
+        assert_eq!(decode_event_value(event.old.as_ref()), Some(json!(true)));
+        assert_eq!(event.new, None);
+    }
+
+    #[test]
+    fn snapshot_and_save_now() {
+        let path = unique_test_path("snapshot");
+        let store = JsonStore::open(StoreConfig::new(path.clone())).unwrap();
+
+        store.set("app.version", &json!("1.0.0")).unwrap();
+        store.set("app.debug", &true).unwrap();
+
+        let snap = store.snapshot();
+        assert_eq!(snap.len(), 1);
+        assert_eq!(snap["app"]["version"], "1.0.0");
+
+        if path.exists() {
+            std::fs::remove_file(&path).unwrap();
+        }
+
+        store.save_now().unwrap();
+
+        assert!(path.exists());
+        let content = std::fs::read_to_string(&path).unwrap();
+        let disk: Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(disk["app"]["version"], "1.0.0");
+    }
 
     use proptest::collection::vec;
     use proptest::prelude::*;

@@ -10,6 +10,8 @@ pub(super) const TABLE_META: TableDefinition<&str, &[u8]> = TableDefinition::new
 pub(super) const TABLE_DIFF_LOG: TableDefinition<&str, &[u8]> = TableDefinition::new("diff_log");
 pub(super) const TABLE_MIGRATION_LOG: TableDefinition<&str, &[u8]> =
     TableDefinition::new("migration_log");
+pub(super) const TABLE_SCHEMA_SNAPSHOT: TableDefinition<&str, &[u8]> =
+    TableDefinition::new("schema_snapshot");
 
 pub(super) trait TableReader {
     fn load_typed<T: DeserializeOwned>(

@@ -296,6 +296,45 @@ fn migrate() -> rpstate::Result<()> {
 }
 ```
 
+### Schema drift detection
+
+`rpstate` records the schema hash and field types of all persistent fields on every run. If you change a field's type or
+add/remove fields without bumping the version, no migration runs—but the discrepancy is still noticed.
+
+On startup, `rpstate` compares the stored schema against the current code. Any mismatch produces a warning in the log:
+
+```
+⚠️  Schema drift detected in prefix 'app_settings'
+  + field 'timeout': Duration
+  - field 'host' (exists in DB, missing in code)
+  ~ field 'port': u16 -> u32
+  Suggestion: increment version and write a migration if these changes are intentional.
+```
+
+Three kinds of drift are reported:
+
+| Symbol | Meaning                                                |
+|--------|--------------------------------------------------------|
+| `+`    | field exists in code but is absent from the database   |
+| `-`    | field exists in the database but was removed from code |
+| `~`    | field exists in both, but its type changed             |
+
+Drift **does not block startup**—it is a warning, not an error. The application continues running, and the full diff is
+available in `MigrationReport` for programmatic inspection:
+
+```rust,ignore
+let (store, report) = StoreBuilder::new("./app.redb")
+    .collect_migrations()
+    .build()?;
+
+if report.has_drift() {
+    // report.components → comp.nagging contains the per-prefix diff
+}
+```
+
+If the changes are intentional, increment the version and write a migration. If not, you may have accidentally dropped
+or renamed a field.
+
 ### Guarantees and safety
 
 1. **Component atomicity:** Nodes linked by dependencies are grouped into Weakly Connected Components (WCC). All
@@ -304,11 +343,3 @@ fn migrate() -> rpstate::Result<()> {
    fails immediately.
 3. **Downgrade protection:** If the version in the database is higher than what the current binary supports, the
    migrator blocks execution to prevent data corruption.
-4. **Schema drift detection:** `rpstate` tracks type hashes for persistent fields. If you change a field type without
-   bumping the version, the system detects the discrepancy and records it.
-
-## Status
-
-Early development. The storage layer, reactive fields, migration runner, and proc-macro are all working. CLI tooling is
-not yet implemented.
-

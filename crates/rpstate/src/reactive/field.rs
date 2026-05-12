@@ -127,7 +127,11 @@ mod tests {
             .unwrap()
             .as_nanos();
         let path = std::env::temp_dir().join(format!("rpstate-reactive-{suffix}-{nanos}.json"));
-        Arc::new(DefaultStore::open(StoreConfig::new(path), Default::default()).unwrap())
+        Arc::new(
+            DefaultStore::open(StoreConfig::new(path), Default::default())
+                .unwrap()
+                .0,
+        )
     }
 
     struct UiScope;

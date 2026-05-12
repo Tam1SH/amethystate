@@ -16,7 +16,16 @@ pub(crate) fn data_impl(
     entries: &[StoreFieldEntry],
     macro_args: &MacroArgs,
 ) -> TokenStream2 {
-    let p_fields = persistent_fields(entries);
+    let mut p_fields = persistent_fields(entries);
+
+    p_fields.sort_by(|a, b| {
+        a.ident
+            .as_ref()
+            .unwrap()
+            .to_string()
+            .cmp(&b.ident.as_ref().unwrap().to_string())
+    });
+
     let data_struct_name = format_ident!("{}_Data", name);
 
     let data_fields = p_fields.iter().map(|e| {
@@ -32,20 +41,24 @@ pub(crate) fn data_impl(
     let version_val = macro_args.version.unwrap_or(0);
 
     let field_descriptors = p_fields.iter().map(|e| {
-        let name = e.ident.as_ref().unwrap().to_string();
+        let fname_str = e.ident.as_ref().unwrap().to_string();
         let ty = &e.ty;
+        let type_name = quote!(stringify!(#ty)).to_string().replace(" ", "");
+
         if e.nested {
             quote! {
                 ::rpstate::migration::fields::FieldDescriptor {
-                    name: #name,
+                    name: #fname_str,
                     type_hash: 0xDEADBEEF ^ < <#ty as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
+                    type_name: #type_name,
                 }
             }
         } else {
             quote! {
                 ::rpstate::migration::fields::FieldDescriptor {
-                    name: #name,
+                    name: #fname_str,
                     type_hash: <#ty as ::rpstate::migration::types::RpType>::TYPE_HASH,
+                    type_name: #type_name,
                 }
             }
         }
@@ -102,6 +115,7 @@ pub(crate) fn data_impl(
 
         impl ::rpstate::migration::types::RpType for #data_struct_name {
             const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(stringify!(#data_struct_name).as_bytes());
+            const TYPE_NAME: &'static str = stringify!(#data_struct_name);
         }
 
        impl ::rpstate::migration::fields::RpStateFields for #data_struct_name {
@@ -109,6 +123,7 @@ pub(crate) fn data_impl(
                 #(#field_descriptors),*
             ];
             const VERSION: u32 = #version_val;
+            const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
             const PARENT_PREFIX: &'static str = #prefix_expr;
             const MIGRATION_DEPS: &'static [&'static str] = &[ #(#deps),* ];
 

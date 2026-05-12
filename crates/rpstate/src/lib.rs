@@ -129,7 +129,9 @@ macro_rules! migrate {
                 prefix: <$new as $crate::migration::fields::RpStateFields>::PARENT_PREFIX,
                 target_version: <$new as $crate::migration::fields::RpStateFields>::VERSION,
                 dependencies: <$new as $crate::migration::fields::RpStateFields>::MIGRATION_DEPS,
-                description: concat!("Migration to v", stringify!(<$new as $crate::migration::fields::RpStateFields>::VERSION)),
+                description: "migrate!", //im lazy
+                schema_hash: <$new as $crate::migration::fields::RpStateFields>::SCHEMA_HASH,
+                fields: <$new as $crate::migration::fields::RpStateFields>::FIELDS,
                 run: |ctx| {
                     use $crate::migration::fields::RpStateFields;
                     use $crate::migration::migrate_from::MigrateFrom;

@@ -14,18 +14,14 @@ struct BenchData {
     payload: Vec<u8>,
 }
 
+#[cfg(feature = "redb")]
 fn setup_store() -> Arc<RedbStore> {
     let path = std::env::temp_dir().join(format!("bench_{}.redb", rand::random::<u32>()));
     if path.exists() {
         std::fs::remove_file(&path).ok();
     }
 
-    Arc::new(
-        StoreBuilder::new(&path)
-            .debounce(100_000)
-            .build_redb()
-            .unwrap(),
-    )
+    StoreBuilder::new(&path).debounce(100_000).build().unwrap()
 }
 
 #[allow(clippy::unit_arg)]

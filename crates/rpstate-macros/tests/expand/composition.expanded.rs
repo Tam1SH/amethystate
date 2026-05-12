@@ -58,8 +58,8 @@ impl ::rpstate::RpStateNode for NetworkState {
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct NetworkState_Data {
-    pub port: u16,
     pub host: String,
+    pub port: u16,
 }
 #[doc(hidden)]
 #[allow(
@@ -87,13 +87,13 @@ const _: () = {
             )?;
             _serde::ser::SerializeStruct::serialize_field(
                 &mut __serde_state,
-                "port",
-                &self.port,
+                "host",
+                &self.host,
             )?;
             _serde::ser::SerializeStruct::serialize_field(
                 &mut __serde_state,
-                "host",
-                &self.host,
+                "port",
+                &self.port,
             )?;
             _serde::ser::SerializeStruct::end(__serde_state)
         }
@@ -159,8 +159,8 @@ const _: () = {
                     __E: _serde::de::Error,
                 {
                     match __value {
-                        "port" => _serde::__private228::Ok(__Field::__field0),
-                        "host" => _serde::__private228::Ok(__Field::__field1),
+                        "host" => _serde::__private228::Ok(__Field::__field0),
+                        "port" => _serde::__private228::Ok(__Field::__field1),
                         _ => _serde::__private228::Ok(__Field::__ignore),
                     }
                 }
@@ -172,8 +172,8 @@ const _: () = {
                     __E: _serde::de::Error,
                 {
                     match __value {
-                        b"port" => _serde::__private228::Ok(__Field::__field0),
-                        b"host" => _serde::__private228::Ok(__Field::__field1),
+                        b"host" => _serde::__private228::Ok(__Field::__field0),
+                        b"port" => _serde::__private228::Ok(__Field::__field1),
                         _ => _serde::__private228::Ok(__Field::__ignore),
                     }
                 }
@@ -219,7 +219,7 @@ const _: () = {
                     __A: _serde::de::SeqAccess<'de>,
                 {
                     let __field0 = match _serde::de::SeqAccess::next_element::<
-                        u16,
+                        String,
                     >(&mut __seq)? {
                         _serde::__private228::Some(__value) => __value,
                         _serde::__private228::None => {
@@ -232,7 +232,7 @@ const _: () = {
                         }
                     };
                     let __field1 = match _serde::de::SeqAccess::next_element::<
-                        String,
+                        u16,
                     >(&mut __seq)? {
                         _serde::__private228::Some(__value) => __value,
                         _serde::__private228::None => {
@@ -245,8 +245,8 @@ const _: () = {
                         }
                     };
                     _serde::__private228::Ok(NetworkState_Data {
-                        port: __field0,
-                        host: __field1,
+                        host: __field0,
+                        port: __field1,
                     })
                 }
                 #[inline]
@@ -257,8 +257,8 @@ const _: () = {
                 where
                     __A: _serde::de::MapAccess<'de>,
                 {
-                    let mut __field0: _serde::__private228::Option<u16> = _serde::__private228::None;
-                    let mut __field1: _serde::__private228::Option<String> = _serde::__private228::None;
+                    let mut __field0: _serde::__private228::Option<String> = _serde::__private228::None;
+                    let mut __field1: _serde::__private228::Option<u16> = _serde::__private228::None;
                     while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                         __Field,
                     >(&mut __map)? {
@@ -266,21 +266,21 @@ const _: () = {
                             __Field::__field0 => {
                                 if _serde::__private228::Option::is_some(&__field0) {
                                     return _serde::__private228::Err(
-                                        <__A::Error as _serde::de::Error>::duplicate_field("port"),
+                                        <__A::Error as _serde::de::Error>::duplicate_field("host"),
                                     );
                                 }
                                 __field0 = _serde::__private228::Some(
-                                    _serde::de::MapAccess::next_value::<u16>(&mut __map)?,
+                                    _serde::de::MapAccess::next_value::<String>(&mut __map)?,
                                 );
                             }
                             __Field::__field1 => {
                                 if _serde::__private228::Option::is_some(&__field1) {
                                     return _serde::__private228::Err(
-                                        <__A::Error as _serde::de::Error>::duplicate_field("host"),
+                                        <__A::Error as _serde::de::Error>::duplicate_field("port"),
                                     );
                                 }
                                 __field1 = _serde::__private228::Some(
-                                    _serde::de::MapAccess::next_value::<String>(&mut __map)?,
+                                    _serde::de::MapAccess::next_value::<u16>(&mut __map)?,
                                 );
                             }
                             _ => {
@@ -293,23 +293,23 @@ const _: () = {
                     let __field0 = match __field0 {
                         _serde::__private228::Some(__field0) => __field0,
                         _serde::__private228::None => {
-                            _serde::__private228::de::missing_field("port")?
+                            _serde::__private228::de::missing_field("host")?
                         }
                     };
                     let __field1 = match __field1 {
                         _serde::__private228::Some(__field1) => __field1,
                         _serde::__private228::None => {
-                            _serde::__private228::de::missing_field("host")?
+                            _serde::__private228::de::missing_field("port")?
                         }
                     };
                     _serde::__private228::Ok(NetworkState_Data {
-                        port: __field0,
-                        host: __field1,
+                        host: __field0,
+                        port: __field1,
                     })
                 }
             }
             #[doc(hidden)]
-            const FIELDS: &'static [&'static str] = &["port", "host"];
+            const FIELDS: &'static [&'static str] = &["host", "port"];
             _serde::Deserializer::deserialize_struct(
                 __deserializer,
                 "NetworkState_Data",
@@ -328,8 +328,8 @@ impl ::core::default::Default for NetworkState_Data {
     #[inline]
     fn default() -> NetworkState_Data {
         NetworkState_Data {
-            port: ::core::default::Default::default(),
             host: ::core::default::Default::default(),
+            port: ::core::default::Default::default(),
         }
     }
 }
@@ -339,8 +339,8 @@ impl ::core::clone::Clone for NetworkState_Data {
     #[inline]
     fn clone(&self) -> NetworkState_Data {
         NetworkState_Data {
-            port: ::core::clone::Clone::clone(&self.port),
             host: ::core::clone::Clone::clone(&self.host),
+            port: ::core::clone::Clone::clone(&self.port),
         }
     }
 }
@@ -352,10 +352,10 @@ impl ::core::fmt::Debug for NetworkState_Data {
         ::core::fmt::Formatter::debug_struct_field2_finish(
             f,
             "NetworkState_Data",
-            "port",
-            &self.port,
             "host",
-            &&self.host,
+            &self.host,
+            "port",
+            &&self.port,
         )
     }
 }
@@ -363,33 +363,37 @@ impl ::rpstate::migration::types::RpType for NetworkState_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "NetworkState_Data".as_bytes(),
     );
+    const TYPE_NAME: &'static str = "NetworkState_Data";
 }
 impl ::rpstate::migration::fields::RpStateFields for NetworkState_Data {
     const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
         ::rpstate::migration::fields::FieldDescriptor {
-            name: "port",
-            type_hash: <u16 as ::rpstate::migration::types::RpType>::TYPE_HASH,
-        },
-        ::rpstate::migration::fields::FieldDescriptor {
             name: "host",
             type_hash: <String as ::rpstate::migration::types::RpType>::TYPE_HASH,
+            type_name: "stringify!(String)",
+        },
+        ::rpstate::migration::fields::FieldDescriptor {
+            name: "port",
+            type_hash: <u16 as ::rpstate::migration::types::RpType>::TYPE_HASH,
+            type_name: "stringify!(u16)",
         },
     ];
     const VERSION: u32 = 0u32;
+    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "net";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
         Ok(Self {
-            port: ctx.get::<u16>("port")?.unwrap_or_else(|| 8080),
             host: ctx.get::<String>("host")?.unwrap_or_else(|| "127.0.0.1".to_string()),
+            port: ctx.get::<u16>("port")?.unwrap_or_else(|| 8080),
         })
     }
     fn save_struct(
         &self,
         ctx: &mut ::rpstate::MigrationContext,
     ) -> ::rpstate::Result<()> {
-        ctx.set("port", &self.port)?;
         ctx.set("host", &self.host)?;
+        ctx.set("port", &self.port)?;
         Ok(())
     }
 }
@@ -725,10 +729,12 @@ impl ::core::fmt::Debug for UiState_Data {
 }
 impl ::rpstate::migration::types::RpType for UiState_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a("UiState_Data".as_bytes());
+    const TYPE_NAME: &'static str = "UiState_Data";
 }
 impl ::rpstate::migration::fields::RpStateFields for UiState_Data {
     const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[];
     const VERSION: u32 = 0u32;
+    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "ui";
     const MIGRATION_DEPS: &'static [&'static str] = &[
         <NetworkState as ::rpstate::StateScope>::PREFIX,

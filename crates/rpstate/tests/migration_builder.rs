@@ -65,26 +65,24 @@ fn migration_builder_mixes_codegen_and_manual_steps() {
         profile.legacy_flag().set(true).unwrap();
     }
 
-    let store = Arc::new(
-        StoreBuilder::new(&path)
-            .migrations(|m| {
-                m.collect_codegen();
-                m.for_node::<Profile>()
-                    .step(3, "derive initials after codegen migration", |ctx| {
-                        let display_name = ctx
-                            .get::<String>("display_name")?
-                            .expect("codegen step should create display_name");
-                        let initials = display_name
-                            .split_whitespace()
-                            .filter_map(|part| part.chars().next())
-                            .collect::<String>();
-                        ctx.set("initials", &initials)?;
-                        Ok(())
-                    });
-            })
-            .build()
-            .unwrap(),
-    );
+    let (store, _) = StoreBuilder::new(&path)
+        .migrations(|m| {
+            m.collect_codegen();
+            m.for_node::<Profile>()
+                .step(3, "derive initials after codegen migration", |ctx| {
+                    let display_name = ctx
+                        .get::<String>("display_name")?
+                        .expect("codegen step should create display_name");
+                    let initials = display_name
+                        .split_whitespace()
+                        .filter_map(|part| part.chars().next())
+                        .collect::<String>();
+                    ctx.set("initials", &initials)?;
+                    Ok(())
+                });
+        })
+        .build()
+        .unwrap();
 
     let profile = Profile::new(&store).unwrap();
     assert_eq!(profile.display_name().get(), "Grace Hopper");

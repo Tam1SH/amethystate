@@ -157,3 +157,108 @@ impl<'a> MigrationContext<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    struct MemoryStorage {
+        data: HashMap<String, Vec<u8>>,
+    }
+
+    impl RawStorage for MemoryStorage {
+        fn get(&self, key: &str) -> crate::Result<Option<Vec<u8>>> {
+            Ok(self.data.get(key).cloned())
+        }
+        fn set(&mut self, key: &str, value: &[u8]) -> crate::Result<()> {
+            self.data.insert(key.to_string(), value.to_vec());
+            Ok(())
+        }
+        fn delete(&mut self, key: &str) -> crate::Result<()> {
+            self.data.remove(key);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_context_rename() {
+        let mut storage = MemoryStorage {
+            data: HashMap::new(),
+        };
+        let mut ctx = MigrationContext::new("p".into(), &mut storage);
+
+        ctx.set("a", &100i32).unwrap();
+        ctx.rename("a", "b").unwrap();
+
+        assert_eq!(ctx.get::<i32>("b").unwrap(), Some(100));
+        assert!(ctx.get::<i32>("a").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_context_transform() {
+        let mut storage = MemoryStorage {
+            data: HashMap::new(),
+        };
+        let mut ctx = MigrationContext::new("p".into(), &mut storage);
+
+        ctx.set("v", &10i32).unwrap();
+        ctx.transform::<i32, i32>("v", |v| Ok(v + 5)).unwrap();
+
+        assert_eq!(ctx.get::<i32>("v").unwrap(), Some(15));
+    }
+
+    #[test]
+    fn test_context_merge() {
+        let mut storage = MemoryStorage {
+            data: HashMap::new(),
+        };
+        let mut ctx = MigrationContext::new("p".into(), &mut storage);
+
+        ctx.set("f", &"a".to_string()).unwrap();
+        ctx.set("l", &"b".to_string()).unwrap();
+
+        ctx.merge::<String, String, String>(("f", "l"), "res", |f, l| Ok(format!("{}{}", f, l)))
+            .unwrap();
+
+        assert_eq!(ctx.get::<String>("res").unwrap(), Some("ab".into()));
+        assert!(ctx.get::<String>("f").unwrap().is_none());
+        assert!(ctx.get::<String>("l").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_context_split() {
+        let mut storage = MemoryStorage {
+            data: HashMap::new(),
+        };
+        let mut ctx = MigrationContext::new("p".into(), &mut storage);
+
+        ctx.set("full", &"a:b".to_string()).unwrap();
+
+        ctx.split::<String, String, String>("full", ("p1", "p2"), |s| {
+            let mut it = s.split(':');
+            Ok((
+                it.next().unwrap().to_string(),
+                it.next().unwrap().to_string(),
+            ))
+        })
+        .unwrap();
+
+        assert_eq!(ctx.get::<String>("p1").unwrap(), Some("a".into()));
+        assert_eq!(ctx.get::<String>("p2").unwrap(), Some("b".into()));
+        assert!(ctx.get::<String>("full").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_global_access() {
+        let mut storage = MemoryStorage {
+            data: HashMap::new(),
+        };
+        let mut ctx = MigrationContext::new("scoped".into(), &mut storage);
+
+        ctx.global_set("raw.key", &777u32).unwrap();
+
+        assert!(ctx.get::<u32>("raw.key").unwrap().is_none());
+        assert_eq!(ctx.global_get::<u32>("raw.key").unwrap(), Some(777));
+    }
+}

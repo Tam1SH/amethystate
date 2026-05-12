@@ -1,4 +1,7 @@
+use crate::migration::fields::FieldDescriptor;
 use crate::store::StateScope;
+use crate::{MigrationContext, Migrator};
+use std::collections::BTreeSet;
 
 pub trait HasMigrations: StateScope {
     const MIGRATION_DEPS: &'static [&'static str];
@@ -11,14 +14,13 @@ pub struct MigrationStepEntry {
     pub target_version: u32,
     pub description: &'static str,
     pub dependencies: &'static [&'static str],
+    pub fields: &'static [FieldDescriptor],
+    pub schema_hash: u64,
     pub run: fn(&mut MigrationContext) -> crate::Result<()>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 inventory::collect!(MigrationStepEntry);
-
-use crate::{MigrationContext, Migrator};
-use std::collections::BTreeSet;
 
 pub trait MigrationDependency {
     fn register(deps: &mut BTreeSet<String>);

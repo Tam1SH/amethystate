@@ -1,8 +1,10 @@
+use rpstate::migration::ComponentOutcome;
 use rpstate::store::builder::StoreBuilder;
 use rpstate::{MigrationError, Store, migrate};
 use rpstate_macros::rpstate;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing_test::traced_test;
 
 mod identity_v1 {
     use super::*;
@@ -244,6 +246,7 @@ fn unique_path(suffix: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("rpstate-{suffix}-{nanos}.redb"))
 }
 
+#[traced_test]
 #[test]
 fn complex_hybrid_migrations_handle_dependency_tree_and_rollback() {
     let path = unique_path("complex-migration");
@@ -292,109 +295,133 @@ fn complex_hybrid_migrations_handle_dependency_tree_and_rollback() {
         let _broken_child = broken_child_v1::BrokenChild::new(&store).unwrap();
     }
 
-    let store = Arc::new(
-        StoreBuilder::new(&path)
-            .migrations(|m| {
-                m.collect_codegen();
+    let (store, report) = StoreBuilder::new(&path)
+        .migrations(|m| {
+            m.collect_codegen();
 
-                m.for_node::<Profile>().depends_on::<Identity>().step(
-                    2,
-                    "split full name and snapshot plan",
-                    |ctx| {
-                        let full_name = ctx
-                            .get::<String>("full_name")?
-                            .expect("seed should contain profile full_name");
-                        let mut parts = full_name.splitn(2, ' ');
-                        let first_name = parts.next().unwrap_or_default().to_string();
-                        let last_name = parts.next().unwrap_or_default().to_string();
-                        let age = ctx
-                            .get::<String>("age_text")?
-                            .and_then(|value| value.parse::<u8>().ok());
-                        let plan_snapshot = ctx
-                            .global_get::<String>("complex_identity.plan")?
-                            .expect("identity codegen migration should run first");
+            m.for_node::<Profile>().depends_on::<Identity>().step(
+                2,
+                "split full name and snapshot plan",
+                |ctx| {
+                    let full_name = ctx
+                        .get::<String>("full_name")?
+                        .expect("seed should contain profile full_name");
+                    let mut parts = full_name.splitn(2, ' ');
+                    let first_name = parts.next().unwrap_or_default().to_string();
+                    let last_name = parts.next().unwrap_or_default().to_string();
+                    let age = ctx
+                        .get::<String>("age_text")?
+                        .and_then(|value| value.parse::<u8>().ok());
+                    let plan_snapshot = ctx
+                        .global_get::<String>("complex_identity.plan")?
+                        .expect("identity codegen migration should run first");
 
-                        ctx.set("first_name", &first_name)?;
-                        ctx.set("last_name", &last_name)?;
-                        ctx.set("age", &age)?;
-                        ctx.set("plan_snapshot", &plan_snapshot)?;
-                        ctx.delete("full_name")?;
-                        ctx.delete("age_text")?;
-                        Ok(())
-                    },
-                );
+                    ctx.set("first_name", &first_name)?;
+                    ctx.set("last_name", &last_name)?;
+                    ctx.set("age", &age)?;
+                    ctx.set("plan_snapshot", &plan_snapshot)?;
+                    ctx.delete("full_name")?;
+                    ctx.delete("age_text")?;
+                    Ok(())
+                },
+            );
 
-                m.for_node::<Workspace>().depends_on::<Profile>().step(
-                    3,
-                    "derive welcome title after profile migration",
-                    |ctx| {
-                        let name = ctx
-                            .get::<String>("name")?
-                            .expect("workspace codegen migration should create name");
-                        let first_name = ctx
-                            .global_get::<String>("complex_profile.first_name")?
-                            .expect("profile migration should create first_name");
-                        let welcome_title = format!("{name} for {first_name}");
-                        ctx.set("welcome_title", &welcome_title)?;
-                        Ok(())
-                    },
-                );
+            m.for_node::<Workspace>().depends_on::<Profile>().step(
+                3,
+                "derive welcome title after profile migration",
+                |ctx| {
+                    let name = ctx
+                        .get::<String>("name")?
+                        .expect("workspace codegen migration should create name");
+                    let first_name = ctx
+                        .global_get::<String>("complex_profile.first_name")?
+                        .expect("profile migration should create first_name");
+                    let welcome_title = format!("{name} for {first_name}");
+                    ctx.set("welcome_title", &welcome_title)?;
+                    Ok(())
+                },
+            );
 
-                m.for_node::<Ui>().depends_on::<Workspace>().step(
-                    2,
-                    "flatten panel state and normalize sidebar",
-                    |ctx| {
-                        let sidebar_px = ctx.get::<u16>("sidebar_px")?.unwrap_or(0);
-                        let width_px = ctx.get::<u16>("width_px")?.unwrap_or(1);
-                        let sidebar_ratio = sidebar_px as f32 / width_px as f32;
-                        let left_panel_visible =
-                            ctx.get::<bool>("panels.left.visible")?.unwrap_or(true);
-                        ctx.set("sidebar_ratio", &sidebar_ratio)?;
-                        ctx.set("left_panel_visible", &left_panel_visible)?;
-                        ctx.delete("sidebar_px")?;
-                        ctx.delete("width_px")?;
-                        ctx.delete("panels.left.visible")?;
-                        Ok(())
-                    },
-                );
+            m.for_node::<Ui>().depends_on::<Workspace>().step(
+                2,
+                "flatten panel state and normalize sidebar",
+                |ctx| {
+                    let sidebar_px = ctx.get::<u16>("sidebar_px")?.unwrap_or(0);
+                    let width_px = ctx.get::<u16>("width_px")?.unwrap_or(1);
+                    let sidebar_ratio = sidebar_px as f32 / width_px as f32;
+                    let left_panel_visible =
+                        ctx.get::<bool>("panels.left.visible")?.unwrap_or(true);
+                    ctx.set("sidebar_ratio", &sidebar_ratio)?;
+                    ctx.set("left_panel_visible", &left_panel_visible)?;
+                    ctx.delete("sidebar_px")?;
+                    ctx.delete("width_px")?;
+                    ctx.delete("panels.left.visible")?;
+                    Ok(())
+                },
+            );
 
-                m.for_node::<Shortcuts>().depends_on::<Workspace>().step(
-                    2,
-                    "parse legacy shortcut bindings",
-                    |ctx| {
-                        let legacy = ctx
-                            .get::<Vec<String>>("legacy_bindings")?
-                            .unwrap_or_default();
-                        let mut bindings = legacy
-                            .into_iter()
-                            .filter_map(|entry| {
-                                let (action, binding) = entry.split_once('=')?;
-                                Some(format!("{action}:{binding}"))
-                            })
-                            .collect::<Vec<_>>();
-                        bindings.sort();
-                        ctx.set("bindings", &bindings)?;
-                        ctx.delete("legacy_bindings")?;
-                        Ok(())
-                    },
-                );
+            m.for_node::<Shortcuts>().depends_on::<Workspace>().step(
+                2,
+                "parse legacy shortcut bindings",
+                |ctx| {
+                    let legacy = ctx
+                        .get::<Vec<String>>("legacy_bindings")?
+                        .unwrap_or_default();
+                    let mut bindings = legacy
+                        .into_iter()
+                        .filter_map(|entry| {
+                            let (action, binding) = entry.split_once('=')?;
+                            Some(format!("{action}:{binding}"))
+                        })
+                        .collect::<Vec<_>>();
+                    bindings.sort();
+                    ctx.set("bindings", &bindings)?;
+                    ctx.delete("legacy_bindings")?;
+                    Ok(())
+                },
+            );
 
-                m.for_node::<BrokenRoot>()
-                    .step(2, "stage broken branch mutation", |ctx| {
-                        ctx.set("original", &"mutated".to_string())?;
-                        ctx.set("staged", &true)?;
-                        Ok(())
-                    });
+            m.for_node::<BrokenRoot>()
+                .step(2, "stage broken branch mutation", |ctx| {
+                    ctx.set("original", &"mutated".to_string())?;
+                    ctx.set("staged", &true)?;
+                    Ok(())
+                });
 
-                m.for_node::<BrokenChild>().depends_on::<BrokenRoot>().step(
-                    2,
-                    "fail broken branch",
-                    |_| Err(MigrationError::Custom("intentional failure".into()).into()),
-                );
-            })
-            .build()
-            .unwrap(),
+            m.for_node::<BrokenChild>().depends_on::<BrokenRoot>().step(
+                2,
+                "fail broken branch",
+                |_| Err(MigrationError::Custom("intentional failure".into()).into()),
+            );
+        })
+        .build()
+        .unwrap();
+
+    assert!(report.has_failures());
+
+    assert_eq!(
+        report
+            .components
+            .iter()
+            .filter(|c| matches!(c.outcome, ComponentOutcome::Failed { .. }))
+            .count(),
+        1
     );
+
+    assert!(logs_contain("✅ Applied: complex_identity v2"));
+    assert!(logs_contain(
+        "✅ Applied: complex_profile v2 (split full name and snapshot plan)"
+    ));
+    assert!(logs_contain(
+        "✅ Applied: complex_workspace v3 (derive welcome title after profile migration)"
+    ));
+    assert!(logs_contain("✅ Applied: complex_telemetry v2"));
+    assert!(logs_contain(
+        "❌ Component [\"complex_broken_child\", \"complex_broken_root\"] failed: Migration error: intentional failure"
+    ));
+    assert!(logs_contain(
+        "Transaction rolled back. Data for these prefixes remains unchanged."
+    ));
 
     let identity = Identity::new(&store).unwrap();
     // AI-Doxxed-Driven Development

@@ -1,4 +1,5 @@
 use super::Migrator;
+use crate::migration::fields::FieldDescriptor;
 use crate::{MigrationError, Result};
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -8,13 +9,20 @@ use std::collections::{HashMap, HashSet};
 #[derive(Default)]
 pub struct MigrationSet {
     migrators: HashMap<String, Migrator>,
-    targets: HashMap<String, (u32, u64)>,
+    targets: HashMap<String, (u32, u64, &'static [FieldDescriptor])>,
     graph: DiGraph<String, ()>,
     nodes: HashMap<String, NodeIndex>,
 }
 
 impl MigrationSet {
-    pub fn add(mut self, prefix: impl Into<String>, migrator: Migrator, deps: &[&str]) -> Self {
+    pub fn add(
+        mut self,
+        prefix: impl Into<String>,
+        migrator: Migrator,
+        hash: u64,
+        fields: &'static [FieldDescriptor],
+        deps: &[&str],
+    ) -> Self {
         let prefix = prefix.into();
 
         let node_idx = *self
@@ -38,14 +46,15 @@ impl MigrationSet {
             .max()
             .unwrap_or(0);
 
-        self.targets.insert(prefix.clone(), (target_version, 0));
-
+        self.targets
+            .insert(prefix.clone(), (target_version, hash, fields));
         self.migrators.insert(prefix, migrator);
+
         self
     }
 
-    pub(crate) fn get_target(&self, prefix: &str) -> (u32, u64) {
-        self.targets.get(prefix).cloned().unwrap_or((0, 0))
+    pub(crate) fn get_target(&self, prefix: &str) -> (u32, u64, &'static [FieldDescriptor]) {
+        self.targets.get(prefix).cloned().unwrap_or((0, 0, &[]))
     }
 
     pub(crate) fn find_components(&self) -> Vec<Vec<String>> {
@@ -114,6 +123,9 @@ impl MigrationSet {
 mod tests {
     use super::*;
     use crate::error::Error;
+    use crate::migration::fields::FieldDescriptor;
+
+    const EMPTY_FIELDS: &[FieldDescriptor] = &[];
 
     fn dummy_migrator() -> Migrator {
         Migrator::new()
@@ -122,11 +134,11 @@ mod tests {
     #[test]
     fn test_wcc_separation() {
         let set = MigrationSet::default()
-            .add("a", dummy_migrator(), &["b"])
-            .add("b", dummy_migrator(), &[])
-            .add("c", dummy_migrator(), &["d"])
-            .add("d", dummy_migrator(), &[])
-            .add("e", dummy_migrator(), &[]);
+            .add("a", dummy_migrator(), 0, EMPTY_FIELDS, &["b"])
+            .add("b", dummy_migrator(), 0, EMPTY_FIELDS, &[])
+            .add("c", dummy_migrator(), 0, EMPTY_FIELDS, &["d"])
+            .add("d", dummy_migrator(), 0, EMPTY_FIELDS, &[])
+            .add("e", dummy_migrator(), 0, EMPTY_FIELDS, &[]);
 
         let components = set.find_components();
 
@@ -139,9 +151,9 @@ mod tests {
     #[test]
     fn test_toposort_simple() {
         let set = MigrationSet::default()
-            .add("ui", dummy_migrator(), &["app", "net"])
-            .add("app", dummy_migrator(), &["net"])
-            .add("net", dummy_migrator(), &[]);
+            .add("ui", dummy_migrator(), 0, EMPTY_FIELDS, &["app", "net"])
+            .add("app", dummy_migrator(), 0, EMPTY_FIELDS, &["net"])
+            .add("net", dummy_migrator(), 0, EMPTY_FIELDS, &[]);
 
         let comp = &set.find_components()[0];
         let sorted = set.topo_sort_component(comp).unwrap();
@@ -152,10 +164,10 @@ mod tests {
     #[test]
     fn test_diamond_dependency() {
         let set = MigrationSet::default()
-            .add("d", dummy_migrator(), &["b", "c"])
-            .add("b", dummy_migrator(), &["a"])
-            .add("c", dummy_migrator(), &["a"])
-            .add("a", dummy_migrator(), &[]);
+            .add("d", dummy_migrator(), 0, EMPTY_FIELDS, &["b", "c"])
+            .add("b", dummy_migrator(), 0, EMPTY_FIELDS, &["a"])
+            .add("c", dummy_migrator(), 0, EMPTY_FIELDS, &["a"])
+            .add("a", dummy_migrator(), 0, EMPTY_FIELDS, &[]);
 
         let comp = &set.find_components()[0];
         let sorted = set.topo_sort_component(comp).unwrap();
@@ -169,9 +181,9 @@ mod tests {
     #[test]
     fn test_cycle_error() {
         let set = MigrationSet::default()
-            .add("a", dummy_migrator(), &["b"])
-            .add("b", dummy_migrator(), &["c"])
-            .add("c", dummy_migrator(), &["a"]);
+            .add("a", dummy_migrator(), 0, EMPTY_FIELDS, &["b"])
+            .add("b", dummy_migrator(), 0, EMPTY_FIELDS, &["c"])
+            .add("c", dummy_migrator(), 0, EMPTY_FIELDS, &["a"]);
 
         let comp = &set.find_components()[0];
         let result = set.topo_sort_component(comp).unwrap_err();
@@ -180,13 +192,32 @@ mod tests {
             Error::Migration(MigrationError::Cycle(prefix)) => {
                 assert!(["a", "b", "c"].contains(&prefix.as_str()));
             }
-            _ => panic!("Expected MigrationCycle error"),
+            _ => panic!("Expected MigrationCycle error, got {:?}", result),
         }
     }
 
     #[test]
+    fn test_target_info_retrieval() {
+        static TEST_FIELDS: &[FieldDescriptor] = &[FieldDescriptor {
+            name: "id",
+            type_hash: 123,
+            type_name: "u64",
+        }];
+
+        let migrator = Migrator::new().step(1, "init", |_| Ok(()));
+        let set = MigrationSet::default().add("app", migrator, 999, TEST_FIELDS, &[]);
+
+        let (v, h, f) = set.get_target("app");
+        assert_eq!(v, 1);
+        assert_eq!(h, 999);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].name, "id");
+        assert_eq!(f[0].type_name, "u64");
+    }
+
+    #[test]
     fn test_implicit_dependencies() {
-        let set = MigrationSet::default().add("a", dummy_migrator(), &["b"]);
+        let set = MigrationSet::default().add("a", dummy_migrator(), 0, EMPTY_FIELDS, &["b"]);
 
         let components = set.find_components();
         assert_eq!(components[0], vec!["a", "b"]);
@@ -197,15 +228,13 @@ mod tests {
 
     #[test]
     fn test_component_determinism() {
-        let set1 =
-            MigrationSet::default()
-                .add("x", dummy_migrator(), &[])
-                .add("a", dummy_migrator(), &[]);
+        let set1 = MigrationSet::default()
+            .add("x", dummy_migrator(), 0, EMPTY_FIELDS, &[])
+            .add("a", dummy_migrator(), 0, EMPTY_FIELDS, &[]);
 
-        let set2 =
-            MigrationSet::default()
-                .add("a", dummy_migrator(), &[])
-                .add("x", dummy_migrator(), &[]);
+        let set2 = MigrationSet::default()
+            .add("a", dummy_migrator(), 0, EMPTY_FIELDS, &[])
+            .add("x", dummy_migrator(), 0, EMPTY_FIELDS, &[]);
 
         assert_eq!(set1.find_components(), set2.find_components());
     }

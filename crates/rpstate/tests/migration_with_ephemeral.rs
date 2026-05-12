@@ -97,12 +97,10 @@ fn test_nested_and_ephemeral_integration() {
     }
 
     {
-        let store = Arc::new(
-            StoreBuilder::new(&path)
-                .collect_migrations()
-                .build()
-                .unwrap(),
-        );
+        let (store, _) = StoreBuilder::new(&path)
+            .collect_migrations()
+            .build()
+            .unwrap();
 
         let sys = SystemConfig::new(&store).expect("Failed to load v2 system");
         let ui = Dashboard::new(&store).expect("Failed to load dashboard");

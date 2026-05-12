@@ -390,19 +390,23 @@ impl ::rpstate::migration::types::RpType for ConnectionPool_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "ConnectionPool_Data".as_bytes(),
     );
+    const TYPE_NAME: &'static str = "ConnectionPool_Data";
 }
 impl ::rpstate::migration::fields::RpStateFields for ConnectionPool_Data {
     const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
         ::rpstate::migration::fields::FieldDescriptor {
             name: "max_connections",
             type_hash: <u32 as ::rpstate::migration::types::RpType>::TYPE_HASH,
+            type_name: "stringify!(u32)",
         },
         ::rpstate::migration::fields::FieldDescriptor {
             name: "timeout_secs",
             type_hash: <u32 as ::rpstate::migration::types::RpType>::TYPE_HASH,
+            type_name: "stringify!(u32)",
         },
     ];
     const VERSION: u32 = 0u32;
+    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
@@ -740,6 +744,7 @@ impl ::rpstate::migration::types::RpType for DatabaseState_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "DatabaseState_Data".as_bytes(),
     );
+    const TYPE_NAME: &'static str = "DatabaseState_Data";
 }
 impl ::rpstate::migration::fields::RpStateFields for DatabaseState_Data {
     const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
@@ -747,9 +752,11 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseState_Data {
             name: "pool",
             type_hash: 0xDEADBEEF
                 ^ <<ConnectionPool as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
+            type_name: "stringify!(ConnectionPool)",
         },
     ];
     const VERSION: u32 = 0u32;
+    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "sys.database";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
@@ -1044,10 +1051,12 @@ impl ::rpstate::migration::types::RpType for InspectorState_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "InspectorState_Data".as_bytes(),
     );
+    const TYPE_NAME: &'static str = "InspectorState_Data";
 }
 impl ::rpstate::migration::fields::RpStateFields for InspectorState_Data {
     const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[];
     const VERSION: u32 = 0u32;
+    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "ui.inspector";
     const MIGRATION_DEPS: &'static [&'static str] = &[
         <DatabaseState as ::rpstate::StateScope>::PREFIX,
