@@ -246,6 +246,7 @@ fn unique_path(suffix: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("rpstate-{suffix}-{nanos}.redb"))
 }
 
+#[cfg(feature = "redb")]
 #[traced_test]
 #[test]
 fn complex_hybrid_migrations_handle_dependency_tree_and_rollback() {

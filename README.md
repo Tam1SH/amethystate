@@ -103,6 +103,24 @@ fn main() -> rpstate::Result<()> {
 }
 ```
 
+## Backends
+
+`rpstate` supports two storage backends, selected at compile time via Cargo features.
+
+`redb` is the default. It is a fast embedded database and the only backend that supports migrations:
+
+```toml
+[dependencies]
+rpstate = { version = "*" }  # redb is enabled by default
+```
+
+`json` is useful for human-readable storage or debugging. To use it, disable the default features:
+
+```toml
+[dependencies]
+rpstate = { version = "*", default-features = false, features = ["json"] }
+```
+
 ## Cross-struct references
 
 Fields can share storage with another struct via `lookup`.
@@ -298,8 +316,7 @@ fn migrate() -> rpstate::Result<()> {
 
 ### Schema drift detection
 
-`rpstate` records the schema hash and field types of all persistent fields on every run. If you change a field's type or
-add/remove fields without bumping the version, no migration runs—but the discrepancy is still noticed.
+`rpstate` records the schema hash and field types of all persistent fields on every run. If you change a field's type or add/remove fields without bumping the version, no migration runs—but the discrepancy is still noticed.
 
 On startup, `rpstate` compares the stored schema against the current code. Any mismatch produces a warning in the log:
 

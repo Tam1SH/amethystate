@@ -36,21 +36,6 @@ impl<'a> MigrationContext<'a> {
         Ok(new_data)
     }
 
-    pub fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
-        let raw = self.get_raw(key)?;
-        match raw {
-            Some(bytes) => Ok(Some(
-                rmp_serde::from_slice(&bytes).map_err(CodecError::from)?,
-            )),
-            None => Ok(None),
-        }
-    }
-
-    pub fn set<T: Serialize>(&mut self, key: &str, value: &T) -> Result<()> {
-        let bytes = rmp_serde::to_vec(value).map_err(CodecError::from)?;
-        self.set_raw(key, &bytes)
-    }
-
     pub fn delete(&mut self, key: &str) -> Result<()> {
         self.storage.delete(&self.scoped_path(key))
     }
@@ -119,18 +104,26 @@ impl<'a> MigrationContext<'a> {
         Ok(())
     }
 
+    pub fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
+        match self.get_raw(key)? {
+            Some(bytes) => Ok(Some(decode(&bytes)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn set<T: Serialize>(&mut self, key: &str, value: &T) -> Result<()> {
+        self.set_raw(key, &encode(value)?)
+    }
+
     pub fn global_get<T: DeserializeOwned>(&self, full_key: &str) -> Result<Option<T>> {
-        let raw = self.storage.get(full_key)?;
-        match raw {
-            Some(bytes) => Ok(Some(
-                rmp_serde::from_slice(&bytes).map_err(CodecError::from)?,
-            )),
+        match self.storage.get(full_key)? {
+            Some(bytes) => Ok(Some(decode(&bytes)?)),
             None => Ok(None),
         }
     }
 
     pub fn global_set<T: Serialize>(&mut self, full_key: &str, value: &T) -> Result<()> {
-        let bytes = rmp_serde::to_vec(value).map_err(CodecError::from)?;
+        let bytes = encode(value)?;
         self.storage.set(full_key, &bytes)
     }
 
@@ -155,6 +148,30 @@ impl<'a> MigrationContext<'a> {
         } else {
             format!("{}.{}", self.prefix, key)
         }
+    }
+}
+
+fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>> {
+    #[cfg(feature = "redb")]
+    {
+        rmp_serde::to_vec(value).map_err(|e| CodecError::from(e).into())
+    }
+
+    #[cfg(not(feature = "redb"))]
+    {
+        serde_json::to_vec(value).map_err(|e| CodecError::from(e).into())
+    }
+}
+
+fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
+    #[cfg(feature = "redb")]
+    {
+        rmp_serde::from_slice(bytes).map_err(|e| CodecError::from(e).into())
+    }
+
+    #[cfg(not(feature = "redb"))]
+    {
+        serde_json::from_slice(bytes).map_err(|e| CodecError::from(e).into())
     }
 }
 

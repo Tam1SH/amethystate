@@ -4,4 +4,3 @@ cargo test --workspace --no-default-features --features redb
 cargo test --workspace --no-default-features --features json
 cargo test --workspace --all-features
 cargo doc --workspace --all-features --no-deps
-cargo test -p rpstate-macros

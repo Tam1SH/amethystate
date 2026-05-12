@@ -842,12 +842,13 @@ dependencies = [
 
 [[package]]
 name = "rpstate"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "arc-swap",
  "bytes",
  "criterion",
  "inventory",
+ "macrotest",
  "petgraph",
  "proptest",
  "rand 0.10.1",
@@ -860,20 +861,17 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-test",
+ "trybuild",
 ]
 
 [[package]]
 name = "rpstate-macros"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "darling",
- "macrotest",
  "proc-macro2",
  "quote",
- "rpstate",
- "serde",
  "syn",
- "trybuild",
 ]
 
 [[package]]

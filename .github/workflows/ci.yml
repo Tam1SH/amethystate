@@ -73,21 +73,3 @@ jobs:
         with:
           toolchain: 1.94.0
       - run: cargo doc --workspace --all-features --no-deps
-
-  macros:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.94.0
-      - uses: dtolnay/rust-toolchain@nightly
-
-      - name: Install cargo-expand
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-expand
-
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p rpstate-macros

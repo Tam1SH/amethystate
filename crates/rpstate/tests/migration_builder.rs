@@ -54,6 +54,7 @@ fn unique_path(suffix: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("rpstate-{suffix}-{nanos}.redb"))
 }
 
+#[cfg(feature = "redb")]
 #[test]
 fn migration_builder_mixes_codegen_and_manual_steps() {
     let path = unique_path("migration-builder");

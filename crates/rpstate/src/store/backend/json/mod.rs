@@ -1,14 +1,15 @@
 pub mod error;
 
 use self::error::{JsonResult, JsonStoreError};
-use crate::Result;
 use crate::codec::CodecError;
+use crate::migration::set::MigrationSet;
 use crate::store::config::StoreConfig;
 use crate::store::util::debouncer::Debouncer;
 use crate::store::{
     Store, StoreCallback, StoreEvent, StoreOp, SubscriptionEntry, SubscriptionId, SubscriptionKind,
     matches_kind,
 };
+use crate::{MigrationReport, Result};
 use bytes::Bytes;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -129,14 +130,14 @@ impl Store for JsonStore {
 }
 
 impl JsonStore {
-    pub fn open(config: StoreConfig) -> Result<Self> {
+    pub fn open(config: StoreConfig, _: MigrationSet) -> Result<(Self, MigrationReport)> {
         let initial = if config.path.exists() {
             Self::load_map(&config.path)?
         } else {
             Map::new()
         };
 
-        Ok(Self::new(config, initial))
+        Ok((Self::new(config, initial), Default::default()))
     }
 
     fn new(config: StoreConfig, initial: Map<String, Value>) -> Self {
@@ -516,7 +517,18 @@ mod tests {
     }
 
     fn make_store(suffix: &str) -> JsonStore {
-        JsonStore::open(StoreConfig::new(unique_test_path(suffix))).unwrap()
+        JsonStore::open(
+            StoreConfig::new(unique_test_path(suffix)),
+            Default::default(),
+        )
+        .unwrap()
+        .0
+    }
+
+    fn open_store_at(path: PathBuf) -> JsonStore {
+        JsonStore::open(StoreConfig::new(path), Default::default())
+            .unwrap()
+            .0
     }
 
     #[test]
@@ -628,7 +640,7 @@ mod tests {
         )
         .expect("seed file should be written");
 
-        let store = JsonStore::open(StoreConfig::new(path.clone())).unwrap();
+        let store = open_store_at(path.clone());
         let (tx, rx) = std::sync::mpsc::channel::<StoreEvent>();
 
         store.on_path(Arc::from("ui.theme.dark"), move |evt| {
@@ -668,7 +680,7 @@ mod tests {
         )
         .expect("seed file should be written");
 
-        let store = JsonStore::open(StoreConfig::new(path.clone())).unwrap();
+        let store = open_store_at(path.clone());
         let (tx, rx) = std::sync::mpsc::channel::<StoreEvent>();
 
         store.on_path(Arc::from("ui.theme.dark"), move |evt| {
@@ -698,7 +710,7 @@ mod tests {
     #[test]
     fn snapshot_and_save_now() {
         let path = unique_test_path("snapshot");
-        let store = JsonStore::open(StoreConfig::new(path.clone())).unwrap();
+        let store = open_store_at(path.clone());
 
         store.set("app.version", &json!("1.0.0")).unwrap();
         store.set("app.debug", &true).unwrap();

@@ -73,6 +73,7 @@ migrate! {
     }
 }
 
+#[cfg(feature = "redb")]
 #[test]
 fn test_nested_and_ephemeral_integration() {
     let path = std::env::temp_dir().join("rpstate_ephemeral_test.redb");

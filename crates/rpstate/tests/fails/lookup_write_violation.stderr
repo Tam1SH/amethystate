@@ -23,7 +23,7 @@ error[E0599]: no method named `set` found for struct `rpstate::Field<u16, RedbSt
    |                 ^^^
    |
 help: there is a method `get` with a similar name, but with different arguments
-  --> $WORKSPACE/crates/rpstate/src/reactive/field.rs
+  --> src/reactive/field.rs
    |
    |     pub fn get(&self) -> TValue {
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^

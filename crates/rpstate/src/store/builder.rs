@@ -5,8 +5,7 @@ use std::time::Duration;
 
 use crate::migration::builder::MigrationBuilder;
 use crate::migration::set::MigrationSet;
-#[cfg(feature = "redb")]
-use crate::store::backend::redb::RedbStore;
+
 use crate::store::config::StoreConfig;
 use crate::{DefaultStore, MigrationReport, Result};
 
@@ -68,13 +67,16 @@ impl StoreBuilder<NoMigrations> {
     pub fn build(self) -> Result<Arc<DefaultStore>> {
         #[cfg(feature = "redb")]
         {
-            let (store, _) = RedbStore::open(self.config, MigrationSet::default())?;
+            let (store, _) =
+                crate::store::backend::redb::RedbStore::open(self.config, MigrationSet::default())?;
             Ok(Arc::new(store))
         }
 
         #[cfg(all(feature = "json", not(feature = "redb")))]
         {
-            Ok(Arc::new(JsonStore::open(self.config))?)
+            Ok(Arc::new(
+                crate::store::backend::json::JsonStore::open(self.config, Default::default())?.0,
+            ))
         }
     }
 }
@@ -83,15 +85,17 @@ impl StoreBuilder<WithMigrations> {
     pub fn build(self) -> Result<(Arc<DefaultStore>, MigrationReport)> {
         #[cfg(feature = "redb")]
         {
-            let (store, report) = RedbStore::open(self.config, self.migration_set)?;
+            let (store, report) =
+                crate::store::backend::redb::RedbStore::open(self.config, self.migration_set)?;
             report.log_to_tracing();
             Ok((Arc::new(store), report))
         }
 
         #[cfg(all(feature = "json", not(feature = "redb")))]
         {
-            let store = JsonStore::open(self.config)?;
-            Ok((Arc::new(store), MigrationReport::default()))
+            let (store, report) =
+                crate::store::backend::json::JsonStore::open(self.config, Default::default())?;
+            Ok((Arc::new(store), report))
         }
     }
 }

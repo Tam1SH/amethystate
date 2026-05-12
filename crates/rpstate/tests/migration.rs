@@ -33,6 +33,7 @@ migrate! {
     }
 }
 
+#[cfg(feature = "redb")]
 #[test]
 fn test_decentralized_codegen_migration() {
     let path = std::env::temp_dir().join("rpstate_integration_test.redb");

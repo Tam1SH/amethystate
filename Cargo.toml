@@ -16,8 +16,8 @@ readme = "README.md"
 
 [workspace.dependencies]
 # internal
-rpstate = { path = "crates/rpstate", version = "0.1.0" }
-rpstate-macros = { path = "crates/rpstate-macros", version = "0.1.0" }
+rpstate = { path = "crates/rpstate", version = "0.2.0" }
+rpstate-macros = { path = "crates/rpstate-macros", version = "0.2.0" }
 
 # external
 anyhow = "1.0.102"

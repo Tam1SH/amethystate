@@ -1,3 +1,4 @@
+#[cfg(feature = "redb")]
 #[test]
 fn test_macro_expansion_compilation() {
     let t = trybuild::TestCases::new();
