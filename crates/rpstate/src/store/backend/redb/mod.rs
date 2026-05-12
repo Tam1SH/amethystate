@@ -5,12 +5,12 @@ use crate::store::{
 use error::RedbStoreError;
 use raw_storage::RedbRawStorage;
 use redb::{Database, ReadableDatabase, WriteTransaction};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use tables::{
-    TableReader, TableWriter, TABLE_DATA, TABLE_DIFF_LOG, TABLE_LOG, TABLE_META,
-    TABLE_MIGRATION_LOG,
+    TABLE_DATA, TABLE_DIFF_LOG, TABLE_LOG, TABLE_META, TABLE_MIGRATION_LOG, TableReader,
+    TableWriter,
 };
 
 use crate::store::config::StoreConfig;
@@ -22,8 +22,8 @@ use crate::migration::set::MigrationSet;
 use crate::migration::{AppliedStep, ComponentOutcome, ComponentResult, NaggingRecord};
 use crate::store::util::debouncer::Debouncer;
 use bytes::Bytes;
-use rmp_serde::config::BytesMode;
 use rmp_serde::Serializer;
+use rmp_serde::config::BytesMode;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
