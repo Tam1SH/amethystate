@@ -5,9 +5,15 @@ with a focus on vertical-slice/feature-based architectures and compile-time veri
 
 ## Why?
 
-GUI apps in Rust almost always end up in the same place: one `Arc<Mutex<AppState>>`, one lock on everything, and a
-struct that grows until you're afraid to open it. I haven't seen a single approach that solves this without either
-losing type safety or requiring every feature to know about the entire application upfront.
+GUI apps in Rust almost always end up in the same place. It usually starts reasonably — a config struct, serde on top,
+load on startup, save on exit. Then the project grows.
+Persistent and ephemeral state start bleeding into each other. Business logic finds its way into serialization.
+Reactivity gets added as an afterthought — a file watcher, a channel, a full reload on any change. Versioning, if it
+appears at all, is a fragile enum that guesses at the data's shape rather than tracking it explicitly.
+
+In other ecosystems this is a solved problem. SwiftUI's @AppStorage, Android's DataStore, and Qt's Settings
+provide persistent, reactive state with minimal boilerplate. In Rust, there's no established equivalent for native GUI
+apps.
 
 `rpstate` is my attempt at something different. Each feature declares its own slice of state independently. References
 between slices are explicit and verified by the compiler—mistype a field name or get the type wrong and it's a compile
@@ -16,8 +22,7 @@ error, not a runtime surprise.
 Persistence is built in, not bolted on. `.set()` writes to the in-memory buffer, fires reactive subscriptions, and
 schedules a debounced flush to disk—all in one call. There's no separate save layer to think about.
 
-Migrations I built because I got burned once: changed a struct, old data became unreadable, fixing it was miserable. I
-don't need them right now—but I know exactly what happens if they're not there when I do.
+Migrations I built because… I can.
 
 ## Alternatives
 
@@ -27,11 +32,13 @@ don't need them right now—but I know exactly what happens if they're not there
 | `rustato`                                      |      ❌      |     ✅      |     ❌      |      ✅       |
 | `reactive-state`                               |      ❌      |     ✅      |     ❌      |      ✅       |
 | `Config managers (confy, figment, twelf, etc)` |      ✅      |     ❌      |     ❌      |      ✅       |
-| `KV stores (redb, sled, etc)`                  |      ✅      |     ?      |     ❌      |      ❌       |
+| `bevy_pkv`*                                    |      ✅      |  partial   |     ❌      |      ✅       |
+| `KV stores (redb, sled, etc)`                  |      ✅      |  partial   |     ❌      |      ❌       |
 | `tauri-plugin-store`                           |      ✅      |  partial   |     ❌      |      ❌       |
-| `redb` + `tokio::watch`                        |      ✅      |     ✅      |     ❌      |      ❌       |
 | `Traditional DBs (SQLite, etc)`                |      ✅      |   manual   |     ✅      |      ✅       |
 | **rpstate**                                    |      ✅      |     ✅      |     ✅      |      ✅       |
+
+* The Bevy dependency is optional, but there is no documentation or examples for non-Bevy usage.
 
 Why not a traditional database (SQLite + ORM)? It comes down to **Collection-oriented vs. State-oriented** design.
 
