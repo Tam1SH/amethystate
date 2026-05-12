@@ -16,18 +16,18 @@ note: function defined here
    |                      ^^^^^^
    = note: this error originates in the attribute macro `rpstate` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0599]: no method named `set` found for struct `rpstate::store::Field<u16, RedbStore>` in the current scope
-  --> tests/fails/lookup_write_violation.rs:17:17
+error[E0599]: no method named `set` found for struct `rpstate::Field<u16, RedbStore>` in the current scope
+  --> tests/fails/lookup_write_violation.rs:18:17
    |
-17 |     dummy_field.set(9090);
+18 |     dummy_field.set(9090);
    |                 ^^^
    |
 help: there is a method `get` with a similar name, but with different arguments
-  --> $WORKSPACE/crates/rpstate/src/store/field.rs
+  --> $WORKSPACE/crates/rpstate/src/reactive/field.rs
    |
    |     pub fn get(&self) -> TValue {
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 help: one of the expressions' fields has a method of the same name
    |
-17 |     dummy_field.signal.set(9090);
+18 |     dummy_field.signal.set(9090);
    |                 +++++++

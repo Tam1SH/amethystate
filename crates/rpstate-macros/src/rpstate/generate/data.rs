@@ -23,7 +23,7 @@ pub(crate) fn data_impl(
         let fname = e.ident.as_ref().unwrap();
         let ty = &e.ty;
         if e.nested {
-            quote! { pub #fname: <#ty as ::rpstate::store::node::RpState>::Data }
+            quote! { pub #fname: <#ty as ::rpstate::RpState>::Data }
         } else {
             quote! { pub #fname: #ty }
         }
@@ -36,16 +36,16 @@ pub(crate) fn data_impl(
         let ty = &e.ty;
         if e.nested {
             quote! {
-                ::rpstate::store::migration::fields::FieldDescriptor {
+                ::rpstate::migration::fields::FieldDescriptor {
                     name: #name,
-                    type_hash: 0xDEADBEEF ^ < <#ty as ::rpstate::store::node::RpState>::Data as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+                    type_hash: 0xDEADBEEF ^ < <#ty as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
                 }
             }
         } else {
             quote! {
-                ::rpstate::store::migration::fields::FieldDescriptor {
+                ::rpstate::migration::fields::FieldDescriptor {
                     name: #name,
-                    type_hash: <#ty as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+                    type_hash: <#ty as ::rpstate::migration::types::RpType>::TYPE_HASH,
                 }
             }
         }
@@ -60,7 +60,7 @@ pub(crate) fn data_impl(
             quote! {
                 #fname: {
                     let mut sub_ctx = ctx.scoped(#key);
-                    < <#ty as ::rpstate::store::node::RpState>::Data as ::rpstate::store::migration::fields::RpStateFields>::load_struct(&mut sub_ctx)?
+                    < <#ty as ::rpstate::RpState>::Data as ::rpstate::migration::fields::RpStateFields>::load_struct(&mut sub_ctx)?
                 }
             }
         } else {
@@ -100,52 +100,31 @@ pub(crate) fn data_impl(
             #(#data_fields,)*
         }
 
-        impl ::rpstate::store::migration::types::RpType for #data_struct_name {
-            const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(stringify!(#data_struct_name).as_bytes());
+        impl ::rpstate::migration::types::RpType for #data_struct_name {
+            const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(stringify!(#data_struct_name).as_bytes());
         }
 
-        impl ::rpstate::store::migration::fields::RpStateFields for #data_struct_name {
-            const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
+       impl ::rpstate::migration::fields::RpStateFields for #data_struct_name {
+            const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
                 #(#field_descriptors),*
             ];
             const VERSION: u32 = #version_val;
             const PARENT_PREFIX: &'static str = #prefix_expr;
             const MIGRATION_DEPS: &'static [&'static str] = &[ #(#deps),* ];
 
-            fn load_struct(ctx: &mut ::rpstate::store::migration::MigrationContext) -> ::rpstate::store::Result<Self> {
+            fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
                 Ok(Self { #(#load_fields,)* })
             }
 
-            fn save_struct(&self, ctx: &mut ::rpstate::store::migration::MigrationContext) -> ::rpstate::store::Result<()> {
+            fn save_struct(&self, ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<()> {
                 #(#save_fields)*
                 Ok(())
             }
         }
 
-        impl ::rpstate::store::node::RpState for #name {
+        impl ::rpstate::RpState for #name {
             type Data = #data_struct_name;
         }
-    }
-}
-
-pub(crate) fn migrations_registry(
-    name: &Ident,
-    entries: &[StoreFieldEntry],
-    macro_args: &MacroArgs,
-) -> TokenStream2 {
-    if !macro_args.migrations {
-        return quote!();
-    }
-
-    let deps = migration_deps(entries);
-    quote! {
-        impl ::rpstate::store::migration::registry::HasMigrations for #name {
-            const MIGRATION_DEPS: &'static [&'static str] = &[ #(#deps),* ];
-            fn migrations() -> ::rpstate::store::migration::Migrator {
-                build_migrations()
-            }
-        }
-        ::rpstate::register_migrations!(#name);
     }
 }
 

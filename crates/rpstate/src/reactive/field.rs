@@ -1,9 +1,7 @@
-use super::Result;
-use crate::signal::{Signal, SignalSubscription};
-use crate::store::access::{AccessMode, ReadOnlyMode, WritableMode};
 use crate::store::{Store, SubscriptionId};
-use serde::de::DeserializeOwned;
+use crate::{AccessMode, ReadOnlyMode, Result, Signal, SignalSubscription, WritableMode};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -116,12 +114,11 @@ impl<TValue: Debug + 'static, S: Store> Debug for Field<TValue, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::signal::Signal;
     use crate::store::config::StoreConfig;
     use crate::store::{StateScope, Store};
     use crate::{DefaultStore, SubscriptionKind};
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_store(suffix: &str) -> Arc<DefaultStore> {
@@ -209,7 +206,7 @@ mod tests {
                 _mode: Default::default(),
             };
 
-            field.set((&"hello").parse().unwrap()).unwrap();
+            field.set("hello".to_string()).unwrap();
             assert_eq!(calls.load(Ordering::SeqCst), 1);
             store.set("test.field", &"world").unwrap();
             assert_eq!(calls.load(Ordering::SeqCst), 2);

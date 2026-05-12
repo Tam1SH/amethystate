@@ -23,12 +23,12 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
         quote_spanned! {target_span=>
             #fname: {
                 const _: fn() = || {
-                    fn assert_node_type<T>(_: ::rpstate::store::access::ReadOnly<T>) {}
+                    fn assert_node_type<T>(_: ::rpstate::ReadOnly<T>) {}
                     let _ = || assert_node_type(#chain);
                     let _ = #chain;
                 };
                 let path = format!("{}.{}", <#parent as ::rpstate::StateScope>::PREFIX, #target_str);
-                ::std::sync::Arc::new(<#ty as ::rpstate::store::node::RpStateNode>::new_node(store, &path)?)
+                ::std::sync::Arc::new(<#ty as ::rpstate::RpStateNode>::new_node(store, &path)?)
             }
         }
     } else if let Some(target) = &e.lookup {
@@ -45,7 +45,7 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
         let mode = field_mode(e);
         let write_check = if e.export_mut {
             quote_spanned! { target.span() =>
-                fn assert_writable<T>(_: ::rpstate::store::access::Writable<T>) {}
+                fn assert_writable<T>(_: ::rpstate::Writable<T>) {}
                 assert_writable(#chain);
             }
         } else {
@@ -57,8 +57,8 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
                 const _: fn() = || {
                     #write_check
                     trait TypeCheck<T> {}
-                    impl<T> TypeCheck<T> for ::rpstate::store::access::ReadOnly<T> {}
-                    impl<T> TypeCheck<T> for ::rpstate::store::access::Writable<T> {}
+                    impl<T> TypeCheck<T> for ::rpstate::ReadOnly<T> {}
+                    impl<T> TypeCheck<T> for ::rpstate::Writable<T> {}
                     fn assert_field_type_matches_lookup<T, M: TypeCheck<T>>(_: M) {}
                     assert_field_type_matches_lookup::<#ty, _>(#chain);
                 };
@@ -93,7 +93,7 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
             };
             quote! { #fname: ::rpstate::Field::new_volatile(::std::sync::Arc::from(#path_expr), #def) }
         } else if is_root {
-            quote! { #fname: ::rpstate::store::field::<Self, #ty, ::rpstate::DefaultStore>(store, #key, #def)? }
+            quote! { #fname: ::rpstate::field::<Self, #ty>(store, #key, #def)? }
         } else {
             quote! { #fname: ::rpstate::store::field_with_path(store, ::std::sync::Arc::from(#path_expr), #def)? }
         }

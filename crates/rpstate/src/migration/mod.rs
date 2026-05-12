@@ -1,4 +1,4 @@
-use crate::store::Result;
+use crate::Result;
 
 pub mod context;
 pub mod error;
@@ -9,8 +9,7 @@ pub mod registry;
 pub mod set;
 pub mod types;
 
-use crate::store::error::Error;
-pub use crate::store::migration::migrate_from::MigrateFrom;
+use crate::error::Error;
 pub use context::MigrationContext;
 pub use error::MigrationError;
 

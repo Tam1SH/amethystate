@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,7 +17,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          toolchain: 1.94.0
+          components: rustfmt, rust-src
       - run: cargo fmt --all --check
 
   clippy:
@@ -26,7 +27,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          toolchain: 1.94.0
+          components: clippy, rust-src
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
@@ -35,20 +37,57 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        feature_set: ["redb", "json"]
+        os: [ ubuntu-latest, windows-latest ]
+        feature_set: [ "redb", "json", "all" ]
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.94.0
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-expand
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-expand
+
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.os }}-${{ matrix.feature_set }}
-      - run: cargo test --workspace --no-default-features --features ${{ matrix.feature_set }}
+
+      - name: Run tests
+        shell: bash
+        run: |
+          if [ "${{ matrix.feature_set }}" == "all" ]; then
+            cargo test --workspace --all-features
+          else
+            cargo test --workspace --no-default-features --features ${{ matrix.feature_set }}
+          fi
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.94.0
+      - run: cargo doc --workspace --all-features --no-deps
 
   macros:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.94.0
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-expand
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-expand
+
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p rpstate-macros

@@ -1,41 +1,52 @@
-pub mod signal;
+pub mod codec;
+pub mod error;
+pub mod migration;
+pub mod reactive;
 pub mod store;
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
-pub use signal::{Signal, SignalSubscription};
+use serde::de::DeserializeOwned;
 use std::sync::Arc;
-pub use store::Result;
-pub use store::{StateScope, Store, StoreEvent, StoreOp, SubscriptionKind};
 
+pub use error::Result;
 pub use inventory;
+pub use reactive::{
+    AccessMode, Field, ReadOnly, ReadOnlyMode, RpState, RpStateNode, Signal, SignalSubscription,
+    StoreSubscription, Writable, WritableMode,
+};
 pub use serde;
-pub use store::access::ReadOnlyMode;
-pub use store::access::WritableMode;
+
+pub use store::{
+    StateScope, Store, StoreEvent, StoreOp, SubscriptionKind, builder::StoreBuilder,
+    config::StoreConfig, scoped_path,
+};
+
+pub use migration::{MigrationContext, MigrationError, MigrationReport, Migrator};
+pub use rpstate_macros::rpstate;
 
 #[cfg(feature = "json")]
-pub use store::JsonStore;
+pub use store::backend::json::JsonStore;
 
 #[cfg(feature = "redb")]
-pub use store::RedbStore;
-
-#[cfg(all(feature = "json", not(feature = "redb")))]
-pub type DefaultStore = JsonStore;
+pub use store::backend::redb::RedbStore;
 
 #[cfg(feature = "redb")]
 pub type DefaultStore = RedbStore;
 
-pub type StoreSubscription = store::field::StoreSubscription<DefaultStore>;
+#[cfg(all(feature = "json", not(feature = "redb")))]
+pub type DefaultStore = JsonStore;
 
-pub use store::scoped_path;
-
-pub type Field<T, M = ReadOnlyMode> = store::field::Field<T, DefaultStore, M>;
+#[cfg(not(any(feature = "json", feature = "redb")))]
+compile_error!(
+    "rpstate requires at least one backend feature to be enabled. \
+     Please enable either 'redb' (recommended) or 'json' in your Cargo.toml."
+);
 
 pub fn field<TScope, TValue>(
     store: &Arc<DefaultStore>,
     key: &str,
     default: TValue,
-) -> Result<Field<TValue, WritableMode>>
+) -> Result<Field<TValue, DefaultStore, WritableMode>>
 where
     TScope: StateScope,
     TValue: Serialize + Default + DeserializeOwned + Clone + Send + Sync + 'static,
@@ -48,10 +59,12 @@ macro_rules! register_migrations {
     ($T:ty) => {
         #[cfg(not(target_arch = "wasm32"))]
         ::inventory::submit! {
-            $crate::store::migration::registry::MigrationEntry {
+            $crate::migration::registry::MigrationStepEntry {
                 prefix:       <$T as $crate::StateScope>::PREFIX,
-                dependencies: <$T as $crate::store::migration::registry::HasMigrations>::MIGRATION_DEPS,
-                build:        <$T as $crate::store::migration::registry::HasMigrations>::migrations,
+                target_version: 0,
+                description: "",
+                dependencies: <$T as $crate::migration::registry::HasMigrations>::MIGRATION_DEPS,
+                run: |_| Ok(()),
             }
         }
     };
@@ -93,7 +106,7 @@ macro_rules! migrate {
             }
         };
 
-        impl $crate::store::migration::migrate_from::MigrateFrom<$old> for $new {
+        impl $crate::migration::migrate_from::MigrateFrom<$old> for $new {
             const RENAMES: &'static [(&'static str, &'static str)] = &[
                 $((stringify!($old_f), stringify!($new_f))),*
             ];
@@ -101,25 +114,25 @@ macro_rules! migrate {
             const CONVERTS: &'static [(&'static str, u64, u64)] = &[
                 $($( (
                     stringify!($conv_f),
-                    <$conv_old as $crate::store::migration::types::RpType>::TYPE_HASH,
-                    <$conv_new as $crate::store::migration::types::RpType>::TYPE_HASH,
+                    <$conv_old as $crate::migration::types::RpType>::TYPE_HASH,
+                    <$conv_new as $crate::migration::types::RpType>::TYPE_HASH,
                 ) ),*)?
             ];
 
-            fn migrate($old_val: $old, $ctx_val: &mut $crate::store::migration::MigrationContext) -> $crate::store::Result<Self> {
+            fn migrate($old_val: $old, $ctx_val: &mut $crate::migration::MigrationContext) -> $crate::Result<Self> {
                 $logic_block
             }
         }
 
         $crate::inventory::submit! {
-            $crate::store::migration::registry::MigrationStepEntry {
-                prefix: <$new as $crate::store::migration::fields::RpStateFields>::PARENT_PREFIX,
-                target_version: <$new as $crate::store::migration::fields::RpStateFields>::VERSION,
-                dependencies: <$new as $crate::store::migration::fields::RpStateFields>::MIGRATION_DEPS,
-                description: concat!("Migration to v", stringify!(<$new as $crate::store::migration::fields::RpStateFields>::VERSION)),
+            $crate::migration::registry::MigrationStepEntry {
+                prefix: <$new as $crate::migration::fields::RpStateFields>::PARENT_PREFIX,
+                target_version: <$new as $crate::migration::fields::RpStateFields>::VERSION,
+                dependencies: <$new as $crate::migration::fields::RpStateFields>::MIGRATION_DEPS,
+                description: concat!("Migration to v", stringify!(<$new as $crate::migration::fields::RpStateFields>::VERSION)),
                 run: |ctx| {
-                    use $crate::store::migration::fields::RpStateFields;
-                    use $crate::store::migration::migrate_from::MigrateFrom;
+                    use $crate::migration::fields::RpStateFields;
+                    use $crate::migration::migrate_from::MigrateFrom;
 
                     let old_data = <$old as RpStateFields>::load_struct(ctx)?;
                     let new_data = <$new as MigrateFrom<$old>>::migrate(old_data, ctx)?;

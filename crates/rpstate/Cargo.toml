@@ -1,12 +1,17 @@
 [package]
 name = "rpstate"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+readme.workspace = true
 
 [features]
 default = ["redb"]
-json = ["dep:serde_json", "dep:anyhow"]
-redb = ["dep:redb", "dep:rmp-serde", "dep:anyhow"]
+json = ["dep:serde_json"]
+redb = ["dep:redb", "dep:rmp-serde"]
 
 [dependencies]
 arc-swap = { workspace = true }
@@ -18,7 +23,6 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
-anyhow = { workspace = true, optional = true }
 redb = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

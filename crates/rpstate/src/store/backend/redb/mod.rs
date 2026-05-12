@@ -1,30 +1,29 @@
-use crate::store::codec::CodecError;
 use crate::store::{
-    debouncer::Debouncer, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionEntry,
-    SubscriptionId, SubscriptionKind,
+    SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionEntry, SubscriptionId,
+    SubscriptionKind,
 };
 use error::RedbStoreError;
 use raw_storage::RedbRawStorage;
 use redb::{Database, ReadableDatabase, WriteTransaction};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use tables::{
-    TableReader, TableWriter, TABLE_DATA, TABLE_DIFF_LOG, TABLE_LOG, TABLE_META,
-    TABLE_MIGRATION_LOG,
+    TABLE_DATA, TABLE_DIFF_LOG, TABLE_LOG, TABLE_META, TABLE_MIGRATION_LOG, TableReader,
+    TableWriter,
 };
 
-use super::Result;
 use crate::store::config::StoreConfig;
-use crate::store::migration::meta::{DiffEntry, PrefixMeta};
-use crate::store::migration::set::MigrationSet;
-use crate::store::migration::{
-    AppliedStep, ComponentOutcome, ComponentResult, MigrationContext, MigrationError,
-    MigrationReport, Migrator, NaggingRecord,
-};
+use crate::{MigrationContext, MigrationError, MigrationReport, Migrator, Result};
+
+use crate::codec::CodecError;
+use crate::migration::meta::{DiffEntry, PrefixMeta};
+use crate::migration::set::MigrationSet;
+use crate::migration::{AppliedStep, ComponentOutcome, ComponentResult, NaggingRecord};
+use crate::store::util::debouncer::Debouncer;
 use bytes::Bytes;
-use rmp_serde::config::BytesMode;
 use rmp_serde::Serializer;
+use rmp_serde::config::BytesMode;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
@@ -161,9 +160,7 @@ impl RedbStore {
             for (path, opt_bytes) in changes {
                 match opt_bytes {
                     Some(b) => {
-                        table
-                            .insert(&*path, &b[..])
-                            .map_err(RedbStoreError::from)?;
+                        table.insert(&*path, &b[..]).map_err(RedbStoreError::from)?;
                     }
                     None => {
                         table.remove(&*path).map_err(RedbStoreError::from)?;
@@ -548,8 +545,8 @@ impl Store for RedbStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::error::Error;
-    use crate::store::migration::Migrator;
+    use crate::error::Error;
+    use crate::migration::ComponentOutcome;
     use redb::ReadableTableMetadata;
     use std::path::PathBuf;
     use std::sync::atomic::AtomicUsize;
@@ -1133,7 +1130,3 @@ mod tests {
         assert_eq!(ran.load(Ordering::SeqCst), 1);
     }
 }
-
-
-
-

@@ -1,7 +1,16 @@
+<div align="center">
+
 # rpstate
 
-Type-safe reactive persistence with automated migrations and schema drift detection. Designed for GUI applications,
-with a focus on vertical-slice/feature-based architectures and compile-time verified relations.
+[![Crates.io](https://img.shields.io/crates/v/rpstate.svg)](https://crates.io/crates/rpstate)
+[![Docs.rs](https://docs.rs/rpstate/badge.svg)](https://docs.rs/rpstate)
+[![CI](https://github.com/Tam1SH/rpstate/actions/workflows/ci.yml/badge.svg)](https://github.com/Tam1SH/rpstate/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+*Type-safe reactive persistence with automated migrations and schema drift detection. Designed for GUI applications,
+with a focus on vertical-slice/feature-based architectures and compile-time verified relations.*
+
+</div>
 
 ## Why?
 

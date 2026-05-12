@@ -1,14 +1,12 @@
-use super::Result;
-use crate::store::config::StoreConfig;
+use crate::migration::registry::{MigrationDependency, MigrationStepEntry};
+use crate::migration::set::MigrationSet;
 #[cfg(feature = "json")]
-use crate::store::json::JsonStore;
-use crate::store::migration::registry::{MigrationDependency, MigrationStepEntry};
-use crate::store::migration::set::MigrationSet;
-use crate::store::migration::MigrationContext;
-use crate::store::migration::Migrator;
+use crate::store::backend::json::JsonStore;
 #[cfg(feature = "redb")]
-use crate::store::redb::RedbStore;
-use crate::StateScope;
+use crate::store::backend::redb::RedbStore;
+use crate::store::config::StoreConfig;
+use crate::{DefaultStore, StateScope};
+use crate::{MigrationContext, Migrator, Result};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -70,15 +68,22 @@ impl StoreBuilder {
         })
     }
 
-    pub fn build(self) -> Result<crate::DefaultStore> {
+    #[allow(clippy::needless_return)]
+    pub fn build(self) -> Result<DefaultStore> {
         #[cfg(feature = "redb")]
-        return self.build_redb();
+        {
+            return self.build_redb();
+        }
 
         #[cfg(all(feature = "json", not(feature = "redb")))]
-        return self.build_json();
+        {
+            return self.build_json();
+        }
 
         #[cfg(not(any(feature = "json", feature = "redb")))]
-        compile_error!("No storage backend enabled. Enable 'json' or 'redb' feature.");
+        {
+            compile_error!("No storage backend enabled. Enable 'json' or 'redb' feature.");
+        }
     }
 }
 

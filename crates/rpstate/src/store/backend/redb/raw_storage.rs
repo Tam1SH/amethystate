@@ -1,7 +1,7 @@
 use super::error::RedbStoreError;
 use super::tables::TABLE_DATA;
+use crate::migration::RawStorage;
 use crate::store::Result;
-use crate::store::migration::RawStorage;
 use redb::ReadableTable;
 
 pub(super) struct RedbRawStorage<'a> {

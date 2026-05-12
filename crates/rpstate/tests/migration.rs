@@ -1,5 +1,5 @@
 use rpstate::store::builder::StoreBuilder;
-use rpstate::{migrate, Store};
+use rpstate::{Store, migrate};
 use rpstate_macros::rpstate;
 use std::sync::Arc;
 

@@ -18,7 +18,6 @@ pub(crate) fn generate_code(
     let is_root = prefix.is_some();
     let schema_methods = accessors::schema_methods(entries);
     let fields_impl = data::data_impl(name, prefix.clone(), entries, &macro_args);
-    let migrations_registry = data::migrations_registry(name, entries, &macro_args);
     let struct_fields = accessors::struct_fields(entries);
     let init_fields = init::init_fields(entries, is_root);
     let node_impl = accessors::node_impl(name, is_root);
@@ -32,6 +31,5 @@ pub(crate) fn generate_code(
         impl #name { #constructor #(#schema_methods)* #(#methods)* }
         #node_impl
         #fields_impl
-        #migrations_registry
     }
 }

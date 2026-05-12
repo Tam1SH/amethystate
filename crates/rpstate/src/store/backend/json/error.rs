@@ -1,7 +1,7 @@
-use crate::store::codec::CodecError;
+use crate::codec::CodecError;
 use thiserror::Error;
 
-pub(super) type JsonResult<T> = std::result::Result<T, JsonStoreError>;
+pub(super) type JsonResult<T> = Result<T, JsonStoreError>;
 
 #[derive(Error, Debug)]
 pub enum JsonStoreError {

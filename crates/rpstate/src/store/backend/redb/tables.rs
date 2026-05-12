@@ -1,5 +1,5 @@
 use super::error::RedbResult;
-use crate::store::codec::CodecError;
+use crate::codec::CodecError;
 use redb::{ReadTransaction, TableDefinition, WriteTransaction};
 use serde::Serialize;
 use serde::de::DeserializeOwned;

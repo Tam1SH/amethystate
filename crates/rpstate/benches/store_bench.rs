@@ -1,8 +1,8 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use rayon::prelude::*;
-use rpstate::store::builder::StoreBuilder;
-use rpstate::store::redb::RedbStore;
+use rpstate::RedbStore;
 use rpstate::store::Store;
+use rpstate::store::builder::StoreBuilder;
 use serde::Serialize;
 use std::hint::black_box;
 use std::sync::Arc;
@@ -28,6 +28,7 @@ fn setup_store() -> Arc<RedbStore> {
     )
 }
 
+#[allow(clippy::unit_arg)]
 fn bench_set_load(c: &mut Criterion) {
     let store = setup_store();
     let threads_counts = [1, 4];

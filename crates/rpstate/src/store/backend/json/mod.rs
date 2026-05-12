@@ -1,12 +1,14 @@
-#[path = "json/error.rs"]
 pub mod error;
 
 use self::error::{JsonResult, JsonStoreError};
-use super::{matches_kind, Result, SubscriptionEntry};
-use crate::store::codec::CodecError;
+use crate::Result;
+use crate::codec::CodecError;
 use crate::store::config::StoreConfig;
-use crate::store::debouncer::Debouncer;
-use crate::store::{Store, StoreCallback, StoreEvent, StoreOp, SubscriptionId, SubscriptionKind};
+use crate::store::util::debouncer::Debouncer;
+use crate::store::{
+    Store, StoreCallback, StoreEvent, StoreOp, SubscriptionEntry, SubscriptionId, SubscriptionKind,
+    matches_kind,
+};
 use bytes::Bytes;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -57,9 +59,9 @@ impl Store for JsonStore {
             let old = set_at_path(&mut map, &path_str, json_value.clone())?;
 
             let old_bytes = old
-            .map(|v| serde_json::to_vec(&v).map(Bytes::from))
-            .transpose()
-            .map_err(CodecError::from)?;
+                .map(|v| serde_json::to_vec(&v).map(Bytes::from))
+                .transpose()
+                .map_err(CodecError::from)?;
 
             let new_bytes = Bytes::from(serde_json::to_vec(&json_value).map_err(CodecError::from)?);
 
@@ -243,14 +245,14 @@ impl JsonStore {
             let new = get_at_path(&guard, split_path(&path_str)).cloned();
 
             let old_bytes = old
-            .map(|v| serde_json::to_vec(&v).map(Bytes::from))
-            .transpose()
-            .map_err(CodecError::from)?;
+                .map(|v| serde_json::to_vec(&v).map(Bytes::from))
+                .transpose()
+                .map_err(CodecError::from)?;
 
             let new_bytes = new
-            .map(|v| serde_json::to_vec(&v).map(Bytes::from))
-            .transpose()
-            .map_err(CodecError::from)?;
+                .map(|v| serde_json::to_vec(&v).map(Bytes::from))
+                .transpose()
+                .map_err(CodecError::from)?;
 
             (old_bytes, new_bytes)
         };
@@ -497,7 +499,7 @@ fn persist_atomic(path: &Path, map: &Map<String, Value>) -> JsonResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -791,6 +793,3 @@ mod tests {
         }
     }
 }
-
-
-

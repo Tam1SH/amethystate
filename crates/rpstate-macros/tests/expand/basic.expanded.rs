@@ -1,7 +1,11 @@
 use rpstate_macros::rpstate;
 pub struct AppConfig {
-    pub port: ::rpstate::Field<u16, ::rpstate::store::access::WritableMode>,
-    pub session_id: ::rpstate::Field<String, ::rpstate::store::access::WritableMode>,
+    pub port: ::rpstate::Field<u16, ::rpstate::DefaultStore, ::rpstate::WritableMode>,
+    pub session_id: ::rpstate::Field<
+        String,
+        ::rpstate::DefaultStore,
+        ::rpstate::WritableMode,
+    >,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for AppConfig {
@@ -19,13 +23,9 @@ impl ::rpstate::StateScope for AppConfig {
 impl AppConfig {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Ok(Self {
-            port: ::rpstate::store::field::<
-                Self,
-                u16,
-                ::rpstate::DefaultStore,
-            >(store, "port", 8080)?,
+            port: ::rpstate::field::<Self, u16>(store, "port", 8080)?,
             session_id: ::rpstate::Field::new_volatile(
                 ::std::sync::Arc::from(
                     ::alloc::__export::must_use({
@@ -42,29 +42,29 @@ impl AppConfig {
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_port(&self) -> ::rpstate::store::access::ReadOnly<u16> {
+    pub fn __schema_field_port(&self) -> ::rpstate::ReadOnly<u16> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     #[doc(hidden)]
-    pub fn __schema_field_session_id(
-        &self,
-    ) -> ::rpstate::store::access::ReadOnly<String> {
+    pub fn __schema_field_session_id(&self) -> ::rpstate::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn port(&self) -> ::rpstate::Field<u16, ::rpstate::store::access::WritableMode> {
+    pub fn port(
+        &self,
+    ) -> ::rpstate::Field<u16, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
         self.port.clone()
     }
     pub fn session_id(
         &self,
-    ) -> ::rpstate::Field<String, ::rpstate::store::access::WritableMode> {
+    ) -> ::rpstate::Field<String, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
         self.session_id.clone()
     }
 }
-impl ::rpstate::store::node::RpStateNode for AppConfig {
+impl ::rpstate::RpStateNode for AppConfig {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         _path: &str,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Self::new(store)
     }
 }
@@ -322,37 +322,35 @@ impl ::core::fmt::Debug for AppConfig_Data {
         )
     }
 }
-impl ::rpstate::store::migration::types::RpType for AppConfig_Data {
-    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+impl ::rpstate::migration::types::RpType for AppConfig_Data {
+    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "AppConfig_Data".as_bytes(),
     );
 }
-impl ::rpstate::store::migration::fields::RpStateFields for AppConfig_Data {
-    const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
-        ::rpstate::store::migration::fields::FieldDescriptor {
+impl ::rpstate::migration::fields::RpStateFields for AppConfig_Data {
+    const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
+        ::rpstate::migration::fields::FieldDescriptor {
             name: "port",
-            type_hash: <u16 as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+            type_hash: <u16 as ::rpstate::migration::types::RpType>::TYPE_HASH,
         },
     ];
     const VERSION: u32 = 0u32;
     const PARENT_PREFIX: &'static str = "app";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<Self> {
+    fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
         Ok(Self {
             port: ctx.get::<u16>("port")?.unwrap_or_else(|| 8080),
         })
     }
     fn save_struct(
         &self,
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<()> {
+        ctx: &mut ::rpstate::MigrationContext,
+    ) -> ::rpstate::Result<()> {
         ctx.set("port", &self.port)?;
         Ok(())
     }
 }
-impl ::rpstate::store::node::RpState for AppConfig {
+impl ::rpstate::RpState for AppConfig {
     type Data = AppConfig_Data;
 }
 fn main() {}

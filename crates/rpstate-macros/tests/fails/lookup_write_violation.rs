@@ -13,6 +13,7 @@ pub struct UiState {
 }
 
 fn main() {
-    let dummy_field: rpstate::Field<u16, rpstate::ReadOnlyMode> = unsafe { std::mem::zeroed() };
+    let dummy_field: rpstate::Field<u16, rpstate::DefaultStore, rpstate::ReadOnlyMode> =
+        unsafe { std::mem::zeroed() };
     dummy_field.set(9090);
 }

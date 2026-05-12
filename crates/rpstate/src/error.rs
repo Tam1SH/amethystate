@@ -1,5 +1,5 @@
-use crate::store::codec::CodecError;
-use crate::store::migration::MigrationError;
+use crate::MigrationError;
+use crate::codec::CodecError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -9,11 +9,11 @@ pub enum Error {
 
     #[cfg(feature = "json")]
     #[error(transparent)]
-    Json(#[from] crate::store::json::error::JsonStoreError),
+    Json(#[from] crate::store::backend::json::error::JsonStoreError),
 
     #[cfg(feature = "redb")]
     #[error(transparent)]
-    Redb(#[from] crate::store::redb::error::RedbStoreError),
+    Redb(#[from] crate::store::backend::redb::error::RedbStoreError),
 
     #[error(transparent)]
     Migration(#[from] MigrationError),

@@ -1,6 +1,5 @@
 use rpstate::store::builder::StoreBuilder;
-use rpstate::store::migration::MigrationError;
-use rpstate::{migrate, Store};
+use rpstate::{MigrationError, Store, migrate};
 use rpstate_macros::rpstate;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};

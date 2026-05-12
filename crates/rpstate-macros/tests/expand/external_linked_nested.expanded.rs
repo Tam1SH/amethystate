@@ -1,7 +1,15 @@
 use rpstate_macros::rpstate;
 pub struct ConnectionPool {
-    pub max_connections: ::rpstate::Field<u32, ::rpstate::store::access::WritableMode>,
-    pub timeout_secs: ::rpstate::Field<u32, ::rpstate::store::access::WritableMode>,
+    pub max_connections: ::rpstate::Field<
+        u32,
+        ::rpstate::DefaultStore,
+        ::rpstate::WritableMode,
+    >,
+    pub timeout_secs: ::rpstate::Field<
+        u32,
+        ::rpstate::DefaultStore,
+        ::rpstate::WritableMode,
+    >,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for ConnectionPool {
@@ -17,7 +25,7 @@ impl ConnectionPool {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         namespace: &str,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Ok(Self {
             max_connections: ::rpstate::store::field_with_path(
                 store,
@@ -44,33 +52,29 @@ impl ConnectionPool {
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_max_connections(
-        &self,
-    ) -> ::rpstate::store::access::ReadOnly<u32> {
+    pub fn __schema_field_max_connections(&self) -> ::rpstate::ReadOnly<u32> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     #[doc(hidden)]
-    pub fn __schema_field_timeout_secs(
-        &self,
-    ) -> ::rpstate::store::access::ReadOnly<u32> {
+    pub fn __schema_field_timeout_secs(&self) -> ::rpstate::ReadOnly<u32> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn max_connections(
         &self,
-    ) -> ::rpstate::Field<u32, ::rpstate::store::access::WritableMode> {
+    ) -> ::rpstate::Field<u32, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
         self.max_connections.clone()
     }
     pub fn timeout_secs(
         &self,
-    ) -> ::rpstate::Field<u32, ::rpstate::store::access::WritableMode> {
+    ) -> ::rpstate::Field<u32, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
         self.timeout_secs.clone()
     }
 }
-impl ::rpstate::store::node::RpStateNode for ConnectionPool {
+impl ::rpstate::RpStateNode for ConnectionPool {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         path: &str,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Self::new(store, path)
     }
 }
@@ -382,28 +386,26 @@ impl ::core::fmt::Debug for ConnectionPool_Data {
         )
     }
 }
-impl ::rpstate::store::migration::types::RpType for ConnectionPool_Data {
-    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+impl ::rpstate::migration::types::RpType for ConnectionPool_Data {
+    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "ConnectionPool_Data".as_bytes(),
     );
 }
-impl ::rpstate::store::migration::fields::RpStateFields for ConnectionPool_Data {
-    const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
-        ::rpstate::store::migration::fields::FieldDescriptor {
+impl ::rpstate::migration::fields::RpStateFields for ConnectionPool_Data {
+    const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
+        ::rpstate::migration::fields::FieldDescriptor {
             name: "max_connections",
-            type_hash: <u32 as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+            type_hash: <u32 as ::rpstate::migration::types::RpType>::TYPE_HASH,
         },
-        ::rpstate::store::migration::fields::FieldDescriptor {
+        ::rpstate::migration::fields::FieldDescriptor {
             name: "timeout_secs",
-            type_hash: <u32 as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+            type_hash: <u32 as ::rpstate::migration::types::RpType>::TYPE_HASH,
         },
     ];
     const VERSION: u32 = 0u32;
     const PARENT_PREFIX: &'static str = "";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<Self> {
+    fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
         Ok(Self {
             max_connections: ctx.get::<u32>("max_connections")?.unwrap_or_else(|| 10),
             timeout_secs: ctx.get::<u32>("timeout_secs")?.unwrap_or_else(|| 30),
@@ -411,14 +413,14 @@ impl ::rpstate::store::migration::fields::RpStateFields for ConnectionPool_Data 
     }
     fn save_struct(
         &self,
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<()> {
+        ctx: &mut ::rpstate::MigrationContext,
+    ) -> ::rpstate::Result<()> {
         ctx.set("max_connections", &self.max_connections)?;
         ctx.set("timeout_secs", &self.timeout_secs)?;
         Ok(())
     }
 }
-impl ::rpstate::store::node::RpState for ConnectionPool {
+impl ::rpstate::RpState for ConnectionPool {
     type Data = ConnectionPool_Data;
 }
 pub struct DatabaseState {
@@ -439,7 +441,7 @@ impl ::rpstate::StateScope for DatabaseState {
 impl DatabaseState {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Ok(Self {
             pool: ::std::sync::Arc::new(
                 ConnectionPool::new(
@@ -457,27 +459,25 @@ impl DatabaseState {
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_pool(
-        &self,
-    ) -> ::rpstate::store::access::ReadOnly<ConnectionPool> {
+    pub fn __schema_field_pool(&self) -> ::rpstate::ReadOnly<ConnectionPool> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn pool(&self) -> ::std::sync::Arc<ConnectionPool> {
         self.pool.clone()
     }
 }
-impl ::rpstate::store::node::RpStateNode for DatabaseState {
+impl ::rpstate::RpStateNode for DatabaseState {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         _path: &str,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Self::new(store)
     }
 }
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct DatabaseState_Data {
-    pub pool: <ConnectionPool as ::rpstate::store::node::RpState>::Data,
+    pub pool: <ConnectionPool as ::rpstate::RpState>::Data,
 }
 #[doc(hidden)]
 #[allow(
@@ -628,7 +628,7 @@ const _: () = {
                     __A: _serde::de::SeqAccess<'de>,
                 {
                     let __field0 = match _serde::de::SeqAccess::next_element::<
-                        <ConnectionPool as ::rpstate::store::node::RpState>::Data,
+                        <ConnectionPool as ::rpstate::RpState>::Data,
                     >(&mut __seq)? {
                         _serde::__private228::Some(__value) => __value,
                         _serde::__private228::None => {
@@ -653,7 +653,7 @@ const _: () = {
                     __A: _serde::de::MapAccess<'de>,
                 {
                     let mut __field0: _serde::__private228::Option<
-                        <ConnectionPool as ::rpstate::store::node::RpState>::Data,
+                        <ConnectionPool as ::rpstate::RpState>::Data,
                     > = _serde::__private228::None;
                     while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                         __Field,
@@ -667,7 +667,7 @@ const _: () = {
                                 }
                                 __field0 = _serde::__private228::Some(
                                     _serde::de::MapAccess::next_value::<
-                                        <ConnectionPool as ::rpstate::store::node::RpState>::Data,
+                                        <ConnectionPool as ::rpstate::RpState>::Data,
                                     >(&mut __map)?,
                                 );
                             }
@@ -736,29 +736,27 @@ impl ::core::fmt::Debug for DatabaseState_Data {
         )
     }
 }
-impl ::rpstate::store::migration::types::RpType for DatabaseState_Data {
-    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+impl ::rpstate::migration::types::RpType for DatabaseState_Data {
+    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "DatabaseState_Data".as_bytes(),
     );
 }
-impl ::rpstate::store::migration::fields::RpStateFields for DatabaseState_Data {
-    const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
-        ::rpstate::store::migration::fields::FieldDescriptor {
+impl ::rpstate::migration::fields::RpStateFields for DatabaseState_Data {
+    const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
+        ::rpstate::migration::fields::FieldDescriptor {
             name: "pool",
             type_hash: 0xDEADBEEF
-                ^ <<ConnectionPool as ::rpstate::store::node::RpState>::Data as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+                ^ <<ConnectionPool as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
         },
     ];
     const VERSION: u32 = 0u32;
     const PARENT_PREFIX: &'static str = "sys.database";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<Self> {
+    fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
         Ok(Self {
             pool: {
                 let mut sub_ctx = ctx.scoped("pool");
-                <<ConnectionPool as ::rpstate::store::node::RpState>::Data as ::rpstate::store::migration::fields::RpStateFields>::load_struct(
+                <<ConnectionPool as ::rpstate::RpState>::Data as ::rpstate::migration::fields::RpStateFields>::load_struct(
                     &mut sub_ctx,
                 )?
             },
@@ -766,8 +764,8 @@ impl ::rpstate::store::migration::fields::RpStateFields for DatabaseState_Data {
     }
     fn save_struct(
         &self,
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<()> {
+        ctx: &mut ::rpstate::MigrationContext,
+    ) -> ::rpstate::Result<()> {
         {
             let mut sub_ctx = ctx.scoped("pool");
             self.pool.save_struct(&mut sub_ctx)?;
@@ -775,7 +773,7 @@ impl ::rpstate::store::migration::fields::RpStateFields for DatabaseState_Data {
         Ok(())
     }
 }
-impl ::rpstate::store::node::RpState for DatabaseState {
+impl ::rpstate::RpState for DatabaseState {
     type Data = DatabaseState_Data;
 }
 pub struct InspectorState {
@@ -796,11 +794,11 @@ impl ::rpstate::StateScope for InspectorState {
 impl InspectorState {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Ok(Self {
             db_pool_view: {
                 const _: fn() = || {
-                    fn assert_node_type<T>(_: ::rpstate::store::access::ReadOnly<T>) {}
+                    fn assert_node_type<T>(_: ::rpstate::ReadOnly<T>) {}
                     let _ = || assert_node_type(
                         unsafe { (&*::core::ptr::null::<DatabaseState>()) }
                             .__schema_field_pool(),
@@ -817,29 +815,24 @@ impl InspectorState {
                     )
                 });
                 ::std::sync::Arc::new(
-                    <ConnectionPool as ::rpstate::store::node::RpStateNode>::new_node(
-                        store,
-                        &path,
-                    )?,
+                    <ConnectionPool as ::rpstate::RpStateNode>::new_node(store, &path)?,
                 )
             },
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_db_pool_view(
-        &self,
-    ) -> ::rpstate::store::access::ReadOnly<ConnectionPool> {
+    pub fn __schema_field_db_pool_view(&self) -> ::rpstate::ReadOnly<ConnectionPool> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn db_pool_view(&self) -> ::std::sync::Arc<ConnectionPool> {
         self.db_pool_view.clone()
     }
 }
-impl ::rpstate::store::node::RpStateNode for InspectorState {
+impl ::rpstate::RpStateNode for InspectorState {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         _path: &str,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Self::new(store)
     }
 }
@@ -1047,31 +1040,29 @@ impl ::core::fmt::Debug for InspectorState_Data {
         ::core::fmt::Formatter::write_str(f, "InspectorState_Data")
     }
 }
-impl ::rpstate::store::migration::types::RpType for InspectorState_Data {
-    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+impl ::rpstate::migration::types::RpType for InspectorState_Data {
+    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "InspectorState_Data".as_bytes(),
     );
 }
-impl ::rpstate::store::migration::fields::RpStateFields for InspectorState_Data {
-    const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[];
+impl ::rpstate::migration::fields::RpStateFields for InspectorState_Data {
+    const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[];
     const VERSION: u32 = 0u32;
     const PARENT_PREFIX: &'static str = "ui.inspector";
     const MIGRATION_DEPS: &'static [&'static str] = &[
         <DatabaseState as ::rpstate::StateScope>::PREFIX,
     ];
-    fn load_struct(
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<Self> {
+    fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
         Ok(Self {})
     }
     fn save_struct(
         &self,
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<()> {
+        ctx: &mut ::rpstate::MigrationContext,
+    ) -> ::rpstate::Result<()> {
         Ok(())
     }
 }
-impl ::rpstate::store::node::RpState for InspectorState {
+impl ::rpstate::RpState for InspectorState {
     type Data = InspectorState_Data;
 }
 fn main() {}

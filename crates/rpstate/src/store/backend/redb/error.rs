@@ -1,4 +1,4 @@
-use crate::store::codec::CodecError;
+use crate::codec::CodecError;
 use thiserror::Error;
 
 pub(super) type RedbResult<T> = std::result::Result<T, RedbStoreError>;

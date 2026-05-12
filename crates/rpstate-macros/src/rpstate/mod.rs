@@ -1,10 +1,10 @@
 mod generate;
 mod model;
 
-use darling::{ast::NestedMeta, FromField, FromMeta};
+use darling::{FromField, FromMeta, ast::NestedMeta};
 use generate::generate_code;
 use model::{MacroArgs, StoreFieldEntry};
-use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields};
+use syn::{Data, DataStruct, DeriveInput, Fields, parse_macro_input};
 
 pub fn rpstate_impl(
     args: proc_macro::TokenStream,

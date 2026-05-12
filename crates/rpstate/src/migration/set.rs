@@ -1,6 +1,5 @@
 use super::Migrator;
-use crate::store::Result;
-use crate::store::migration::MigrationError;
+use crate::{MigrationError, Result};
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -114,7 +113,7 @@ impl MigrationSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::error::Error;
+    use crate::error::Error;
 
     fn dummy_migrator() -> Migrator {
         Migrator::new()

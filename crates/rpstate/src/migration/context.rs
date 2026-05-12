@@ -1,9 +1,10 @@
-use super::{MigrateFrom, RawStorage};
-use crate::store::codec::CodecError;
-use crate::store::migration::fields::RpStateFields;
-use crate::store::Result;
-use serde::de::DeserializeOwned;
+use crate::Result;
+use crate::codec::CodecError;
+use crate::migration::RawStorage;
+use crate::migration::fields::RpStateFields;
+use crate::migration::migrate_from::MigrateFrom;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 pub struct MigrationContext<'a> {
     prefix: String,

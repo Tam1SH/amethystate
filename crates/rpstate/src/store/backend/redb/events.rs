@@ -1,6 +1,6 @@
 use super::error::RedbResult;
 use super::tables::{TABLE_DATA, TABLE_LOG};
-use crate::store::{matches_kind, StoreEvent, StoreOp, SubscriptionEntry};
+use crate::store::{StoreEvent, StoreOp, SubscriptionEntry, matches_kind};
 use bytes::Bytes;
 use redb::{Database, ReadableTable};
 use std::sync::Arc;
@@ -64,4 +64,3 @@ pub(super) fn emit_local(subs_lock: &RwLock<Vec<SubscriptionEntry>>, event: Stor
         cb(&event);
     }
 }
-

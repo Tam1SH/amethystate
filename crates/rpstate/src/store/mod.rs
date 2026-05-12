@@ -1,33 +1,21 @@
-#[cfg(feature = "json")]
-pub mod json;
-#[cfg(feature = "redb")]
-pub mod redb;
-
-#[cfg(feature = "json")]
-pub use json::JsonStore;
-
-#[cfg(feature = "redb")]
-pub use redb::RedbStore;
-
-pub mod access;
+pub mod backend;
 pub mod builder;
-pub mod codec;
 pub mod config;
-pub mod debouncer;
-pub mod error;
-pub mod field;
-pub mod migration;
-pub mod node;
+pub mod util;
 
-pub use error::Result;
-use std::sync::Arc;
+#[cfg(feature = "json")]
+pub use backend::json::JsonStore;
+
+#[cfg(feature = "redb")]
+pub use backend::redb::RedbStore;
+
 use bytes::Bytes;
+use std::sync::Arc;
 
-use crate::Signal;
-use access::WritableMode;
-pub use field::{Field, FieldSubscription, StoreSubscription};
-use serde::de::DeserializeOwned;
+use crate::migration::set::MigrationSet;
+use crate::{AccessMode, Field, MigrationReport, Result, Signal, StoreSubscription, WritableMode};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 pub type SubscriptionId = u64;
 pub type StoreCallback = Arc<dyn Fn(&StoreEvent) + Send + Sync + 'static>;
@@ -68,10 +56,7 @@ pub trait Store: Send + Sync + 'static {
 }
 
 pub trait SchemaAwareStore: Store {
-    fn run_migrations(
-        &self,
-        mset: migration::set::MigrationSet,
-    ) -> Result<migration::MigrationReport>;
+    fn run_migrations(&self, mset: MigrationSet) -> Result<MigrationReport>;
 }
 
 pub trait StateScope {
@@ -111,7 +96,7 @@ pub fn field_with_path<TValue, S, M>(
 where
     S: Store,
     TValue: Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
-    M: access::AccessMode,
+    M: AccessMode,
 {
     if store.get::<TValue>(&path)?.is_none() {
         store.set(&path, &default)?;
@@ -168,4 +153,3 @@ pub fn matches_kind(kind: &SubscriptionKind, path: &str) -> bool {
         }
     }
 }
-

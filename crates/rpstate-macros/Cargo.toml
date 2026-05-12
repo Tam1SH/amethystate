@@ -1,19 +1,24 @@
 [package]
-name    = "rpstate-macros"
-version = "0.1.0"
-edition = "2024"
+name = "rpstate-macros"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [lib]
 proc-macro = true
 
 [dependencies]
-darling     = { workspace = true }
+darling = { workspace = true }
 proc-macro2 = { workspace = true }
-quote       = { workspace = true }
-syn         = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
 
 [dev-dependencies]
 macrotest = { workspace = true }
-rpstate   = { path = "../rpstate" }
-serde     = { workspace = true }
-trybuild  = { workspace = true }
+rpstate.workspace = true
+serde = { workspace = true }
+trybuild = { workspace = true }

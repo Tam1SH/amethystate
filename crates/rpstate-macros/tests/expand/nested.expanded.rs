@@ -1,6 +1,6 @@
 use rpstate_macros::rpstate;
 pub struct DatabaseConfig {
-    pub host: ::rpstate::Field<String, ::rpstate::store::access::WritableMode>,
+    pub host: ::rpstate::Field<String, ::rpstate::DefaultStore, ::rpstate::WritableMode>,
 }
 #[automatically_derived]
 impl ::core::clone::Clone for DatabaseConfig {
@@ -15,7 +15,7 @@ impl DatabaseConfig {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         namespace: &str,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Ok(Self {
             host: ::rpstate::store::field_with_path(
                 store,
@@ -29,20 +29,20 @@ impl DatabaseConfig {
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_host(&self) -> ::rpstate::store::access::ReadOnly<String> {
+    pub fn __schema_field_host(&self) -> ::rpstate::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn host(
         &self,
-    ) -> ::rpstate::Field<String, ::rpstate::store::access::WritableMode> {
+    ) -> ::rpstate::Field<String, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
         self.host.clone()
     }
 }
-impl ::rpstate::store::node::RpStateNode for DatabaseConfig {
+impl ::rpstate::RpStateNode for DatabaseConfig {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         path: &str,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Self::new(store, path)
     }
 }
@@ -304,37 +304,35 @@ impl ::core::fmt::Debug for DatabaseConfig_Data {
         )
     }
 }
-impl ::rpstate::store::migration::types::RpType for DatabaseConfig_Data {
-    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+impl ::rpstate::migration::types::RpType for DatabaseConfig_Data {
+    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "DatabaseConfig_Data".as_bytes(),
     );
 }
-impl ::rpstate::store::migration::fields::RpStateFields for DatabaseConfig_Data {
-    const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
-        ::rpstate::store::migration::fields::FieldDescriptor {
+impl ::rpstate::migration::fields::RpStateFields for DatabaseConfig_Data {
+    const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
+        ::rpstate::migration::fields::FieldDescriptor {
             name: "host",
-            type_hash: <String as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+            type_hash: <String as ::rpstate::migration::types::RpType>::TYPE_HASH,
         },
     ];
     const VERSION: u32 = 0u32;
     const PARENT_PREFIX: &'static str = "";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<Self> {
+    fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
         Ok(Self {
             host: ctx.get::<String>("host")?.unwrap_or_else(|| "localhost".to_string()),
         })
     }
     fn save_struct(
         &self,
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<()> {
+        ctx: &mut ::rpstate::MigrationContext,
+    ) -> ::rpstate::Result<()> {
         ctx.set("host", &self.host)?;
         Ok(())
     }
 }
-impl ::rpstate::store::node::RpState for DatabaseConfig {
+impl ::rpstate::RpState for DatabaseConfig {
     type Data = DatabaseConfig_Data;
 }
 pub struct SystemSettings {
@@ -355,7 +353,7 @@ impl ::rpstate::StateScope for SystemSettings {
 impl SystemSettings {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Ok(Self {
             db: ::std::sync::Arc::new(
                 DatabaseConfig::new(
@@ -372,27 +370,25 @@ impl SystemSettings {
         })
     }
     #[doc(hidden)]
-    pub fn __schema_field_db(
-        &self,
-    ) -> ::rpstate::store::access::ReadOnly<DatabaseConfig> {
+    pub fn __schema_field_db(&self) -> ::rpstate::ReadOnly<DatabaseConfig> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn db(&self) -> ::std::sync::Arc<DatabaseConfig> {
         self.db.clone()
     }
 }
-impl ::rpstate::store::node::RpStateNode for SystemSettings {
+impl ::rpstate::RpStateNode for SystemSettings {
     fn new_node(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         _path: &str,
-    ) -> ::rpstate::store::Result<Self> {
+    ) -> ::rpstate::Result<Self> {
         Self::new(store)
     }
 }
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct SystemSettings_Data {
-    pub db: <DatabaseConfig as ::rpstate::store::node::RpState>::Data,
+    pub db: <DatabaseConfig as ::rpstate::RpState>::Data,
 }
 #[doc(hidden)]
 #[allow(
@@ -543,7 +539,7 @@ const _: () = {
                     __A: _serde::de::SeqAccess<'de>,
                 {
                     let __field0 = match _serde::de::SeqAccess::next_element::<
-                        <DatabaseConfig as ::rpstate::store::node::RpState>::Data,
+                        <DatabaseConfig as ::rpstate::RpState>::Data,
                     >(&mut __seq)? {
                         _serde::__private228::Some(__value) => __value,
                         _serde::__private228::None => {
@@ -568,7 +564,7 @@ const _: () = {
                     __A: _serde::de::MapAccess<'de>,
                 {
                     let mut __field0: _serde::__private228::Option<
-                        <DatabaseConfig as ::rpstate::store::node::RpState>::Data,
+                        <DatabaseConfig as ::rpstate::RpState>::Data,
                     > = _serde::__private228::None;
                     while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                         __Field,
@@ -582,7 +578,7 @@ const _: () = {
                                 }
                                 __field0 = _serde::__private228::Some(
                                     _serde::de::MapAccess::next_value::<
-                                        <DatabaseConfig as ::rpstate::store::node::RpState>::Data,
+                                        <DatabaseConfig as ::rpstate::RpState>::Data,
                                     >(&mut __map)?,
                                 );
                             }
@@ -651,29 +647,27 @@ impl ::core::fmt::Debug for SystemSettings_Data {
         )
     }
 }
-impl ::rpstate::store::migration::types::RpType for SystemSettings_Data {
-    const TYPE_HASH: u64 = ::rpstate::store::migration::types::fnv1a(
+impl ::rpstate::migration::types::RpType for SystemSettings_Data {
+    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "SystemSettings_Data".as_bytes(),
     );
 }
-impl ::rpstate::store::migration::fields::RpStateFields for SystemSettings_Data {
-    const FIELDS: &'static [::rpstate::store::migration::fields::FieldDescriptor] = &[
-        ::rpstate::store::migration::fields::FieldDescriptor {
+impl ::rpstate::migration::fields::RpStateFields for SystemSettings_Data {
+    const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
+        ::rpstate::migration::fields::FieldDescriptor {
             name: "db",
             type_hash: 0xDEADBEEF
-                ^ <<DatabaseConfig as ::rpstate::store::node::RpState>::Data as ::rpstate::store::migration::types::RpType>::TYPE_HASH,
+                ^ <<DatabaseConfig as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
         },
     ];
     const VERSION: u32 = 0u32;
     const PARENT_PREFIX: &'static str = "sys";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<Self> {
+    fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
         Ok(Self {
             db: {
                 let mut sub_ctx = ctx.scoped("db");
-                <<DatabaseConfig as ::rpstate::store::node::RpState>::Data as ::rpstate::store::migration::fields::RpStateFields>::load_struct(
+                <<DatabaseConfig as ::rpstate::RpState>::Data as ::rpstate::migration::fields::RpStateFields>::load_struct(
                     &mut sub_ctx,
                 )?
             },
@@ -681,8 +675,8 @@ impl ::rpstate::store::migration::fields::RpStateFields for SystemSettings_Data 
     }
     fn save_struct(
         &self,
-        ctx: &mut ::rpstate::store::migration::MigrationContext,
-    ) -> ::rpstate::store::Result<()> {
+        ctx: &mut ::rpstate::MigrationContext,
+    ) -> ::rpstate::Result<()> {
         {
             let mut sub_ctx = ctx.scoped("db");
             self.db.save_struct(&mut sub_ctx)?;
@@ -690,7 +684,7 @@ impl ::rpstate::store::migration::fields::RpStateFields for SystemSettings_Data 
         Ok(())
     }
 }
-impl ::rpstate::store::node::RpState for SystemSettings {
+impl ::rpstate::RpState for SystemSettings {
     type Data = SystemSettings_Data;
 }
 fn main() {}
