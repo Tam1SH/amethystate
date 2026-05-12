@@ -80,9 +80,7 @@ pub struct NetworkState {
 }
 
 fn main() -> rpstate::Result<()> {
-    let store: Arc<DefaultStore> = Arc::new(
-        StoreBuilder::new("./app.redb").build()?
-    );
+    let store = StoreBuilder::new("./app.redb").build()?;
 
     let state = NetworkState::new(&store)?;
 
