@@ -25,7 +25,7 @@ pub use store::{
 };
 
 pub use migration::{MigrationContext, MigrationError, MigrationReport, Migrator};
-pub use rpstate_macros::rpstate;
+pub use rpstate_macros::{RpType, rpstate};
 
 #[cfg(feature = "json")]
 pub use store::backend::json::JsonStore;

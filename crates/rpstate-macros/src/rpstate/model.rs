@@ -11,9 +11,6 @@ pub(crate) struct MacroArgs {
     pub(crate) version: Option<u32>,
 }
 
-/// Ручная реализация FromField — darling не умеет `TokenStream2` через FromMeta,
-/// и syn не может распарсить JSON-like литералы `{ "key": val }` как Expr.
-/// Разбираем токены `#[state(...)]` сами.
 #[derive(Debug)]
 pub(crate) struct StoreFieldEntry {
     pub(crate) ident: Option<Ident>,
@@ -78,8 +75,6 @@ impl FromField for StoreFieldEntry {
     }
 }
 
-/// Разбивает поток токенов по запятым верхнего уровня
-/// (запятые внутри групп `{ }` / `[ ]` / `( )` не считаются).
 fn split_top_level_commas(tokens: TokenStream2) -> Vec<TokenStream2> {
     let mut result: Vec<TokenStream2> = Vec::new();
     let mut current: Vec<TokenTree> = Vec::new();
@@ -118,14 +113,14 @@ fn parse_state_tokens(
                     darling::Error::custom("expected attribute key identifier").with_span(&tt)
                 );
             }
-            None => continue, // пустой элемент после trailing запятой
+            None => continue,
         };
         let name = first.to_string();
 
         let has_eq = matches!(iter.peek(), Some(TokenTree::Punct(p)) if p.as_char() == '=');
 
         if has_eq {
-            iter.next(); // поглощаем '='
+            iter.next();
             let value: TokenStream2 = iter.collect();
 
             match name.as_str() {

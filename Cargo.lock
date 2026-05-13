@@ -842,7 +842,7 @@ dependencies = [
 
 [[package]]
 name = "rpstate"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "arc-swap",
  "bytes",
@@ -866,7 +866,7 @@ dependencies = [
 
 [[package]]
 name = "rpstate-macros"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "darling",
  "proc-macro2",

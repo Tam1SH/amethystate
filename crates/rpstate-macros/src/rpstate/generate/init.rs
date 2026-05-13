@@ -99,7 +99,6 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
             }
         }
     } else {
-        // Plain leaf field — parse_default нужен и здесь: `[1, 2, 3]` не Vec, `{}` не HashMap
         let raw_def = e
             .default
             .as_ref()
