@@ -5,12 +5,12 @@ use crate::store::{
 use error::RedbStoreError;
 use raw_storage::RedbRawStorage;
 use redb::{Database, ReadableDatabase, WriteTransaction};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::collections::HashMap;
 use tables::{
-    TABLE_DATA, TABLE_DIFF_LOG, TABLE_LOG, TABLE_META, TABLE_MIGRATION_LOG, TableReader,
-    TableWriter,
+    TableReader, TableWriter, TABLE_DATA, TABLE_DIFF_LOG, TABLE_LOG, TABLE_META,
+    TABLE_MIGRATION_LOG,
 };
 
 use crate::store::config::StoreConfig;
@@ -26,8 +26,8 @@ use crate::migration::{
 use crate::store::backend::redb::tables::TABLE_SCHEMA_SNAPSHOT;
 use crate::store::util::debouncer::Debouncer;
 use bytes::Bytes;
-use rmp_serde::Serializer;
 use rmp_serde::config::BytesMode;
+use rmp_serde::Serializer;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
@@ -596,9 +596,9 @@ impl Store for RedbStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::StoreBuilder;
     use crate::error::Error;
     use crate::migration::ComponentOutcome;
+    use crate::StoreBuilder;
     use redb::ReadableTableMetadata;
     use std::path::PathBuf;
     use std::sync::atomic::AtomicUsize;
@@ -641,7 +641,11 @@ mod tests {
     #[test]
     fn test_debouncer_persistence() {
         let path = unique_path("debounce");
-        let (store, _) = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
+
+        let mut config = StoreConfig::new(path);
+        config.save_debounce = Duration::from_millis(50);
+
+        let (store, _) = RedbStore::open(config, MigrationSet::default()).unwrap();
 
         store.set("config.port", &8080u16).unwrap();
 
