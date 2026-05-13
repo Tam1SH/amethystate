@@ -204,6 +204,90 @@ pub struct SystemSettings {
 }
 ```
 
+
+## Reactive Maps
+
+`ReactiveMap<K, V>` manages dynamic collections where each entry is stored as an individual key in the database.
+
+### Declaration
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize, Default, RpType)]
+pub struct AlertThresholds {
+    pub warning: u64,
+    pub critical: u64,
+}
+
+#[rpstate(prefix = "sys")]
+pub struct SystemSettings {
+    #[state(default = {
+        "cpu": AlertThresholds { warning: 70, critical: 90 },
+        "mem": AlertThresholds { warning: 80, critical: 95 }
+    })]
+    pub limits: ReactiveMap<String, AlertThresholds>,
+}
+```
+
+### Usage
+
+```rust,ignore
+let state = SystemSettings::new(&store)?;
+
+// Upsert (Insert or Update)
+state.limits().set_or_create("gpu".into(), &AlertThresholds { warning: 60, critical: 85 })?;
+
+// Lookup
+let cpu_limit = state.limits().get(&"cpu".into())?; // Result<Option<AlertThresholds>>
+
+// Scan
+for (key, val) in state.limits().entries()? {
+    println!("{key}: {val:?}");
+}
+```
+
+### Reactivity and Interceptors
+
+You can subscribe to changes for the entire map or a specific key.
+
+```rust,ignore
+// Subscribe to any change in the map
+let _any_sub = state.limits().subscribe_any(|change| {
+    match change {
+        MapChange::Insert { key, .. } => println!("Added {key}"),
+        MapChange::Update { key, .. } => println!("Updated {key}"),
+        MapChange::Remove { key, .. } => println!("Removed {key}"),
+        MapChange::Clear => println!("Cleared"),
+    }
+});
+
+// Subscribe to a specific key only
+let _key_sub = state.limits().subscribe_key("cpu".into(), |change| {
+    println!("CPU limit changed");
+});
+```
+
+#### Interceptors and Cycle Protection
+Interceptors allow you to validate or transform changes before they are committed.
+
+*   **Rejection:** If an interceptor returns `None`, the operation is cancelled and returns `Err(Error::Intercepted)`.
+*   **Cycle Protection:** The system tracks recursion depth (max depth = 10). If an interceptor triggers a change to the same path, execution is aborted with a `warning` in the log to prevent deadlocks.
+
+```rust,ignore
+state.limits().intercept(|change| {
+    if let MapChange::Update { new_value, .. } = &change {
+        // Validation: critical threshold cannot be lower than warning
+        if new_value.critical < new_value.warning {
+            return None; // Will cause the .set() call to return Err(Error::Intercepted)
+        }
+    }
+    Some(change)
+});
+```
+
+### Storage
+Data is persisted using the path format `{prefix}.{field_name}.{key}` (e.g., `sys.limits.cpu`).
+
+
 ## Migrations
 
 The migration system manages persistent state evolution using a dependency graph between components. All transformations
@@ -263,6 +347,52 @@ migrate! {
     |old, ctx| {
         Ok(Self {
             net: migrate_field!(ctx, old.net),
+        })
+    }
+}
+```
+
+To migrate `ReactiveMap` data, transform the snapshot provided in the `_Data` struct and use the `MigrationContext` to manually delete old physical records from the storage:
+
+```rust
+mod v1 {
+    #[rpstate(prefix = "network", version = 1)]
+    pub struct ProxyConfig {
+        pub routes: ReactiveMap<String, String>,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, RpType)]
+pub struct ProxyEndpoint {
+    pub url: String,
+    pub timeout_ms: u32,
+}
+
+#[rpstate(prefix = "network", version = 2)]
+pub struct ProxyConfig {
+    pub endpoints: ReactiveMap<String, ProxyEndpoint>,
+}
+
+migrate! {
+    v1::ProxyConfig_Data => ProxyConfig_Data,
+    |old, ctx| {
+        // 1. Manually delete old physical keys from the storage.
+        // ReactiveMap entries are stored as "{field_name}.{key}".
+        for key in old.routes.keys() {
+            ctx.delete(&format!("routes.{}", key))?;
+        }
+
+        // 2. Transform the old HashMap<String, String> into 
+        // the new HashMap<String, ProxyEndpoint>.
+        let endpoints = old.routes.into_iter()
+            .map(|(k, v)| (k, ProxyEndpoint { 
+                url: v, 
+                timeout_ms: 5000 
+            }))
+            .collect();
+
+        Ok(Self {
+            endpoints,
         })
     }
 }

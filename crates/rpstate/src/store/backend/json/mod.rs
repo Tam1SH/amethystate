@@ -80,6 +80,31 @@ impl Store for JsonStore {
         Ok(())
     }
 
+    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Bytes)>> {
+        let guard = self.map.read().map_err(|_| JsonStoreError::Poisoned)?;
+        let mut results = Vec::new();
+
+        let prefix_str = normalize_path(prefix).unwrap_or_else(|_| prefix.to_string());
+        let parts = split_path(&prefix_str);
+
+        if let Some(node) = get_at_path(&guard, parts)
+            && let Some(obj) = node.as_object()
+        {
+            for (k, v) in obj {
+                let full_key = if prefix_str.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{}.{}", prefix_str, k)
+                };
+                if let Ok(bytes) = serde_json::to_vec(v) {
+                    results.push((full_key, Bytes::from(bytes)));
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
     fn delete(&self, path: &str) -> Result<()> {
         let path_str = normalize_path(path)?;
 
@@ -125,7 +150,17 @@ impl Store for JsonStore {
     }
 
     fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
-        serde_json::from_slice(bytes).map_err(|e| CodecError::from(e).into())
+        match serde_json::from_slice(bytes) {
+            Ok(val) => Ok(val),
+            Err(e) => {
+                warn!(
+                    target: "rpstate",
+                    "Failed to decode JSON field. Data is corrupted or type changed. \
+                    Using Default value. Error: {e}"
+                );
+                Ok(T::default())
+            }
+        }
     }
 }
 

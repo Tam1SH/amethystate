@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 pub trait RpType {
     const TYPE_HASH: u64;
     const TYPE_NAME: &'static str;
@@ -47,4 +49,9 @@ impl<T: RpType> RpType for Vec<T> {
 impl<T: RpType> RpType for Option<T> {
     const TYPE_HASH: u64 = fnv1a(b"Option") ^ T::TYPE_HASH;
     const TYPE_NAME: &'static str = "Option";
+}
+
+impl<K: RpType, V: RpType> RpType for HashMap<K, V> {
+    const TYPE_HASH: u64 = fnv1a(b"HashMap") ^ K::TYPE_HASH ^ V::TYPE_HASH;
+    const TYPE_NAME: &'static str = "HashMap";
 }

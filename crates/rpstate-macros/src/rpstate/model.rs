@@ -1,8 +1,9 @@
+use darling::FromField;
 use darling::util::SpannedValue;
-use darling::{FromField, FromMeta};
-use syn::{Expr, Ident, Type, Visibility};
+use proc_macro2::{TokenStream as TokenStream2, TokenTree};
+use syn::{Expr, GenericArgument, Ident, PathArguments, Type, TypePath, Visibility};
 
-#[derive(Debug, FromMeta)]
+#[derive(Debug, darling::FromMeta)]
 pub(crate) struct MacroArgs {
     #[darling(default)]
     pub(crate) prefix: Option<String>,
@@ -10,26 +11,184 @@ pub(crate) struct MacroArgs {
     pub(crate) version: Option<u32>,
 }
 
-#[derive(Debug, FromField)]
-#[darling(attributes(state, setting))]
+/// Ручная реализация FromField — darling не умеет `TokenStream2` через FromMeta,
+/// и syn не может распарсить JSON-like литералы `{ "key": val }` как Expr.
+/// Разбираем токены `#[state(...)]` сами.
+#[derive(Debug)]
 pub(crate) struct StoreFieldEntry {
     pub(crate) ident: Option<Ident>,
     pub(crate) vis: Visibility,
     pub(crate) ty: Type,
-    #[darling(default)]
+    #[allow(dead_code)]
     pub(crate) key: Option<String>,
-    #[darling(default)]
-    pub(crate) default: Option<Expr>,
-    #[darling(default)]
+    pub(crate) default: Option<TokenStream2>,
     pub(crate) nested: bool,
-    #[darling(default)]
     pub(crate) lookup: Option<SpannedValue<String>>,
-    #[darling(default)]
     pub(crate) lookup_node: Option<SpannedValue<String>>,
-    #[darling(default)]
     pub(crate) parent: Option<Expr>,
-    #[darling(default)]
     pub(crate) export_mut: bool,
-    #[darling(default)]
     pub(crate) volatile: bool,
+}
+
+impl FromField for StoreFieldEntry {
+    fn from_field(field: &syn::Field) -> darling::Result<Self> {
+        let ident = field.ident.clone();
+        let vis = field.vis.clone();
+        let ty = field.ty.clone();
+
+        let mut key = None;
+        let mut default = None;
+        let mut nested = false;
+        let mut lookup = None;
+        let mut lookup_node = None;
+        let mut parent = None;
+        let mut export_mut = false;
+        let mut volatile = false;
+
+        for attr in &field.attrs {
+            if attr.path().is_ident("state") || attr.path().is_ident("setting") {
+                let list = attr.meta.require_list().map_err(darling::Error::from)?;
+                parse_state_tokens(
+                    list.tokens.clone(),
+                    &mut key,
+                    &mut default,
+                    &mut nested,
+                    &mut lookup,
+                    &mut lookup_node,
+                    &mut parent,
+                    &mut export_mut,
+                    &mut volatile,
+                )?;
+            }
+        }
+
+        Ok(StoreFieldEntry {
+            ident,
+            vis,
+            ty,
+            key,
+            default,
+            nested,
+            lookup,
+            lookup_node,
+            parent,
+            export_mut,
+            volatile,
+        })
+    }
+}
+
+/// Разбивает поток токенов по запятым верхнего уровня
+/// (запятые внутри групп `{ }` / `[ ]` / `( )` не считаются).
+fn split_top_level_commas(tokens: TokenStream2) -> Vec<TokenStream2> {
+    let mut result: Vec<TokenStream2> = Vec::new();
+    let mut current: Vec<TokenTree> = Vec::new();
+    for tt in tokens {
+        if matches!(&tt, TokenTree::Punct(p) if p.as_char() == ',') {
+            result.push(current.drain(..).collect());
+        } else {
+            current.push(tt);
+        }
+    }
+    if !current.is_empty() {
+        result.push(current.into_iter().collect());
+    }
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn parse_state_tokens(
+    tokens: TokenStream2,
+    key: &mut Option<String>,
+    default: &mut Option<TokenStream2>,
+    nested: &mut bool,
+    lookup: &mut Option<SpannedValue<String>>,
+    lookup_node: &mut Option<SpannedValue<String>>,
+    parent: &mut Option<Expr>,
+    export_mut: &mut bool,
+    volatile: &mut bool,
+) -> darling::Result<()> {
+    for item in split_top_level_commas(tokens) {
+        let mut iter = item.into_iter().peekable();
+
+        let first = match iter.next() {
+            Some(TokenTree::Ident(i)) => i,
+            Some(tt) => {
+                return Err(
+                    darling::Error::custom("expected attribute key identifier").with_span(&tt)
+                );
+            }
+            None => continue, // пустой элемент после trailing запятой
+        };
+        let name = first.to_string();
+
+        let has_eq = matches!(iter.peek(), Some(TokenTree::Punct(p)) if p.as_char() == '=');
+
+        if has_eq {
+            iter.next(); // поглощаем '='
+            let value: TokenStream2 = iter.collect();
+
+            match name.as_str() {
+                "default" => *default = Some(value),
+                "key" => {
+                    let lit: syn::LitStr = syn::parse2(value).map_err(darling::Error::from)?;
+                    *key = Some(lit.value());
+                }
+                "lookup" => {
+                    let lit: syn::LitStr = syn::parse2(value).map_err(darling::Error::from)?;
+                    *lookup = Some(SpannedValue::new(lit.value(), lit.span()));
+                }
+                "lookup_node" => {
+                    let lit: syn::LitStr = syn::parse2(value).map_err(darling::Error::from)?;
+                    *lookup_node = Some(SpannedValue::new(lit.value(), lit.span()));
+                }
+                "parent" => {
+                    let expr: Expr = syn::parse2(value).map_err(darling::Error::from)?;
+                    *parent = Some(expr);
+                }
+                other => {
+                    return Err(darling::Error::unknown_field_with_alts(
+                        other,
+                        &["default", "key", "lookup", "lookup_node", "parent"],
+                    ));
+                }
+            }
+        } else {
+            match name.as_str() {
+                "volatile" => *volatile = true,
+                "nested" => *nested = true,
+                "export_mut" => *export_mut = true,
+                other => {
+                    return Err(darling::Error::unknown_field_with_alts(
+                        other,
+                        &["volatile", "nested", "export_mut"],
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+impl StoreFieldEntry {
+    pub fn get_map_types(&self) -> Option<(&Type, &Type)> {
+        if let Type::Path(TypePath { path, .. }) = &self.ty {
+            let last_seg = path.segments.last()?;
+            if last_seg.ident == "ReactiveMap"
+                && let PathArguments::AngleBracketed(args) = &last_seg.arguments
+            {
+                let mut generics = args.args.iter().filter_map(|arg| {
+                    if let GenericArgument::Type(t) = arg {
+                        Some(t)
+                    } else {
+                        None
+                    }
+                });
+                let k = generics.next()?;
+                let v = generics.next()?;
+                return Some((k, v));
+            }
+        }
+        None
+    }
 }

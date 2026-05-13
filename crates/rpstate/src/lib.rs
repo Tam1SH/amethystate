@@ -1,3 +1,4 @@
+#![allow(clippy::complexity)]
 pub mod codec;
 pub mod error;
 pub mod migration;
@@ -11,14 +12,16 @@ use std::sync::Arc;
 pub use error::Result;
 pub use inventory;
 pub use reactive::{
-    AccessMode, Field, ReadOnly, ReadOnlyMode, RpState, RpStateNode, Signal, SignalSubscription,
-    StoreSubscription, Writable, WritableMode,
+    AccessMode, Change, Field, InterceptDisposer, MapChange, MapSubscription, ReactiveMap,
+    ReadOnly, ReadOnlyMode, RpState, RpStateNode, Signal, SignalSubscription, StoreSubscription,
+    Writable, WritableMode,
 };
 pub use serde;
+pub use serde_json;
 
 pub use store::{
     StateScope, Store, StoreEvent, StoreOp, SubscriptionKind, builder::StoreBuilder,
-    config::StoreConfig, scoped_path,
+    config::StoreConfig, reactive_map, reactive_map_with_path, scoped_path,
 };
 
 pub use migration::{MigrationContext, MigrationError, MigrationReport, Migrator};
@@ -74,19 +77,41 @@ macro_rules! register_migrations {
 macro_rules! migrate {
     (
         $old:path => $new:path,
-        rename: $rename:tt
-        $(, convert: $convert:tt)?
-        , |$old_val:ident| $logic_block:block
+        rename: $rename:tt,
+        convert: $convert:tt,
+        |$($args:ident),* $(,)?| $logic_block:block
     ) => {
-        $crate::migrate!(@impl $old => $new, rename: $rename $(, convert: $convert)? , |$old_val, _unused_ctx| $logic_block);
+        $crate::migrate!(@route $old => $new, rename: $rename, convert: $convert, |$($args),*| $logic_block);
     };
 
     (
         $old:path => $new:path,
-        rename: $rename:tt
-        $(, convert: $convert:tt)?
-        , |$old_val:ident, $ctx_val:ident| $logic_block:block
+        rename: $rename:tt,
+        |$($args:ident),* $(,)?| $logic_block:block
     ) => {
+        $crate::migrate!(@route $old => $new, rename: $rename, |$($args),*| $logic_block);
+    };
+
+    (
+        $old:path => $new:path,
+        convert: $convert:tt,
+        |$($args:ident),* $(,)?| $logic_block:block
+    ) => {
+        $crate::migrate!(@route $old => $new, rename: [], convert: $convert, |$($args),*| $logic_block);
+    };
+
+    (
+        $old:path => $new:path,
+        |$($args:ident),* $(,)?| $logic_block:block
+    ) => {
+        $crate::migrate!(@route $old => $new, rename: [], |$($args),*| $logic_block);
+    };
+
+    (@route $old:path => $new:path, rename: $rename:tt $(, convert: $convert:tt)? , |$old_val:ident| $logic_block:block) => {
+        $crate::migrate!(@impl $old => $new, rename: $rename $(, convert: $convert)? , |$old_val, _unused_ctx| $logic_block);
+    };
+
+    (@route $old:path => $new:path, rename: $rename:tt $(, convert: $convert:tt)? , |$old_val:ident, $ctx_val:ident| $logic_block:block) => {
         $crate::migrate!(@impl $old => $new, rename: $rename $(, convert: $convert)? , |$old_val, $ctx_val| $logic_block);
     };
 
@@ -129,7 +154,7 @@ macro_rules! migrate {
                 prefix: <$new as $crate::migration::fields::RpStateFields>::PARENT_PREFIX,
                 target_version: <$new as $crate::migration::fields::RpStateFields>::VERSION,
                 dependencies: <$new as $crate::migration::fields::RpStateFields>::MIGRATION_DEPS,
-                description: "migrate!", //im lazy
+                description: "migrate!",
                 schema_hash: <$new as $crate::migration::fields::RpStateFields>::SCHEMA_HASH,
                 fields: <$new as $crate::migration::fields::RpStateFields>::FIELDS,
                 run: |ctx| {

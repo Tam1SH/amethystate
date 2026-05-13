@@ -1,0 +1,89 @@
+use rpstate::store::builder::StoreBuilder;
+use rpstate::{ReactiveMap, Store, migrate};
+use rpstate_macros::{RpType, rpstate};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, RpType)]
+pub struct ProxyEndpoint {
+    pub url: String,
+    pub timeout_ms: u32,
+}
+
+mod v1 {
+    use super::*;
+    #[rpstate(prefix = "network", version = 1)]
+    pub struct ProxyConfig {
+        #[state(default = "default".into())]
+        pub name: String,
+        pub routes: ReactiveMap<String, String>,
+    }
+}
+
+#[rpstate(prefix = "network", version = 2)]
+pub struct ProxyConfig {
+    #[state(default = "default".into())]
+    pub name: String,
+    pub endpoints: ReactiveMap<String, ProxyEndpoint>,
+}
+
+migrate! {
+    v1::ProxyConfig_Data => ProxyConfig_Data,
+    |old, ctx| {
+        for key in old.routes.keys() {
+            ctx.delete(&format!("routes.{}", key))?;
+        }
+
+        let endpoints = old.routes.into_iter()
+            .filter(|(k, _)| k != "obsolete")
+            .map(|(k, v)| (k, ProxyEndpoint { url: v, timeout_ms: 5000 }))
+            .collect();
+
+        Ok(Self {
+            name: old.name,
+            endpoints,
+        })
+    }
+}
+
+#[cfg(feature = "redb")]
+#[test]
+fn test_embedded_map_migration() {
+    let path = std::env::temp_dir().join("rpstate_embedded_map.redb");
+    if path.exists() {
+        let _ = std::fs::remove_file(&path);
+    }
+
+    {
+        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
+        let config = v1::ProxyConfig::new(&store).unwrap();
+        config.name().set("legacy-proxy".into()).unwrap();
+
+        config
+            .routes()
+            .set_or_create("api".into(), &"http://api.v1".into())
+            .unwrap();
+        config
+            .routes()
+            .set_or_create("obsolete".into(), &"http://drop.me".into())
+            .unwrap();
+        store.save_now().unwrap();
+    }
+
+    let (store, _) = StoreBuilder::new(&path)
+        .collect_migrations()
+        .build()
+        .unwrap();
+
+    let config = ProxyConfig::new(&store).unwrap();
+
+    assert_eq!(config.name().get(), "legacy-proxy");
+
+    let entries = config.endpoints().entries().unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].0, "api");
+    assert_eq!(entries[0].1.url, "http://api.v1");
+
+    let old_keys = store.scan_prefix("network.routes.").unwrap();
+    assert!(old_keys.is_empty());
+}

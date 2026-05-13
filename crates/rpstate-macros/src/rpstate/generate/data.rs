@@ -1,3 +1,4 @@
+use crate::rpstate::generate::parse_default;
 use crate::rpstate::model::{MacroArgs, StoreFieldEntry};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
@@ -33,6 +34,8 @@ pub(crate) fn data_impl(
         let ty = &e.ty;
         if e.nested {
             quote! { pub #fname: <#ty as ::rpstate::RpState>::Data }
+        } else if let Some((k, v)) = e.get_map_types() {
+            quote! { pub #fname: ::std::collections::HashMap<#k, #v> }
         } else {
             quote! { pub #fname: #ty }
         }
@@ -50,6 +53,14 @@ pub(crate) fn data_impl(
                 ::rpstate::migration::fields::FieldDescriptor {
                     name: #fname_str,
                     type_hash: 0xDEADBEEF ^ < <#ty as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
+                    type_name: #type_name,
+                }
+            }
+        } else if let Some((k, v)) = e.get_map_types() {
+            quote! {
+                ::rpstate::migration::fields::FieldDescriptor {
+                    name: #fname_str,
+                    type_hash: <::std::collections::HashMap<#k, #v> as ::rpstate::migration::types::RpType>::TYPE_HASH,
                     type_name: #type_name,
                 }
             }
@@ -76,9 +87,15 @@ pub(crate) fn data_impl(
                     < <#ty as ::rpstate::RpState>::Data as ::rpstate::migration::fields::RpStateFields>::load_struct(&mut sub_ctx)?
                 }
             }
+        } else if let Some((k, v)) = e.get_map_types() {
+            quote! {
+                #fname: ctx.scan_map::<#k, #v>(#key)?
+            }
         } else {
-            let fallback = e.default.as_ref()
-                .map(|d| quote! { #d })
+            let fallback = e
+                .default
+                .as_ref()
+                .map(parse_default)
                 .unwrap_or_else(|| quote! { <#ty as ::std::default::Default>::default() });
             quote! {
                 #fname: ctx.get::<#ty>(#key)?.unwrap_or_else(|| #fallback)
@@ -95,6 +112,13 @@ pub(crate) fn data_impl(
                 {
                     let mut sub_ctx = ctx.scoped(#key);
                     self.#fname.save_struct(&mut sub_ctx)?;
+                }
+            }
+        } else if e.get_map_types().is_some() {
+            quote! {
+                for (k, v) in &self.#fname {
+                    let full_key = format!("{}.{}", #key, k);
+                    ctx.set(&full_key, v)?;
                 }
             }
         } else {

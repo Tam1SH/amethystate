@@ -261,7 +261,7 @@ impl RedbStore {
     fn calculate_drift(
         &self,
         prefix: &str,
-        txn: &redb::WriteTransaction,
+        txn: &WriteTransaction,
         current_fields: &[FieldDescriptor],
     ) -> Result<Option<SchemaDiff>> {
         let snapshot: Option<SchemaSnapshot> = txn.load_typed(TABLE_SCHEMA_SNAPSHOT, prefix)?;
@@ -526,6 +526,11 @@ impl Store for RedbStore {
             Ok::<Bytes, RedbStoreError>(Bytes::copy_from_slice(&b))
         })?;
 
+        let old_bytes = {
+            let lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
+            lock.get(&*path).cloned().flatten()
+        };
+
         {
             let mut lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
             lock.insert(path.clone(), Some(bytes.clone()));
@@ -536,7 +541,7 @@ impl Store for RedbStore {
             StoreEvent {
                 path: path.clone(),
                 op: StoreOp::Set,
-                old: None,
+                old: old_bytes,
                 new: Some(bytes),
             },
         );
@@ -545,18 +550,80 @@ impl Store for RedbStore {
         Ok(())
     }
 
+    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Bytes)>> {
+        let mut results = Vec::new();
+
+        let read_txn = self.db.begin_read().map_err(RedbStoreError::from)?;
+        let table = read_txn
+            .open_table(TABLE_DATA)
+            .map_err(RedbStoreError::from)?;
+
+        let range = prefix..;
+        for result in table.range(range).map_err(RedbStoreError::from)? {
+            let (k, v) = result.map_err(RedbStoreError::from)?;
+            let key_str = k.value();
+            if key_str.starts_with(prefix) {
+                results.push((key_str.to_string(), Bytes::copy_from_slice(v.value())));
+            } else {
+                break;
+            }
+        }
+
+        let mut pending_map = HashMap::new();
+        {
+            let lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
+            for (k, opt_v) in lock.iter() {
+                if k.starts_with(prefix) {
+                    pending_map.insert(k.to_string(), opt_v.clone());
+                }
+            }
+        }
+
+        for (k, opt_v) in pending_map {
+            if let Some(v) = opt_v {
+                if let Some(pos) = results.iter().position(|(rk, _)| *rk == k) {
+                    results[pos].1 = v;
+                } else {
+                    results.push((k, v));
+                }
+            } else {
+                results.retain(|(rk, _)| *rk != k);
+            }
+        }
+
+        Ok(results)
+    }
+
     fn delete(&self, path: &str) -> Result<()> {
+        let path_arc: Arc<str> = Arc::from(path);
+
+        let old_bytes = {
+            let lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
+            if let Some(p) = lock.get(path) {
+                p.clone()
+            } else {
+                let read_txn = self.db.begin_read().map_err(RedbStoreError::from)?;
+                let table = read_txn
+                    .open_table(TABLE_DATA)
+                    .map_err(RedbStoreError::from)?;
+                table
+                    .get(path)
+                    .map_err(RedbStoreError::from)?
+                    .map(|v| Bytes::copy_from_slice(v.value()))
+            }
+        };
+
         {
             let mut lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
-            lock.insert(Arc::from(path), None);
+            lock.insert(path_arc.clone(), None);
         }
 
         events::emit_local(
             &self.subscriptions,
             StoreEvent {
-                path: Arc::from(path),
+                path: path_arc,
                 op: StoreOp::Delete,
-                old: None,
+                old: old_bytes,
                 new: None,
             },
         );

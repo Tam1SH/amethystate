@@ -3,9 +3,11 @@ mod data;
 mod init;
 
 use crate::rpstate::model::{MacroArgs, StoreFieldEntry};
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
-use syn::{Attribute, Ident, Visibility};
+use syn::parse::{Parse, ParseStream, Parser};
+use syn::punctuated::Punctuated;
+use syn::{Attribute, Expr, Ident, Token, Visibility};
 
 pub(crate) fn generate_code(
     vis: &Visibility,
@@ -31,5 +33,61 @@ pub(crate) fn generate_code(
         impl #name { #constructor #(#schema_methods)* #(#methods)* }
         #node_impl
         #fields_impl
+    }
+}
+
+struct MapEntry {
+    key: Expr,
+    _colon: Token![:],
+    value: Expr,
+}
+
+impl Parse for MapEntry {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(MapEntry {
+            key: input.parse()?,
+            _colon: input.parse()?,
+            value: input.parse()?,
+        })
+    }
+}
+
+pub(crate) fn parse_default(tokens: &TokenStream2) -> TokenStream2 {
+    let mut iter = tokens.clone().into_iter();
+
+    match iter.next() {
+        Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket => {
+            let content = g.stream();
+            quote! { vec![#content] }
+        }
+        Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Brace => {
+            let content = g.stream();
+
+            if content.is_empty() {
+                return quote! { ::std::collections::HashMap::default() };
+            }
+
+            let parser = Punctuated::<MapEntry, Token![,]>::parse_terminated;
+            if let Ok(pairs) = parser.parse2(content)
+                && !pairs.is_empty()
+            {
+                let inserts = pairs.iter().map(|pair| {
+                    let k = &pair.key;
+                    let v = &pair.value;
+                    quote! { __map.insert(::std::convert::Into::into(#k), #v); }
+                });
+
+                return quote! {
+                    {
+                        let mut __map = ::std::collections::HashMap::default();
+                        #( #inserts )*
+                        __map
+                    }
+                };
+            }
+
+            tokens.clone()
+        }
+        _ => tokens.clone(),
     }
 }

@@ -72,3 +72,16 @@ mod rpstate;
 pub fn rpstate(args: TokenStream, input: TokenStream) -> TokenStream {
     rpstate::rpstate_impl(args, input)
 }
+
+#[proc_macro_derive(RpType)]
+pub fn rp_type_derive(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as syn::DeriveInput);
+    let name = &input.ident;
+    let expanded = quote::quote! {
+        impl ::rpstate::migration::types::RpType for #name {
+            const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(stringify!(#name).as_bytes());
+            const TYPE_NAME: &'static str = stringify!(#name);
+        }
+    };
+    TokenStream::from(expanded)
+}

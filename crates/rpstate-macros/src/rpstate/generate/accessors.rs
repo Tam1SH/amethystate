@@ -29,8 +29,12 @@ pub(crate) fn struct_fields(
         let fname = e.ident.as_ref().unwrap();
         let fvis = &e.vis;
         let ty = &e.ty;
+
         if e.nested || e.lookup_node.is_some() {
             quote! { #fvis #fname: ::std::sync::Arc<#ty> }
+        } else if let Some((k, v)) = e.get_map_types() {
+            let mode = field_mode(e);
+            quote! { #fvis #fname: ::rpstate::ReactiveMap<#k, #v, ::rpstate::DefaultStore, #mode> }
         } else {
             let mode = field_mode(e);
             quote! { #fvis #fname: ::rpstate::Field<#ty, ::rpstate::DefaultStore, #mode> }
@@ -45,6 +49,13 @@ pub(crate) fn methods(entries: &[StoreFieldEntry]) -> impl Iterator<Item = Token
 
         if e.nested || e.lookup_node.is_some() {
             quote! { pub fn #fname(&self) -> ::std::sync::Arc<#ty> { self.#fname.clone() } }
+        } else if let Some((k, v)) = e.get_map_types() {
+            let mode = field_mode(e);
+            quote! {
+                pub fn #fname(&self) -> ::rpstate::ReactiveMap<#k, #v, ::rpstate::DefaultStore, #mode> {
+                    self.#fname.clone()
+                }
+            }
         } else {
             let mode = field_mode(e);
             quote! {

@@ -131,6 +131,7 @@ pub trait RawStorage {
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>>;
     fn set(&mut self, key: &str, value: &[u8]) -> Result<()>;
     fn delete(&mut self, key: &str) -> Result<()>;
+    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>>;
 }
 
 pub struct Migrator {

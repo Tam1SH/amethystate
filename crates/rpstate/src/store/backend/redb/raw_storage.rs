@@ -43,4 +43,21 @@ impl RawStorage for RedbRawStorage<'_> {
         table.remove(key).map_err(RedbStoreError::from)?;
         Ok(())
     }
+
+    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
+        use redb::ReadableTable;
+        let table = self
+            .txn
+            .open_table(TABLE_DATA)
+            .map_err(RedbStoreError::from)?;
+        let mut result = Vec::new();
+        for entry in table.iter().map_err(RedbStoreError::from)? {
+            let (k, v) = entry.map_err(RedbStoreError::from)?;
+            let key = k.value().to_string();
+            if key.starts_with(prefix) {
+                result.push((key, v.value().to_vec()));
+            }
+        }
+        Ok(result)
+    }
 }

@@ -17,6 +17,12 @@ pub enum Error {
 
     #[error(transparent)]
     Migration(#[from] MigrationError),
+
+    #[error("Change intercepted")]
+    Intercepted,
+
+    #[error("Key not found in ReactiveMap: {0}")]
+    KeyNotFound(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

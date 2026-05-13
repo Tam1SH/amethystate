@@ -6,6 +6,7 @@ fn test_macro_expansion_compilation() {
     t.pass("tests/expand/nested.rs");
     t.pass("tests/expand/composition.rs");
     t.pass("tests/expand/external_linked_nested.rs");
+    t.pass("tests/expand/map_syntax.rs");
 
     t.compile_fail("tests/fails/lookup_wrong_name.rs");
     t.compile_fail("tests/fails/lookup_type_mismatch.rs");

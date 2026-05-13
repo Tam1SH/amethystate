@@ -1,9 +1,11 @@
+use crate::error::Error;
+use crate::reactive::{Change, InterceptDisposer, InterceptGuard};
 use crate::store::{Store, SubscriptionId};
 use crate::{AccessMode, ReadOnlyMode, Result, Signal, SignalSubscription, WritableMode};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use std::fmt::Debug;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 pub struct StoreSubscription<S: Store> {
     pub store: Arc<S>,
@@ -26,6 +28,17 @@ pub struct Field<TValue, S: Store, M: AccessMode = ReadOnlyMode> {
     pub path: Arc<str>,
     pub store_sub: Option<Arc<StoreSubscription<S>>>,
     pub(crate) _mode: std::marker::PhantomData<M>,
+
+    pub(crate) interceptors: Arc<
+        Mutex<
+            Vec<(
+                u64,
+                Arc<dyn Fn(Change<TValue>) -> Option<Change<TValue>> + Send + Sync + 'static>,
+            )>,
+        >,
+    >,
+    pub(crate) next_interceptor_id: Arc<AtomicUsize>,
+    pub(crate) intercept_depth: Arc<AtomicUsize>,
 }
 
 impl<TValue, S: Store, M: AccessMode> Clone for Field<TValue, S, M> {
@@ -35,6 +48,9 @@ impl<TValue, S: Store, M: AccessMode> Clone for Field<TValue, S, M> {
             path: Arc::clone(&self.path),
             store_sub: self.store_sub.clone(),
             _mode: std::marker::PhantomData,
+            interceptors: self.interceptors.clone(),
+            next_interceptor_id: self.next_interceptor_id.clone(),
+            intercept_depth: self.intercept_depth.clone(),
         }
     }
 }
@@ -78,36 +94,62 @@ where
     S: Store,
 {
     pub fn set(&self, value: TValue) -> Result<()> {
+        let mut change = Change {
+            old_value: self.get(),
+            new_value: value,
+        };
+
+        if let Some(_guard) = InterceptGuard::enter(&self.intercept_depth, self.path.clone()) {
+            let interceptors = { self.interceptors.lock().unwrap().clone() };
+            for (_, interceptor) in interceptors {
+                if let Some(new_change) = interceptor(change.clone()) {
+                    change = new_change;
+                } else {
+                    return Err(Error::Intercepted);
+                }
+            }
+        }
+
         if let Some(sub) = &self.store_sub {
-            sub.store.set_owned(self.path.clone(), &value)
+            sub.store.set_owned(self.path.clone(), &change.new_value)?;
         } else {
-            self.signal.set(value);
-            Ok(())
+            self.signal.set(change.new_value);
+        }
+        Ok(())
+    }
+
+    pub fn intercept<F>(&self, callback: F) -> InterceptDisposer
+    where
+        F: Fn(Change<TValue>) -> Option<Change<TValue>> + Send + Sync + 'static,
+    {
+        let id = self.next_interceptor_id.fetch_add(1, Ordering::Relaxed);
+        self.interceptors
+            .lock()
+            .unwrap()
+            .push((id as u64, Arc::new(callback)));
+
+        let interceptors = self.interceptors.clone();
+        InterceptDisposer {
+            id: id as u64,
+            path: self.path.clone(),
+            cleanup: Arc::new(move |id| {
+                if let Ok(mut lock) = interceptors.lock() {
+                    lock.retain(|(i, _)| *i != id);
+                }
+            }),
         }
     }
-}
 
-impl<TValue, S> Field<TValue, S, WritableMode>
-where
-    TValue: DeserializeOwned + Serialize + Send + Sync + Clone + 'static,
-    S: Store,
-{
     pub fn new_volatile(path: Arc<str>, default: TValue) -> Self {
         Self {
             signal: Arc::new(Signal::new(default)),
             path,
             store_sub: None,
             _mode: std::marker::PhantomData,
+            interceptors: Arc::new(Mutex::new(Vec::new())),
+            next_interceptor_id: Arc::new(AtomicUsize::new(0)),
+            intercept_depth: Arc::new(AtomicUsize::new(0)),
         }
-    }
-}
-
-impl<TValue: Debug + 'static, S: Store> Debug for Field<TValue, S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Field")
-            .field("path", &self.path)
-            .field("value", self.signal.get_arc().as_ref())
-            .finish()
     }
 }
 
@@ -120,6 +162,7 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+    use tracing_test::traced_test;
 
     fn unique_store(suffix: &str) -> Arc<DefaultStore> {
         let nanos = SystemTime::now()
@@ -162,29 +205,6 @@ mod tests {
     }
 
     #[test]
-    fn field_debug_output_contains_type_and_value() {
-        let store = unique_store("field-debug");
-        let signal = Arc::new(Signal::new("test_val".to_string()));
-        let sub_id = store.subscribe(crate::store::SubscriptionKind::Any, Arc::new(|_| {}));
-        let field: Field<String, DefaultStore> = Field {
-            signal,
-            path: Arc::from("debug.path"),
-            store_sub: Some(Arc::new(StoreSubscription {
-                store: store.clone(),
-                id: sub_id,
-            })),
-            _mode: Default::default(),
-        };
-
-        let debug_str = format!("{:?}", field);
-        assert!(debug_str.contains("Field"), "debug should show type name");
-        assert!(
-            debug_str.contains("test_val"),
-            "debug should show current value"
-        );
-    }
-
-    #[test]
     fn store_subscription_drop_unsubscribes() {
         let store = unique_store("drop-unsub");
         let calls = Arc::new(AtomicUsize::new(0));
@@ -208,6 +228,9 @@ mod tests {
                     id: sub_id,
                 })),
                 _mode: Default::default(),
+                interceptors: Arc::new(Mutex::new(Vec::new())),
+                intercept_depth: Arc::new(AtomicUsize::new(0)),
+                next_interceptor_id: Arc::new(AtomicUsize::new(0)),
             };
 
             field.set("hello".to_string()).unwrap();
@@ -237,6 +260,9 @@ mod tests {
                 id: sub_id,
             })),
             _mode: Default::default(),
+            interceptors: Arc::new(Mutex::new(Vec::new())),
+            intercept_depth: Arc::new(AtomicUsize::new(0)),
+            next_interceptor_id: Arc::new(AtomicUsize::new(0)),
         };
 
         let extracted = field.as_signal();
@@ -275,5 +301,72 @@ mod tests {
             in_store.is_none(),
             "Volatile data must NOT be persisted to store"
         );
+    }
+
+    #[test]
+    fn test_field_additional_coverage() {
+        let field = Field::<i32, DefaultStore, WritableMode>::new_volatile(Arc::from("test"), 42);
+
+        let disp = field.intercept(|mut change| {
+            change.new_value *= 2;
+            Some(change)
+        });
+
+        field.set(10).unwrap();
+        assert_eq!(field.get(), 20);
+
+        drop(disp);
+
+        field.set(10).unwrap();
+        assert_eq!(field.get(), 20, "Interceptor should survive manual drop");
+
+        let disp2 = field.intercept(|mut change| {
+            change.new_value += 1;
+            Some(change)
+        });
+
+        field.set(5).unwrap();
+        assert_eq!(field.get(), 11);
+
+        disp2.remove();
+
+        field.set(5).unwrap();
+        assert_eq!(field.get(), 10);
+    }
+
+    #[test]
+    fn test_field_depth_guard() {
+        let field = Field::<i32, DefaultStore, WritableMode>::new_volatile(Arc::from("test"), 1);
+
+        field.intercept_depth.store(100, Ordering::SeqCst);
+
+        let _disp = field.intercept(|mut c| {
+            c.new_value = 999;
+            Some(c)
+        });
+
+        field.set(10).unwrap();
+        assert_eq!(field.get(), 10);
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_field_recursion_warning() {
+        let field = Field::<i32, DefaultStore, WritableMode>::new_volatile(
+            Arc::from("test.recursive_field"),
+            0,
+        );
+
+        let field_clone = field.clone();
+
+        field.intercept(move |change| {
+            let _ = field_clone.set(change.new_value + 1);
+            Some(change)
+        });
+
+        let _ = field.set(1);
+
+        assert!(logs_contain("maximum intercept depth reached"));
+        assert!(logs_contain("path=test.recursive_field"));
     }
 }

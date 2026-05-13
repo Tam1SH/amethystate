@@ -1,4 +1,5 @@
 use crate::rpstate::generate::accessors::{field_mode, lookup_chain};
+use crate::rpstate::generate::parse_default;
 use crate::rpstate::model::StoreFieldEntry;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, quote_spanned};
@@ -39,7 +40,7 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
         let def = e
             .default
             .as_ref()
-            .map(|d| quote!(#d))
+            .map(parse_default)
             .unwrap_or_else(|| quote!(::std::default::Default::default()));
 
         let mode = field_mode(e);
@@ -77,8 +78,34 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
         } else {
             quote! { #fname: ::std::sync::Arc::new(#ty::new(store, &format!("{}.{}", namespace, #key))?) }
         }
+    } else if let Some((k, v)) = e.get_map_types() {
+        let def = e
+            .default
+            .as_ref()
+            .map(parse_default)
+            .unwrap_or_else(|| quote!(::std::collections::HashMap::new()));
+
+        if is_root {
+            quote! {
+                #fname: ::rpstate::reactive_map::<Self, #k, #v, _>(store, #key, #def)?
+            }
+        } else {
+            quote! {
+                #fname: ::rpstate::store::reactive_map_with_path::<#k, #v, _, _>(
+                    store,
+                    ::std::sync::Arc::from(format!("{}.{}", namespace, #key)),
+                    #def
+                )?
+            }
+        }
     } else {
-        let def = e.default.as_ref().expect("Default required");
+        // Plain leaf field — parse_default нужен и здесь: `[1, 2, 3]` не Vec, `{}` не HashMap
+        let raw_def = e
+            .default
+            .as_ref()
+            .expect("Default required for leaf fields");
+        let def = parse_default(raw_def);
+
         let path_expr = if is_root {
             quote! { #key.to_string() }
         } else {

@@ -5,6 +5,9 @@ use crate::migration::fields::RpStateFields;
 use crate::migration::migrate_from::MigrateFrom;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::str::FromStr;
 
 pub struct MigrationContext<'a> {
     prefix: String,
@@ -142,6 +145,25 @@ impl<'a> MigrationContext<'a> {
         }
     }
 
+    pub fn scan_map<K, V>(&self, key: &str) -> Result<HashMap<K, V>>
+    where
+        K: FromStr + Eq + Hash,
+        V: DeserializeOwned,
+    {
+        let full_prefix = format!("{}.", self.scoped_path(key));
+        let raw = self.storage.scan_prefix(&full_prefix)?;
+        let mut map = HashMap::new();
+        for (path, bytes) in raw {
+            if let Some(k_str) = path.strip_prefix(&full_prefix)
+                && let Ok(kv) = K::from_str(k_str)
+                && let Ok(vv) = decode::<V>(&bytes)
+            {
+                map.insert(kv, vv);
+            }
+        }
+        Ok(map)
+    }
+
     fn scoped_path(&self, key: &str) -> String {
         if self.prefix.is_empty() {
             key.to_string()
@@ -195,6 +217,10 @@ mod tests {
         fn delete(&mut self, key: &str) -> crate::Result<()> {
             self.data.remove(key);
             Ok(())
+        }
+
+        fn scan_prefix(&self, _: &str) -> Result<Vec<(String, Vec<u8>)>> {
+            todo!()
         }
     }
 
