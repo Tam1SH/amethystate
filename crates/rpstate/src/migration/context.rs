@@ -1,10 +1,10 @@
-use crate::Result;
 use crate::codec::CodecError;
-use crate::migration::RawStorage;
 use crate::migration::fields::RpStateFields;
 use crate::migration::migrate_from::MigrateFrom;
-use serde::Serialize;
+use crate::migration::RawStorage;
+use crate::Result;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::str::FromStr;
@@ -220,7 +220,7 @@ mod tests {
         }
 
         fn scan_prefix(&self, _: &str) -> Result<Vec<(String, Vec<u8>)>> {
-            todo!()
+            unreachable!()
         }
     }
 

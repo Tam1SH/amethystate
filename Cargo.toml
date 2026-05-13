@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Tam1SH <ignatternyev54@gmail.com>"]
 edition = "2024"
 license = "MIT"
@@ -16,8 +16,8 @@ readme = "README.md"
 
 [workspace.dependencies]
 # internal
-rpstate = { path = "crates/rpstate", version = "0.2.0" }
-rpstate-macros = { path = "crates/rpstate-macros", version = "0.2.0" }
+rpstate = { path = "crates/rpstate", version = "0.3.0" }
+rpstate-macros = { path = "crates/rpstate-macros", version = "0.3.0" }
 
 # external
 anyhow = "1.0.102"
