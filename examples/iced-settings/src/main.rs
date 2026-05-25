@@ -1,10 +1,9 @@
 use iced::widget::{button, column, row, text};
 use iced::{Element, Task};
-use rpstate::rpstate;
-use rpstate::store::builder::StoreBuilder;
+use rpstate::{rpstate, StoreBuilder};
 use std::sync::Arc;
 
-#[rpstate(prefix = "iced_settings")]
+#[rpstate(prefix = "iced_settings", mode = "persistent")]
 pub struct SettingsState {
     #[state(default = "127.0.0.1".to_string())]
     pub host: String,
@@ -14,7 +13,7 @@ pub struct SettingsState {
 }
 
 struct App {
-    data: SettingsState_Persistent,
+    data: SettingsState,
 }
 
 #[derive(Debug, Clone)]
@@ -33,13 +32,13 @@ impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::IncrementPort => {
-                let _ = self.data.mutate(|d| d.port = d.port.saturating_add(1));
+                let _ = self.data.mutate_lazy(|d| d.port = d.port.saturating_add(1));
             }
             Message::DecrementPort => {
-                let _ = self.data.mutate(|d| d.port = d.port.saturating_sub(1));
+                let _ = self.data.mutate_lazy(|d| d.port = d.port.saturating_sub(1));
             }
             Message::UseLocalhost => {
-                let _ = self.data.mutate(|d| d.host = "localhost".to_string());
+                let _ = self.data.mutate_lazy(|d| d.host = "localhost".to_string());
             }
         }
 

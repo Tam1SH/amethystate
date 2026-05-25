@@ -1,3 +1,4 @@
+use super::RpMode;
 use crate::rpstate::generate::parse_default;
 use crate::rpstate::model::{MacroArgs, StoreFieldEntry};
 use proc_macro2::TokenStream as TokenStream2;
@@ -12,10 +13,13 @@ pub(crate) fn persistent_fields(entries: &[StoreFieldEntry]) -> Vec<&StoreFieldE
 }
 
 pub(crate) fn data_impl(
+    vis: &syn::Visibility,
     name: &Ident,
+    attrs: &[syn::Attribute],
     prefix: Option<String>,
     entries: &[StoreFieldEntry],
     macro_args: &MacroArgs,
+    rp_mode: RpMode,
 ) -> TokenStream2 {
     let mut p_fields = persistent_fields(entries);
 
@@ -28,7 +32,6 @@ pub(crate) fn data_impl(
     });
 
     let data_struct_name = format_ident!("{}_Data", name);
-    let persisted_struct_name = format_ident!("{}_Persistent", name);
 
     let data_fields = p_fields.iter().map(|e| {
         let fname = e.ident.as_ref().unwrap();
@@ -206,8 +209,140 @@ pub(crate) fn data_impl(
         }
     });
 
-    let deps = migration_deps(entries);
     let prefix_expr = prefix.unwrap_or_default();
+    let deps = migration_deps(entries);
+
+    let persistent_wrapper_tokens = match rp_mode {
+        RpMode::Reactive => {
+            quote! {}
+        }
+        RpMode::Persistent => {
+            quote! {
+                #[derive(Clone)] #(#attrs)* #vis struct #name {
+                    inner: #data_struct_name,
+                    store: ::std::sync::Arc<::rpstate::DefaultStore>,
+                    prefix: ::std::sync::Arc<str>,
+                }
+
+                impl ::std::fmt::Debug for #name {
+                    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                        f.debug_struct(stringify!(#name))
+                            .field("inner", &self.inner)
+                            .finish()
+                    }
+                }
+
+                impl ::std::ops::Deref for #name {
+                    type Target = #data_struct_name;
+
+                    fn deref(&self) -> &Self::Target {
+                        &self.inner
+                    }
+                }
+
+                impl ::std::ops::DerefMut for #name {
+                    fn deref_mut(&mut self) -> &mut Self::Target {
+                        &mut self.inner
+                    }
+                }
+
+                impl #name {
+                    pub fn save_lazy(&self) -> ::rpstate::Result<()> {
+                        self.inner.__rpstate_save_to(&self.store, &self.prefix)
+                    }
+
+                    pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> ::rpstate::Result<()> {
+                        f(&mut self.inner);
+                        self.save_lazy()
+                    }
+
+                    pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> ::rpstate::Result<()> {
+                        f(&mut self.inner);
+                        self.save()
+                    }
+
+                    pub fn save(&self) -> ::rpstate::Result<()> {
+                        self.save_lazy()?;
+                        <::rpstate::DefaultStore as ::rpstate::Store>::flush_prefix(&*self.store, &self.prefix)
+                    }
+
+                    pub fn load(store: &::std::sync::Arc<::rpstate::DefaultStore>) -> ::rpstate::Result<Self> {
+                        Ok(Self {
+                            inner: #data_struct_name::__rpstate_load_from(store, #prefix_expr)?,
+                            store: ::std::sync::Arc::clone(store),
+                            prefix: ::std::sync::Arc::from(#prefix_expr),
+                        })
+                    }
+                }
+            }
+        }
+        RpMode::Both => {
+            let persisted_struct_name = format_ident!("{}_Persistent", name);
+            quote! {
+                #[allow(non_camel_case_types)]
+                pub struct #persisted_struct_name {
+                    inner: #data_struct_name,
+                    store: ::std::sync::Arc<::rpstate::DefaultStore>,
+                    prefix: ::std::sync::Arc<str>,
+                }
+
+                impl ::std::fmt::Debug for #persisted_struct_name {
+                    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                        f.debug_struct(stringify!(#persisted_struct_name))
+                            .field("inner", &self.inner)
+                            .finish()
+                    }
+                }
+
+                impl ::std::ops::Deref for #persisted_struct_name {
+                    type Target = #data_struct_name;
+
+                    fn deref(&self) -> &Self::Target {
+                        &self.inner
+                    }
+                }
+
+                impl ::std::ops::DerefMut for #persisted_struct_name {
+                    fn deref_mut(&mut self) -> &mut Self::Target {
+                        &mut self.inner
+                    }
+                }
+
+                impl #persisted_struct_name {
+
+                    pub fn save_lazy(&self) -> ::rpstate::Result<()> {
+                        self.inner.__rpstate_save_to(&self.store, &self.prefix)
+                    }
+
+
+                    pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> ::rpstate::Result<()> {
+                        f(&mut self.inner);
+                        self.save_lazy()
+                    }
+
+                    pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> ::rpstate::Result<()> {
+                        f(&mut self.inner);
+                        self.save()
+                    }
+
+                    pub fn save(&self) -> ::rpstate::Result<()> {
+                        self.save_lazy()?;
+                        <::rpstate::DefaultStore as ::rpstate::Store>::flush_prefix(&*self.store, &self.prefix)
+                    }
+                }
+
+                impl #name {
+                    pub fn load(store: &::std::sync::Arc<::rpstate::DefaultStore>) -> ::rpstate::Result<#persisted_struct_name> {
+                        Ok(#persisted_struct_name {
+                            inner: #data_struct_name::__rpstate_load_from(store, #prefix_expr)?,
+                            store: ::std::sync::Arc::clone(store),
+                            prefix: ::std::sync::Arc::from(#prefix_expr),
+                        })
+                    }
+                }
+            }
+        }
+    };
 
     quote! {
         #[derive(::rpstate::serde::Serialize, ::rpstate::serde::Deserialize, Default, Clone, Debug)]
@@ -217,45 +352,7 @@ pub(crate) fn data_impl(
             #(#data_fields,)*
         }
 
-        #[allow(non_camel_case_types)]
-        pub struct #persisted_struct_name {
-            inner: #data_struct_name,
-            store: ::std::sync::Arc<::rpstate::DefaultStore>,
-            prefix: ::std::sync::Arc<str>,
-        }
-
-        impl ::std::fmt::Debug for #persisted_struct_name {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                f.debug_struct(stringify!(#persisted_struct_name))
-                    .field("inner", &self.inner)
-                    .finish()
-            }
-        }
-
-        impl ::std::ops::Deref for #persisted_struct_name {
-            type Target = #data_struct_name;
-
-            fn deref(&self) -> &Self::Target {
-                &self.inner
-            }
-        }
-
-        impl ::std::ops::DerefMut for #persisted_struct_name {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                &mut self.inner
-            }
-        }
-
-        impl #persisted_struct_name {
-            pub fn save(&self) -> ::rpstate::Result<()> {
-                self.inner.__rpstate_save_to(&self.store, &self.prefix)
-            }
-
-            pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> ::rpstate::Result<()> {
-                f(&mut self.inner);
-                self.save()
-            }
-        }
+        #persistent_wrapper_tokens
 
         impl #data_struct_name {
             #[doc(hidden)]
@@ -315,16 +412,6 @@ pub(crate) fn data_impl(
 
         impl ::rpstate::RpState for #name {
             type Data = #data_struct_name;
-        }
-
-        impl #name {
-            pub fn load(store: &::std::sync::Arc<::rpstate::DefaultStore>) -> ::rpstate::Result<#persisted_struct_name> {
-                Ok(#persisted_struct_name {
-                    inner: #data_struct_name::__rpstate_load_from(store, #prefix_expr)?,
-                    store: ::std::sync::Arc::clone(store),
-                    prefix: ::std::sync::Arc::from(#prefix_expr),
-                })
-            }
         }
     }
 }

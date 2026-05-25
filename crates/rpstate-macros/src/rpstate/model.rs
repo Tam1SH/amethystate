@@ -9,6 +9,8 @@ pub(crate) struct MacroArgs {
     pub(crate) prefix: Option<String>,
     #[darling(default)]
     pub(crate) version: Option<u32>,
+    #[darling(default)]
+    pub(crate) mode: Option<String>,
 }
 
 #[derive(Debug)]

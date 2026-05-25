@@ -926,40 +926,6 @@ impl ::core::fmt::Debug for DatabaseConfig_Data {
         )
     }
 }
-#[allow(non_camel_case_types)]
-pub struct DatabaseConfig_Persistent {
-    inner: DatabaseConfig_Data,
-    store: ::std::sync::Arc<::rpstate::DefaultStore>,
-    prefix: ::std::sync::Arc<str>,
-}
-impl ::std::fmt::Debug for DatabaseConfig_Persistent {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        f.debug_struct("DatabaseConfig_Persistent").field("inner", &self.inner).finish()
-    }
-}
-impl ::std::ops::Deref for DatabaseConfig_Persistent {
-    type Target = DatabaseConfig_Data;
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-impl ::std::ops::DerefMut for DatabaseConfig_Persistent {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-impl DatabaseConfig_Persistent {
-    pub fn save(&self) -> ::rpstate::Result<()> {
-        self.inner.__rpstate_save_to(&self.store, &self.prefix)
-    }
-    pub fn mutate(
-        &mut self,
-        f: impl FnOnce(&mut DatabaseConfig_Data),
-    ) -> ::rpstate::Result<()> {
-        f(&mut self.inner);
-        self.save()
-    }
-}
 impl DatabaseConfig_Data {
     #[doc(hidden)]
     pub fn __rpstate_load_from(
@@ -1034,17 +1000,6 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseConfig_Data {
 }
 impl ::rpstate::RpState for DatabaseConfig {
     type Data = DatabaseConfig_Data;
-}
-impl DatabaseConfig {
-    pub fn load(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<DatabaseConfig_Persistent> {
-        Ok(DatabaseConfig_Persistent {
-            inner: DatabaseConfig_Data::__rpstate_load_from(store, "")?,
-            store: ::std::sync::Arc::clone(store),
-            prefix: ::std::sync::Arc::from(""),
-        })
-    }
 }
 pub struct SystemSettings {
     pub db: ::std::sync::Arc<DatabaseConfig>,
@@ -1638,40 +1593,6 @@ impl ::core::fmt::Debug for SystemSettings_Data {
         )
     }
 }
-#[allow(non_camel_case_types)]
-pub struct SystemSettings_Persistent {
-    inner: SystemSettings_Data,
-    store: ::std::sync::Arc<::rpstate::DefaultStore>,
-    prefix: ::std::sync::Arc<str>,
-}
-impl ::std::fmt::Debug for SystemSettings_Persistent {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        f.debug_struct("SystemSettings_Persistent").field("inner", &self.inner).finish()
-    }
-}
-impl ::std::ops::Deref for SystemSettings_Persistent {
-    type Target = SystemSettings_Data;
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-impl ::std::ops::DerefMut for SystemSettings_Persistent {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-impl SystemSettings_Persistent {
-    pub fn save(&self) -> ::rpstate::Result<()> {
-        self.inner.__rpstate_save_to(&self.store, &self.prefix)
-    }
-    pub fn mutate(
-        &mut self,
-        f: impl FnOnce(&mut SystemSettings_Data),
-    ) -> ::rpstate::Result<()> {
-        f(&mut self.inner);
-        self.save()
-    }
-}
 impl SystemSettings_Data {
     #[doc(hidden)]
     pub fn __rpstate_load_from(
@@ -1880,16 +1801,5 @@ impl ::rpstate::migration::fields::RpStateFields for SystemSettings_Data {
 }
 impl ::rpstate::RpState for SystemSettings {
     type Data = SystemSettings_Data;
-}
-impl SystemSettings {
-    pub fn load(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<SystemSettings_Persistent> {
-        Ok(SystemSettings_Persistent {
-            inner: SystemSettings_Data::__rpstate_load_from(store, "sys")?,
-            store: ::std::sync::Arc::clone(store),
-            prefix: ::std::sync::Arc::from("sys"),
-        })
-    }
 }
 fn main() {}

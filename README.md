@@ -31,13 +31,25 @@ reason, though minor releases may still contain breaking changes if real usage e
 
 ## Examples
 
-GUI examples live in [`examples/`](examples/):
+Run the examples from the repository root:
 
-- `egui-settings`: reactive fields read from an immediate-mode UI;
-- `iced-settings`: persistent-only state inside an MVU update loop;
-- `slint-settings`: reactive fields, `ReactiveScope`, and a pipeline updating Slint properties.
+```shell
+cargo run --manifest-path examples/egui-settings/Cargo.toml
+cargo run --manifest-path examples/iced-settings/Cargo.toml
+cargo run --manifest-path examples/slint-settings/Cargo.toml
+cargo run --manifest-path examples/dioxus-settings/Cargo.toml
+```
+
+| Example           | GUI model                         | rpstate usage                                                                            |
+|-------------------|-----------------------------------|------------------------------------------------------------------------------------------|
+| `egui-settings`   | immediate-mode UI                 | reactive fields read during `update`, writes from widgets, derived pipeline              |
+| `iced-settings`   | TEA/MVU                           | persistent-only `State::load`, plain data mutation in `update`                           |
+| `slint-settings`  | property bindings + event loop    | reactive fields, `ReactiveScope`, pipeline subscription updating Slint properties        |
+| `dioxus-settings` | components + fine-grained signals | custom hooks bridging reactive fields and pipelines to Dioxus signals via async channels |
 
 ## Quick start
+
+By default, `rpstate` structures are compiled in **`reactive`** mode. This exposes reactive `Field<T>` handles with automatic change propagation.
 
 ```rust
 use rpstate::{IntoPipeline, ReactiveScope, rpstate};
@@ -86,28 +98,48 @@ fn main() -> rpstate::Result<()> {
 
 ## Persistent-only mode
 
-Some frameworks already own the render/update loop and have no use for reactive subscriptions. For example, iced uses
-The Elm Architecture: mutate plain model data in `update`, then let the framework render from that model.
+Some frameworks already own the render/update loop and have no use for reactive subscriptions. For example, iced uses The Elm Architecture: you mutate plain model data in `update`, then let the framework render from that model.
 
-For those cases, `State::load(&store)` returns a persistent wrapper around the generated plain `_Data` struct. It
-dereferences to the data, so fields are accessed and mutated directly.
+For those cases, you can declare your struct with `mode = "persistent"`. This removes the overhead of reactive `Field` wrappers. Fields are exposed as plain Rust types and are accessed and mutated directly.
 
 ```rust
-let mut data = NetworkState::load(&store)?;
+#[rpstate(prefix = "network", mode = "persistent")]
+pub struct NetworkState {
+    #[state(default = "127.0.0.1".to_string())]
+    pub host: String,
 
-println!("{}", data.port);
-
-data.port = 9090;
-data.save()?;
-
-data.mutate(|d| {
-    d.host = "127.0.0.1".to_string();
-    d.port = 4040;
-})?;
+    #[state(default = 8080)]
+    pub port: u16,
+}
 ```
 
-Persistent-only mode uses the same storage, defaults, migrations, nested structs, and schema drift detection as
-reactive mode. It does not create `Field`, `Signal`, or subscription machinery.
+Usage:
+
+```rust,ignore
+let mut state = NetworkState::load(&store)?;
+
+println!("{}", state.port);
+
+// --- Scenario 1: Direct Field Mutation ---
+state.port = 9090;
+
+state.save_lazy()?; // RAM-buffer write (debounced/background)
+state.save()?;      // Synchronous/immediate flush to disk
+
+// --- Scenario 2: Block Mutation (Immediate Flush) ---
+state.mutate(|d| {
+    d.host = "127.0.0.1".to_string();
+    d.port = 4040;
+})?; // Mutates and immediately flushes changes to disk synchronously
+
+// --- Scenario 3: Block Mutation (Debounced Background Flush) ---
+state.mutate_lazy(|d| {
+    d.host = "192.168.1.1".to_string();
+    d.port = 3000;
+})?; // Mutates and schedules a debounced background write to disk
+```
+
+For edge cases where you want both reactive fields and a flat persistent-only wrapper generated for the exact same struct, you can use `mode = "both"`.
 
 ## Why?
 
@@ -117,15 +149,13 @@ Persistent and ephemeral state start bleeding into each other. Business logic fi
 Reactivity gets added as an afterthought — a file watcher, a channel, a full reload on any change. Versioning, if it
 appears at all, is a fragile enum that guesses at the data's shape rather than tracking it explicitly.
 
-In other ecosystems this is a solved problem. SwiftUI's @AppStorage, Android's DataStore, and Qt's Settings
-provide persistent, reactive state with minimal boilerplate. In Rust, there's no established equivalent for native GUI
-apps.
+In other ecosystems this is a solved problem. SwiftUI's @AppStorage, Android's DataStore, Qt's Settings, and Flutter's Hive provide persistent, reactive state with minimal boilerplate. In Rust, there's no established equivalent for native GUI apps.
 
 `rpstate` is my attempt at something different. Each feature declares its own slice of state independently. References
 between slices are explicit and verified by the compiler—mistype a field name or get the type wrong and it's a compile
 error, not a runtime surprise.
 
-Persistence is built in, not bolted on. `.set()` writes to the in-memory buffer, fires reactive subscriptions, and
+Persistence is built in, not bolted on. Changing state writes to the in-memory buffer, fires reactive subscriptions, and
 schedules a debounced flush to disk—all in one call. There's no separate save layer to think about.
 
 Migrations I built because… I can.
@@ -319,12 +349,12 @@ scope.clear(); // drops all watched subscriptions
 
 Available operators:
 
-| Operator | Behavior |
-|----------|----------|
-| `.map(f)` | Transform every value. |
+| Operator         | Behavior                                                                                                |
+|------------------|---------------------------------------------------------------------------------------------------------|
+| `.map(f)`        | Transform every value.                                                                                  |
 | `.filter_map(f)` | Accept `Some(value)` and suppress `None`; if the initial value is `None`, `Default::default()` is used. |
-| `.inspect(f)` | Observe values without changing them. |
-| `.dedupe()` | Suppress consecutive duplicate values. |
+| `.inspect(f)`    | Observe values without changing them.                                                                   |
+| `.dedupe()`      | Suppress consecutive duplicate values.                                                                  |
 
 Propagation is synchronous. There is no runtime, scheduler, batching, or dependency tracker. If two upstream fields are
 changed one after another, a tuple pipeline fires once for each change.

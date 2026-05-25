@@ -162,6 +162,10 @@ impl Store for JsonStore {
             }
         }
     }
+
+    fn flush_prefix(&self, _prefix: &str) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl JsonStore {

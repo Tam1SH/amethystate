@@ -2,16 +2,22 @@ use proc_macro::TokenStream;
 
 mod rpstate;
 
-/// Generates a reactive state wrapper for a struct.
+/// Generates a persistent state wrapper for a struct.
 ///
-/// This macro creates accessors that return reactive `Field<T>` handles or `Arc<T>`
-/// for nested structures. It handles persistence, signals, and cross-references.
+/// This macro creates structures that manage persistence, reactive subscribers,
+/// and migrations. Depending on the selected `mode`, it generates either reactive
+/// `Field<T>` accessors or a flat persistent-only model.
 ///
-/// # Struct Attributes
+/// # Struct Attributes (`#[rpstate(...)]`)
 ///
-/// * `#[rpstate(prefix = "path")]` - Defines a **Root** struct.
-///   * Acts as a top-level entry point in the store.
-///   * Generates `pub fn new(store: &Arc<DefaultStore>) -> Result<Self>`.
+/// * `#[rpstate(prefix = "path", version = 1, mode = "reactive")]` - Defines a **Root** struct.
+///   * `prefix` (optional String): Sets the top-level namespace path in the store.
+///     Generates `pub fn new(store: &Arc<DefaultStore>) -> Result<Self>`.
+///   * `version` (optional u32): Schema version for migrations (defaults to 0).
+///   * `mode` (optional String): Controls the generated code paradigm. One of:
+///     * `"reactive"` (default): Generates fine-grained reactive `Field<T>` accessors.
+///     * `"persistent"`: Generates a flat struct with plain-type fields and synchronous `.save()` / `.save_lazy()` methods.
+///     * `"both"`: Generates both reactive accessors on `#name` and a separate `#name_Persistent` flat struct.
 /// * `#[rpstate]` - Defines a **Nested** struct.
 ///   * Used as a component within other structures.
 ///   * Generates `pub fn new(store: &Arc<DefaultStore>, namespace: &str) -> Result<Self>`.
@@ -31,22 +37,38 @@ mod rpstate;
 ///
 /// # Examples
 ///
-/// ### Basic Root and Nesting
+/// ### Reactive Mode (Default)
 /// ```rust,ignore
-/// #[rpstate]
-/// pub struct NetworkConfig {
-///     #[state(default = "localhost".to_string())]
-///     pub host: String,
-/// }
-///
 /// #[rpstate(prefix = "settings")]
 /// pub struct AppSettings {
-///     #[state(nested)]
-///     pub net: NetworkConfig,
+///     #[state(default = "localhost".to_string())]
+///     pub host: String,
 ///
 ///     #[state(default = false, volatile)]
 ///     pub debug_mode: bool,
 /// }
+///
+/// // Usage:
+/// // let settings = AppSettings::new(&store)?;
+/// // let _sub = settings.host().subscribe(|val| println!("Host: {val}"));
+/// // settings.host().set("10.0.0.1".to_string())?;
+/// ```
+///
+/// ### Persistent-only Mode
+/// ```rust,ignore
+/// #[rpstate(prefix = "network", mode = "persistent")]
+/// pub struct NetworkConfig {
+///     #[state(default = "localhost".to_string())]
+///     pub host: String,
+///     #[state(default = 8080)]
+///     pub port: u16,
+/// }
+///
+/// // Usage:
+/// // let mut cfg = NetworkConfig::load(&store)?;
+/// // cfg.host = "10.0.0.1".to_string(); // Direct field mutation (plain types)
+/// // cfg.save_lazy()?;                  // RAM-buffer write (debounced/background)
+/// // cfg.save()?;                       // Immediate synchronous flush to disk
 /// ```
 ///
 /// ### Lookups and Permissions

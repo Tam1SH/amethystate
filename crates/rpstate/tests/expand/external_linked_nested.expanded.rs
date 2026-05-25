@@ -386,40 +386,6 @@ impl ::core::fmt::Debug for ConnectionPool_Data {
         )
     }
 }
-#[allow(non_camel_case_types)]
-pub struct ConnectionPool_Persistent {
-    inner: ConnectionPool_Data,
-    store: ::std::sync::Arc<::rpstate::DefaultStore>,
-    prefix: ::std::sync::Arc<str>,
-}
-impl ::std::fmt::Debug for ConnectionPool_Persistent {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        f.debug_struct("ConnectionPool_Persistent").field("inner", &self.inner).finish()
-    }
-}
-impl ::std::ops::Deref for ConnectionPool_Persistent {
-    type Target = ConnectionPool_Data;
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-impl ::std::ops::DerefMut for ConnectionPool_Persistent {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-impl ConnectionPool_Persistent {
-    pub fn save(&self) -> ::rpstate::Result<()> {
-        self.inner.__rpstate_save_to(&self.store, &self.prefix)
-    }
-    pub fn mutate(
-        &mut self,
-        f: impl FnOnce(&mut ConnectionPool_Data),
-    ) -> ::rpstate::Result<()> {
-        f(&mut self.inner);
-        self.save()
-    }
-}
 impl ConnectionPool_Data {
     #[doc(hidden)]
     pub fn __rpstate_load_from(
@@ -510,17 +476,6 @@ impl ::rpstate::migration::fields::RpStateFields for ConnectionPool_Data {
 }
 impl ::rpstate::RpState for ConnectionPool {
     type Data = ConnectionPool_Data;
-}
-impl ConnectionPool {
-    pub fn load(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<ConnectionPool_Persistent> {
-        Ok(ConnectionPool_Persistent {
-            inner: ConnectionPool_Data::__rpstate_load_from(store, "")?,
-            store: ::std::sync::Arc::clone(store),
-            prefix: ::std::sync::Arc::from(""),
-        })
-    }
 }
 pub struct DatabaseState {
     pub pool: ::std::sync::Arc<ConnectionPool>,
@@ -835,40 +790,6 @@ impl ::core::fmt::Debug for DatabaseState_Data {
         )
     }
 }
-#[allow(non_camel_case_types)]
-pub struct DatabaseState_Persistent {
-    inner: DatabaseState_Data,
-    store: ::std::sync::Arc<::rpstate::DefaultStore>,
-    prefix: ::std::sync::Arc<str>,
-}
-impl ::std::fmt::Debug for DatabaseState_Persistent {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        f.debug_struct("DatabaseState_Persistent").field("inner", &self.inner).finish()
-    }
-}
-impl ::std::ops::Deref for DatabaseState_Persistent {
-    type Target = DatabaseState_Data;
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-impl ::std::ops::DerefMut for DatabaseState_Persistent {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-impl DatabaseState_Persistent {
-    pub fn save(&self) -> ::rpstate::Result<()> {
-        self.inner.__rpstate_save_to(&self.store, &self.prefix)
-    }
-    pub fn mutate(
-        &mut self,
-        f: impl FnOnce(&mut DatabaseState_Data),
-    ) -> ::rpstate::Result<()> {
-        f(&mut self.inner);
-        self.save()
-    }
-}
 impl DatabaseState_Data {
     #[doc(hidden)]
     pub fn __rpstate_load_from(
@@ -948,17 +869,6 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseState_Data {
 }
 impl ::rpstate::RpState for DatabaseState {
     type Data = DatabaseState_Data;
-}
-impl DatabaseState {
-    pub fn load(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<DatabaseState_Persistent> {
-        Ok(DatabaseState_Persistent {
-            inner: DatabaseState_Data::__rpstate_load_from(store, "sys.database")?,
-            store: ::std::sync::Arc::clone(store),
-            prefix: ::std::sync::Arc::from("sys.database"),
-        })
-    }
 }
 pub struct InspectorState {
     pub db_pool_view: ::std::sync::Arc<ConnectionPool>,
@@ -1224,40 +1134,6 @@ impl ::core::fmt::Debug for InspectorState_Data {
         ::core::fmt::Formatter::write_str(f, "InspectorState_Data")
     }
 }
-#[allow(non_camel_case_types)]
-pub struct InspectorState_Persistent {
-    inner: InspectorState_Data,
-    store: ::std::sync::Arc<::rpstate::DefaultStore>,
-    prefix: ::std::sync::Arc<str>,
-}
-impl ::std::fmt::Debug for InspectorState_Persistent {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        f.debug_struct("InspectorState_Persistent").field("inner", &self.inner).finish()
-    }
-}
-impl ::std::ops::Deref for InspectorState_Persistent {
-    type Target = InspectorState_Data;
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-impl ::std::ops::DerefMut for InspectorState_Persistent {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-impl InspectorState_Persistent {
-    pub fn save(&self) -> ::rpstate::Result<()> {
-        self.inner.__rpstate_save_to(&self.store, &self.prefix)
-    }
-    pub fn mutate(
-        &mut self,
-        f: impl FnOnce(&mut InspectorState_Data),
-    ) -> ::rpstate::Result<()> {
-        f(&mut self.inner);
-        self.save()
-    }
-}
 impl InspectorState_Data {
     #[doc(hidden)]
     pub fn __rpstate_load_from(
@@ -1315,16 +1191,5 @@ impl ::rpstate::migration::fields::RpStateFields for InspectorState_Data {
 }
 impl ::rpstate::RpState for InspectorState {
     type Data = InspectorState_Data;
-}
-impl InspectorState {
-    pub fn load(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<InspectorState_Persistent> {
-        Ok(InspectorState_Persistent {
-            inner: InspectorState_Data::__rpstate_load_from(store, "ui.inspector")?,
-            store: ::std::sync::Arc::clone(store),
-            prefix: ::std::sync::Arc::from("ui.inspector"),
-        })
-    }
 }
 fn main() {}

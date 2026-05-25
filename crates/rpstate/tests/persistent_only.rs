@@ -3,7 +3,7 @@ use rpstate::{Store, rpstate};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[rpstate(prefix = "network")]
+#[rpstate(prefix = "network", mode = "both")]
 pub struct NetworkState {
     #[state(default = "localhost".to_string())]
     pub host: String,

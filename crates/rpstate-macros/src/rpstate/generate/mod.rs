@@ -9,6 +9,13 @@ use syn::parse::{Parse, ParseStream, Parser};
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Expr, Ident, Token, Visibility};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RpMode {
+    Reactive,
+    Persistent,
+    Both,
+}
+
 pub(crate) fn generate_code(
     vis: &Visibility,
     name: &Ident,
@@ -17,9 +24,30 @@ pub(crate) fn generate_code(
     entries: &[StoreFieldEntry],
     macro_args: MacroArgs,
 ) -> TokenStream2 {
+    let rp_mode = match macro_args.mode.as_deref() {
+        None | Some("reactive") => RpMode::Reactive,
+        Some("persistent") => RpMode::Persistent,
+        Some("both") => RpMode::Both,
+        Some(other) => {
+            let err = format!(
+                "invalid rpstate mode: \"{}\". Expected one of: \"reactive\", \"persistent\", \"both\"",
+                other
+            );
+            return syn::Error::new(proc_macro2::Span::call_site(), err).to_compile_error();
+        }
+    };
+
     let is_root = prefix.is_some();
     let schema_methods = accessors::schema_methods(entries);
-    let fields_impl = data::data_impl(name, prefix.clone(), entries, &macro_args);
+    let fields_impl = data::data_impl(
+        vis,
+        name,
+        attrs,
+        prefix.clone(),
+        entries,
+        &macro_args,
+        rp_mode,
+    );
     let struct_fields = accessors::struct_fields(entries);
     let init_fields = init::init_fields(entries, is_root);
     let node_impl = accessors::node_impl(name, is_root);
@@ -27,12 +55,31 @@ pub(crate) fn generate_code(
     let scope = accessors::scope(name, prefix);
     let constructor = accessors::constructor(is_root, &init_fields);
 
-    quote! {
-        #[derive(Clone)] #(#attrs)* #vis struct #name { #(#struct_fields,)* }
-        #scope
-        impl #name { #constructor #(#schema_methods)* #(#methods)* }
-        #node_impl
-        #fields_impl
+    match rp_mode {
+        RpMode::Reactive => {
+            quote! {
+                #[derive(Clone)] #(#attrs)* #vis struct #name { #(#struct_fields,)* }
+                #scope
+                impl #name { #constructor #(#schema_methods)* #(#methods)* }
+                #node_impl
+                #fields_impl
+            }
+        }
+        RpMode::Persistent => {
+            quote! {
+                #scope
+                #fields_impl
+            }
+        }
+        RpMode::Both => {
+            quote! {
+                #[derive(Clone)] #(#attrs)* #vis struct #name { #(#struct_fields,)* }
+                #scope
+                impl #name { #constructor #(#schema_methods)* #(#methods)* }
+                #node_impl
+                #fields_impl
+            }
+        }
     }
 }
 

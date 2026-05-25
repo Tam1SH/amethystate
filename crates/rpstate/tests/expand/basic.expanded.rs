@@ -322,40 +322,6 @@ impl ::core::fmt::Debug for AppConfig_Data {
         )
     }
 }
-#[allow(non_camel_case_types)]
-pub struct AppConfig_Persistent {
-    inner: AppConfig_Data,
-    store: ::std::sync::Arc<::rpstate::DefaultStore>,
-    prefix: ::std::sync::Arc<str>,
-}
-impl ::std::fmt::Debug for AppConfig_Persistent {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        f.debug_struct("AppConfig_Persistent").field("inner", &self.inner).finish()
-    }
-}
-impl ::std::ops::Deref for AppConfig_Persistent {
-    type Target = AppConfig_Data;
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-impl ::std::ops::DerefMut for AppConfig_Persistent {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-impl AppConfig_Persistent {
-    pub fn save(&self) -> ::rpstate::Result<()> {
-        self.inner.__rpstate_save_to(&self.store, &self.prefix)
-    }
-    pub fn mutate(
-        &mut self,
-        f: impl FnOnce(&mut AppConfig_Data),
-    ) -> ::rpstate::Result<()> {
-        f(&mut self.inner);
-        self.save()
-    }
-}
 impl AppConfig_Data {
     #[doc(hidden)]
     pub fn __rpstate_load_from(
@@ -430,16 +396,5 @@ impl ::rpstate::migration::fields::RpStateFields for AppConfig_Data {
 }
 impl ::rpstate::RpState for AppConfig {
     type Data = AppConfig_Data;
-}
-impl AppConfig {
-    pub fn load(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<AppConfig_Persistent> {
-        Ok(AppConfig_Persistent {
-            inner: AppConfig_Data::__rpstate_load_from(store, "app")?,
-            store: ::std::sync::Arc::clone(store),
-            prefix: ::std::sync::Arc::from("app"),
-        })
-    }
 }
 fn main() {}

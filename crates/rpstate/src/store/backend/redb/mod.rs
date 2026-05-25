@@ -53,6 +53,7 @@ pub struct RedbStore {
     subscriptions: Arc<RwLock<Vec<SubscriptionEntry>>>,
     next_sub_id: AtomicU64,
 
+    write_lock: Arc<Mutex<()>>,
     watcher_tx: std::sync::mpsc::Sender<()>,
     watcher_handle: Option<JoinHandle<()>>,
 }
@@ -95,7 +96,13 @@ impl RedbStore {
 
         let db_save = db.clone();
         let pending_save = pending.clone();
+
+        let write_lock = Arc::new(Mutex::new(()));
+        let write_lock_save = write_lock.clone();
+
         let debouncer = Debouncer::new(config.save_debounce, move || {
+            let _write_guard = write_lock_save.lock().unwrap();
+
             let changes = {
                 let mut lock = pending_save.lock().unwrap();
                 if lock.is_empty() {
@@ -133,6 +140,7 @@ impl RedbStore {
             debouncer,
             subscriptions: subscriptions.clone(),
             next_sub_id: AtomicU64::new(1),
+            write_lock,
             watcher_tx: w_tx,
             watcher_handle: Some(watcher_handle),
         };
@@ -156,12 +164,44 @@ impl RedbStore {
     }
 
     pub fn save_now(&self) -> Result<()> {
+        self.flush_prefix("")
+    }
+
+    pub fn flush_prefix(&self, prefix: &str) -> Result<()> {
+        let _write_guard = self
+            .write_lock
+            .lock()
+            .map_err(|_| RedbStoreError::Poisoned)?;
+
         let changes = {
             let mut lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
             if lock.is_empty() {
                 return Ok(());
             }
-            std::mem::take(&mut *lock)
+
+            let mut matched = HashMap::new();
+
+            if prefix.is_empty() {
+                matched = std::mem::take(&mut *lock);
+            } else {
+                let prefix_dot = format!("{}.", prefix);
+                let keys_to_remove: Vec<Arc<str>> = lock
+                    .keys()
+                    .filter(|k| k.starts_with(&prefix_dot) || &***k == prefix)
+                    .cloned()
+                    .collect();
+
+                for k in keys_to_remove {
+                    if let Some(v) = lock.remove(&k) {
+                        matched.insert(k, v);
+                    }
+                }
+            }
+
+            if matched.is_empty() {
+                return Ok(());
+            }
+            matched
         };
 
         let txn = self.db.begin_write().map_err(RedbStoreError::from)?;
@@ -181,7 +221,6 @@ impl RedbStore {
         txn.commit().map_err(RedbStoreError::from)?;
         Ok(())
     }
-
     fn run_migrations_impl(&self, mset: MigrationSet) -> Result<MigrationReport> {
         let mut report = MigrationReport::default();
         let components = mset.find_components();
@@ -657,6 +696,10 @@ impl Store for RedbStore {
                 Ok(T::default())
             }
         }
+    }
+
+    fn flush_prefix(&self, prefix: &str) -> Result<()> {
+        Self::flush_prefix(self, prefix)
     }
 }
 
@@ -1575,5 +1618,81 @@ mod tests {
         assert!(logs_contain("- field 'host'"));
         assert!(logs_contain("~ field 'port': u16 -> u32"));
         assert!(logs_contain("Suggestion: increment version"));
+    }
+    #[test]
+    fn test_granular_flush_prefix_drains_buffer() {
+        let path = unique_path("granular_flush");
+        let mut config = StoreConfig::new(&path);
+
+        config.save_debounce = Duration::from_secs(3600);
+
+        let (store, _) = RedbStore::open(config, MigrationSet::default()).unwrap();
+
+        store.set("net.host", &"127.0.0.1".to_string()).unwrap();
+        store.set("net.port", &8080u16).unwrap();
+        store.set("ui.theme", &"dark".to_string()).unwrap();
+
+        {
+            let pending = store.pending.lock().unwrap();
+            assert_eq!(pending.len(), 3);
+        }
+        {
+            let read_txn = store.db.begin_read().unwrap();
+            let table = read_txn.open_table(TABLE_DATA).unwrap();
+            assert!(table.get("net.host").unwrap().is_none());
+            assert!(table.get("ui.theme").unwrap().is_none());
+        }
+
+        store.flush_prefix("net").unwrap();
+
+        {
+            let read_txn = store.db.begin_read().unwrap();
+            let table = read_txn.open_table(TABLE_DATA).unwrap();
+            assert_eq!(
+                store
+                    .decode::<String>(table.get("net.host").unwrap().unwrap().value())
+                    .unwrap(),
+                "127.0.0.1"
+            );
+            assert_eq!(
+                store
+                    .decode::<u16>(table.get("net.port").unwrap().unwrap().value())
+                    .unwrap(),
+                8080
+            );
+            assert!(
+                table.get("ui.theme").unwrap().is_none(),
+                "UI should remain in the RAM buffer"
+            );
+        }
+
+        {
+            let pending = store.pending.lock().unwrap();
+            assert_eq!(
+                pending.len(),
+                1,
+                "Only ui.theme should remain in the buffer"
+            );
+            assert!(pending.contains_key("ui.theme"));
+            assert!(!pending.contains_key("net.host"));
+            assert!(!pending.contains_key("net.port"));
+        }
+
+        store.flush_prefix("").unwrap();
+        {
+            let pending = store.pending.lock().unwrap();
+            assert!(
+                pending.is_empty(),
+                "Pending buffer should be completely empty"
+            );
+        }
+        {
+            let read_txn = store.db.begin_read().unwrap();
+            let table = read_txn.open_table(TABLE_DATA).unwrap();
+            assert!(
+                table.get("ui.theme").unwrap().is_some(),
+                "UI should now be persisted on disk"
+            );
+        }
     }
 }

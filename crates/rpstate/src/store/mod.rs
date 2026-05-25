@@ -59,6 +59,7 @@ pub trait Store: Send + Sync + 'static {
     fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId;
     fn unsubscribe(&self, id: SubscriptionId);
     fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T>;
+    fn flush_prefix(&self, prefix: &str) -> Result<()>;
 }
 
 pub trait SchemaAwareStore: Store {
