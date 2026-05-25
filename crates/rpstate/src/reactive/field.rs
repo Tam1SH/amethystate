@@ -18,11 +18,6 @@ impl<S: Store> Drop for StoreSubscription<S> {
     }
 }
 
-pub struct FieldSubscription {
-    #[allow(unused)]
-    pub signal_sub: SignalSubscription,
-}
-
 pub struct Field<TValue, S: Store, M: AccessMode = ReadOnlyMode> {
     pub signal: Arc<Signal<TValue>>,
     pub path: Arc<str>,
@@ -77,14 +72,13 @@ where
         self.signal.clone()
     }
 
-    pub fn subscribe<F>(&self, callback: F) -> FieldSubscription
+    pub fn subscribe<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(TValue) + Send + Sync + 'static,
     {
-        let signal_sub = self.signal.subscribe(move |val: &TValue| {
+        self.signal.subscribe(move |val: &TValue| {
             callback(val.clone());
-        });
-        FieldSubscription { signal_sub }
+        })
     }
 }
 
@@ -152,6 +146,14 @@ where
         }
     }
 }
+
+impl<TValue, S: Store, M: AccessMode> PartialEq for Field<TValue, S, M> {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path && Arc::ptr_eq(&self.signal, &other.signal)
+    }
+}
+
+impl<TValue, S: Store, M: AccessMode> Eq for Field<TValue, S, M> {}
 
 #[cfg(test)]
 mod tests {

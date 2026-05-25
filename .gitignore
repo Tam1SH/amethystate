@@ -1,3 +1,11 @@
 /target
+examples/*/target
+examples/*/Cargo.lock
+examples/*/.idea
+examples/*/egui-settings.redb
+examples/*/iced-settings.redb
+examples/*/slint-settings.redb
+examples/*/dioxus-settings.redb
+
 /profile.json.gz
 /crates/rpstate/*.profraw

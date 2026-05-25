@@ -1,0 +1,13 @@
+[package]
+name = "rpstate-egui-settings-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1.0"
+eframe = "0.34.2"
+rpstate = { path = "../../crates/rpstate" }
+serde = { version = "1.0", features = ["derive"] }

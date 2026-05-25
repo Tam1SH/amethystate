@@ -9,10 +9,11 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/Tam1SH/rpstate"
 homepage = "https://github.com/Tam1SH/rpstate"
-description = "Type-safe reactive persistence for Rust GUI apps..."
+description = "Type-safe reactive persistence for Rust GUI apps"
 keywords = ["state", "state-managment", "reactive", "persistence", "gui"]
 categories = ["config", "data-structures", "gui"]
 readme = "README.md"
+rust-version = "1.89.0"
 
 [workspace.dependencies]
 # internal

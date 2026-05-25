@@ -4,6 +4,7 @@ pub mod field;
 pub mod intercept;
 pub mod map;
 pub mod node;
+pub mod pipeline;
 pub mod signal;
 
 pub use access::*;
@@ -12,4 +13,5 @@ pub use field::*;
 pub use intercept::*;
 pub use map::*;
 pub use node::*;
+pub use pipeline::*;
 pub use signal::*;

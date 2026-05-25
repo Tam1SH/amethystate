@@ -12,6 +12,7 @@ pub struct Signal<T> {
     pub(crate) next_id: Arc<AtomicU64>,
 }
 
+#[derive(Clone)]
 pub struct SignalSubscription {
     pub(crate) id: u64,
     pub(crate) cleanup: Arc<dyn Fn(u64) + Send + Sync + 'static>,

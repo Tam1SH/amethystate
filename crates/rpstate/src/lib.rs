@@ -12,9 +12,9 @@ use std::sync::Arc;
 pub use error::Result;
 pub use inventory;
 pub use reactive::{
-    AccessMode, Change, Field, InterceptDisposer, MapChange, MapSubscription, ReactiveMap,
-    ReadOnly, ReadOnlyMode, RpState, RpStateNode, Signal, SignalSubscription, StoreSubscription,
-    Writable, WritableMode,
+    AccessMode, Change, Field, InterceptDisposer, IntoPipeline, MapChange, MapSubscription,
+    Pipeline, Reactive, ReactiveMap, ReactiveScope, ReadOnly, ReadOnlyMode, RpState, RpStateNode,
+    Signal, SignalSubscription, StoreSubscription, Writable, WritableMode,
 };
 pub use serde;
 pub use serde_json;

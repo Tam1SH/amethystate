@@ -7,68 +7,41 @@
 [![CI](https://github.com/Tam1SH/rpstate/actions/workflows/ci.yml/badge.svg)](https://github.com/Tam1SH/rpstate/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-*Type-safe reactive persistence with automated migrations and schema drift detection. Designed for GUI applications,
-with a focus on vertical-slice/feature-based architectures and compile-time verified relations.*
+*Type-safe reactive persistence with automated migrations, schema drift detection, persistent-only data access, and
+derived reactive pipelines. Designed for GUI applications, with a focus on vertical-slice/feature-based architectures
+and compile-time verified relations.*
 
 </div>
 
-## Why?
+## Features
 
-GUI apps in Rust almost always end up in the same place. It usually starts reasonably — a config struct, serde on top,
-load on startup, save on exit. Then the project grows.
-Persistent and ephemeral state start bleeding into each other. Business logic finds its way into serialization.
-Reactivity gets added as an afterthought — a file watcher, a channel, a full reload on any change. Versioning, if it
-appears at all, is a fragile enum that guesses at the data's shape rather than tracking it explicitly.
+`rpstate` is built around feature-local state slices:
 
-In other ecosystems this is a solved problem. SwiftUI's @AppStorage, Android's DataStore, and Qt's Settings
-provide persistent, reactive state with minimal boilerplate. In Rust, there's no established equivalent for native GUI
-apps.
+- persistent reactive fields with `.get()`, `.set()`, and `.subscribe()`;
+- persistent-only loading with plain mutable data for frameworks that own their state model;
+- derived reactive pipelines for small synchronous transformations;
+- feature-local state that can be composed, shared, versioned, and checked for schema drift.
 
-`rpstate` is my attempt at something different. Each feature declares its own slice of state independently. References
-between slices are explicit and verified by the compiler—mistype a field name or get the type wrong and it's a compile
-error, not a runtime surprise.
+Use `State::new(&store)` for reactive fields and `State::load(&store)` when you only want persistence and migrations.
 
-Persistence is built in, not bolted on. `.set()` writes to the in-memory buffer, fires reactive subscriptions, and
-schedules a debounced flush to disk—all in one call. There's no separate save layer to think about.
+## Status
 
-Migrations I built because… I can.
+`rpstate` is pre-1.0, but the current API is meant to be usable as-is. I do not plan to break it without a strong
+reason, though minor releases may still contain breaking changes if real usage exposes a design issue.
 
-## Alternatives
+## Examples
 
-|                                                | Persistence | Reactivity | Migrations | Typed fields |
-|------------------------------------------------|:-----------:|:----------:|:----------:|:------------:|
-| `Arc<Mutex<AppState>>`                         |      ❌      |     ❌      |     ❌      |      ✅       |
-| `rustato`                                      |      ❌      |     ✅      |     ❌      |      ✅       |
-| `reactive-state`                               |      ❌      |     ✅      |     ❌      |      ✅       |
-| `Config managers (confy, figment, twelf, etc)` |      ✅      |     ❌      |     ❌      |      ✅       |
-| `bevy_pkv`*                                    |      ✅      |  partial   |     ❌      |      ✅       |
-| `KV stores (redb, sled, etc)`                  |      ✅      |  partial   |     ❌      |      ❌       |
-| `tauri-plugin-store`                           |      ✅      |  partial   |     ❌      |      ❌       |
-| `Traditional DBs (SQLite, etc)`                |      ✅      |   manual   |     ✅      |      ✅       |
-| **rpstate**                                    |      ✅      |     ✅      |     ✅      |      ✅       |
+GUI examples live in [`examples/`](examples/):
 
-* The Bevy dependency is optional, but there is no documentation or examples for non-Bevy usage.
-
-Why not a traditional database (SQLite + ORM)? It comes down to **Collection-oriented vs. State-oriented** design.
-
-Databases are built to store and query collections of records (users, messages, logs). `rpstate` is built for
-application state—singleton feature slices with field-level reactive signals out of the box.
-
-If you need to manage lists of entities, use a database. If you need reactive, persistent GUI state without the
-boilerplate, use `rpstate`.
-
-## A note on naming
-
-rpstate stands for Reactive Persistent State. When I was checking for name availability, putting the R first was a very
-conscious and deliberate choice. One search for the alternative anagram was enough to convince me that "managing your
-internal state" should remain a strictly technical endeavor. 🥴
+- `egui-settings`: reactive fields read from an immediate-mode UI;
+- `iced-settings`: persistent-only state inside an MVU update loop;
+- `slint-settings`: reactive fields, `ReactiveScope`, and a pipeline updating Slint properties.
 
 ## Quick start
 
 ```rust
-use rpstate::{rpstate, DefaultStore};
+use rpstate::{IntoPipeline, ReactiveScope, rpstate};
 use rpstate::store::builder::StoreBuilder;
-use std::sync::Arc;
 
 #[rpstate(prefix = "network")]
 pub struct NetworkState {
@@ -97,9 +70,91 @@ fn main() -> rpstate::Result<()> {
 
     state.port().set(3000)?; // triggers callback
 
+    // Derive values with a synchronous reactive pipeline
+    let address = (state.host(), state.port()).pipe()
+        .map(|(host, port)| format!("{host}:{port}"))
+        .dedupe();
+
+    let mut scope = ReactiveScope::new();
+    scope.watch(address.subscribe(|addr| {
+        println!("address is now {addr}");
+    }));
+
     Ok(())
 }
 ```
+
+## Persistent-only mode
+
+Some frameworks already own the render/update loop and have no use for reactive subscriptions. For example, iced uses
+The Elm Architecture: mutate plain model data in `update`, then let the framework render from that model.
+
+For those cases, `State::load(&store)` returns a persistent wrapper around the generated plain `_Data` struct. It
+dereferences to the data, so fields are accessed and mutated directly.
+
+```rust
+let mut data = NetworkState::load(&store)?;
+
+println!("{}", data.port);
+
+data.port = 9090;
+data.save()?;
+
+data.mutate(|d| {
+    d.host = "127.0.0.1".to_string();
+    d.port = 4040;
+})?;
+```
+
+Persistent-only mode uses the same storage, defaults, migrations, nested structs, and schema drift detection as
+reactive mode. It does not create `Field`, `Signal`, or subscription machinery.
+
+## Why?
+
+GUI apps in Rust almost always end up in the same place. It usually starts reasonably — a config struct, serde on top,
+load on startup, save on exit. Then the project grows.
+Persistent and ephemeral state start bleeding into each other. Business logic finds its way into serialization.
+Reactivity gets added as an afterthought — a file watcher, a channel, a full reload on any change. Versioning, if it
+appears at all, is a fragile enum that guesses at the data's shape rather than tracking it explicitly.
+
+In other ecosystems this is a solved problem. SwiftUI's @AppStorage, Android's DataStore, and Qt's Settings
+provide persistent, reactive state with minimal boilerplate. In Rust, there's no established equivalent for native GUI
+apps.
+
+`rpstate` is my attempt at something different. Each feature declares its own slice of state independently. References
+between slices are explicit and verified by the compiler—mistype a field name or get the type wrong and it's a compile
+error, not a runtime surprise.
+
+Persistence is built in, not bolted on. `.set()` writes to the in-memory buffer, fires reactive subscriptions, and
+schedules a debounced flush to disk—all in one call. There's no separate save layer to think about.
+
+Migrations I built because… I can.
+
+## Alternatives
+
+`rpstate` is for singleton application state: settings, feature flags, UI preferences, window/session state, and other
+feature-local values that need to survive restarts.
+
+It is not trying to replace a database. If your data is naturally a collection of records—users, messages, logs,
+documents, transactions—use SQLite, redb directly, sled, or another database-shaped tool.
+
+| If you need... | Use... |
+|----------------|--------|
+| A plain in-memory app model | `Arc<Mutex<AppState>>`, channels, or the state model provided by your GUI framework |
+| Human-editable config with no reactivity | `confy`, `figment`, `twelf`, or a serde config file |
+| Reactive values without persistence | Framework-local signals, or crates such as `rustato` / `reactive-state` if their maintenance status fits your risk tolerance |
+| Collections, queries, indexes, or relational data | SQLite, redb/sled directly, or an ORM |
+| Tauri frontend storage only | `tauri-plugin-store` |
+| Persistent GUI state with field-level reactivity, migrations, and typed feature slices | `rpstate` |
+
+The line is **state-oriented vs. collection-oriented**. `rpstate` works best when each feature owns a small slice of
+application state and wants persistence, migration, and reactive updates without building that plumbing by hand.
+
+## A note on naming
+
+rpstate stands for Reactive Persistent State. When I was checking for name availability, putting the R first was a very
+conscious and deliberate choice. One search for the alternative anagram was enough to convince me that "managing your
+internal state" should remain a strictly technical endeavor. 🥴
 
 ## Backends
 
@@ -204,6 +259,75 @@ pub struct SystemSettings {
 }
 ```
 
+## Reactive pipelines
+
+Pipelines are synchronous derived reactive values. They are useful when one or more fields should produce a formatted
+value, validation result, log event, or side effect without nesting subscriptions by hand.
+
+```rust
+use rpstate::IntoPipeline;
+
+let display_port = state.port().pipe()
+    .map(|p| format!(":{p}"))
+    .dedupe();
+
+let _sub = display_port.subscribe(|port| {
+    println!("display port changed: {port}");
+});
+```
+
+Pipelines are readable. A GUI can call `.get()` during its own render cycle without subscribing:
+
+```rust
+let display_port = state.port().pipe()
+    .map(|p| format!(":{p}"));
+
+assert_eq!(display_port.get(), ":8080");
+```
+
+Tuple pipelines derive a value from the latest values of all inputs. When any input changes, the pipeline reads every
+input and recomputes from that full tuple.
+
+```rust
+let address = (state.host(), state.port()).pipe()
+    .map(|(host, port)| format!("{host}:{port}"));
+```
+
+Pipelines compose because `Pipeline<T>` is itself reactive:
+
+```rust
+let display_port = state.port().pipe()
+    .map(|p| format!(":{p}"));
+
+let address = (state.host(), display_port).pipe()
+    .map(|(host, port)| format!("{host}{port}"));
+```
+
+Subscriptions are RAII handles. Store them directly or put them in a `ReactiveScope`:
+
+```rust
+use rpstate::ReactiveScope;
+
+let mut scope = ReactiveScope::new();
+
+scope.watch(address.subscribe(|addr| {
+    println!("address changed: {addr}");
+}));
+
+scope.clear(); // drops all watched subscriptions
+```
+
+Available operators:
+
+| Operator | Behavior |
+|----------|----------|
+| `.map(f)` | Transform every value. |
+| `.filter_map(f)` | Accept `Some(value)` and suppress `None`; if the initial value is `None`, `Default::default()` is used. |
+| `.inspect(f)` | Observe values without changing them. |
+| `.dedupe()` | Suppress consecutive duplicate values. |
+
+Propagation is synchronous. There is no runtime, scheduler, batching, or dependency tracker. If two upstream fields are
+changed one after another, a tuple pipeline fires once for each change.
 
 ## Reactive Maps
 
