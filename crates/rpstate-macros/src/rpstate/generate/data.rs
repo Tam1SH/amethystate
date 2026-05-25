@@ -28,6 +28,7 @@ pub(crate) fn data_impl(
     });
 
     let data_struct_name = format_ident!("{}_Data", name);
+    let persisted_struct_name = format_ident!("{}_Persistent", name);
 
     let data_fields = p_fields.iter().map(|e| {
         let fname = e.ident.as_ref().unwrap();
@@ -126,6 +127,85 @@ pub(crate) fn data_impl(
         }
     });
 
+    let store_load_fields = p_fields.iter().map(|e| {
+        let fname = e.ident.as_ref().unwrap();
+        let key = e.key.clone().unwrap_or_else(|| fname.to_string());
+        let ty = &e.ty;
+
+        if e.nested {
+            quote! {
+                #fname: <#ty as ::rpstate::RpState>::Data::__rpstate_load_from(
+                    store,
+                    &Self::__rpstate_path(prefix, #key),
+                )?
+            }
+        } else if let Some((k, v)) = e.get_map_types() {
+            quote! {
+                #fname: {
+                    let path = Self::__rpstate_path(prefix, #key);
+                    let raw = <::rpstate::DefaultStore as ::rpstate::Store>::scan_prefix(
+                        &**store,
+                        &format!("{}.", path),
+                    )?;
+                    let mut map = ::std::collections::HashMap::<#k, #v>::new();
+                    for (stored_path, bytes) in raw {
+                        if let Some(k_str) = stored_path.strip_prefix(&format!("{}.", path))
+                            && let Ok(kv) = <#k as ::std::str::FromStr>::from_str(k_str)
+                        {
+                            let vv = <::rpstate::DefaultStore as ::rpstate::Store>::decode::<#v>(
+                                &**store,
+                                &bytes,
+                            )?;
+                            map.insert(kv, vv);
+                        }
+                    }
+                    map
+                }
+            }
+        } else {
+            let fallback = e
+                .default
+                .as_ref()
+                .map(parse_default)
+                .unwrap_or_else(|| quote! { <#ty as ::std::default::Default>::default() });
+            quote! {
+                #fname: <::rpstate::DefaultStore as ::rpstate::Store>::get::<#ty>(
+                    &**store,
+                    &Self::__rpstate_path(prefix, #key),
+                )?.unwrap_or_else(|| #fallback)
+            }
+        }
+    });
+
+    let store_save_fields = p_fields.iter().map(|e| {
+        let fname = e.ident.as_ref().unwrap();
+        let key = e.key.clone().unwrap_or_else(|| fname.to_string());
+
+        if e.nested {
+            quote! {
+                self.#fname.__rpstate_save_to(store, &Self::__rpstate_path(prefix, #key))?;
+            }
+        } else if e.get_map_types().is_some() {
+            quote! {
+                {
+                    let path = Self::__rpstate_path(prefix, #key);
+                    for (k, v) in &self.#fname {
+                        let full_path = format!("{}.{}", path, k);
+                        <::rpstate::DefaultStore as ::rpstate::Store>::set(&**store, &full_path, v)?;
+                    }
+                }
+            }
+        } else {
+            quote! {
+                <::rpstate::DefaultStore as ::rpstate::Store>::set(
+                    &**store,
+                    &Self::__rpstate_path(prefix, #key),
+                    &self.#fname,
+                )?;
+            }
+        }
+    });
+
     let deps = migration_deps(entries);
     let prefix_expr = prefix.unwrap_or_default();
 
@@ -135,6 +215,76 @@ pub(crate) fn data_impl(
         #[allow(non_camel_case_types)]
         pub struct #data_struct_name {
             #(#data_fields,)*
+        }
+
+        #[allow(non_camel_case_types)]
+        pub struct #persisted_struct_name {
+            inner: #data_struct_name,
+            store: ::std::sync::Arc<::rpstate::DefaultStore>,
+            prefix: ::std::sync::Arc<str>,
+        }
+
+        impl ::std::fmt::Debug for #persisted_struct_name {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                f.debug_struct(stringify!(#persisted_struct_name))
+                    .field("inner", &self.inner)
+                    .finish()
+            }
+        }
+
+        impl ::std::ops::Deref for #persisted_struct_name {
+            type Target = #data_struct_name;
+
+            fn deref(&self) -> &Self::Target {
+                &self.inner
+            }
+        }
+
+        impl ::std::ops::DerefMut for #persisted_struct_name {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.inner
+            }
+        }
+
+        impl #persisted_struct_name {
+            pub fn save(&self) -> ::rpstate::Result<()> {
+                self.inner.__rpstate_save_to(&self.store, &self.prefix)
+            }
+
+            pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> ::rpstate::Result<()> {
+                f(&mut self.inner);
+                self.save()
+            }
+        }
+
+        impl #data_struct_name {
+            #[doc(hidden)]
+            pub fn __rpstate_load_from(
+                store: &::std::sync::Arc<::rpstate::DefaultStore>,
+                prefix: &str,
+            ) -> ::rpstate::Result<Self> {
+                Ok(Self {
+                    #(#store_load_fields,)*
+                })
+            }
+
+            #[doc(hidden)]
+            pub fn __rpstate_save_to(
+                &self,
+                store: &::std::sync::Arc<::rpstate::DefaultStore>,
+                prefix: &str,
+            ) -> ::rpstate::Result<()> {
+                #(#store_save_fields)*
+                Ok(())
+            }
+
+            fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
+                if prefix.is_empty() {
+                    key.to_string()
+                } else {
+                    format!("{}.{}", prefix.trim_end_matches('.'), key.trim_start_matches('.'))
+                }
+            }
         }
 
         impl ::rpstate::migration::types::RpType for #data_struct_name {
@@ -152,7 +302,9 @@ pub(crate) fn data_impl(
             const MIGRATION_DEPS: &'static [&'static str] = &[ #(#deps),* ];
 
             fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
-                Ok(Self { #(#load_fields,)* })
+                Ok(Self {
+                    #(#load_fields,)*
+                })
             }
 
             fn save_struct(&self, ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<()> {
@@ -163,6 +315,16 @@ pub(crate) fn data_impl(
 
         impl ::rpstate::RpState for #name {
             type Data = #data_struct_name;
+        }
+
+        impl #name {
+            pub fn load(store: &::std::sync::Arc<::rpstate::DefaultStore>) -> ::rpstate::Result<#persisted_struct_name> {
+                Ok(#persisted_struct_name {
+                    inner: #data_struct_name::__rpstate_load_from(store, #prefix_expr)?,
+                    store: ::std::sync::Arc::clone(store),
+                    prefix: ::std::sync::Arc::from(#prefix_expr),
+                })
+            }
         }
     }
 }

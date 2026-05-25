@@ -359,6 +359,90 @@ impl ::core::fmt::Debug for NetworkState_Data {
         )
     }
 }
+#[allow(non_camel_case_types)]
+pub struct NetworkState_Persistent {
+    inner: NetworkState_Data,
+    store: ::std::sync::Arc<::rpstate::DefaultStore>,
+    prefix: ::std::sync::Arc<str>,
+}
+impl ::std::fmt::Debug for NetworkState_Persistent {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        f.debug_struct("NetworkState_Persistent").field("inner", &self.inner).finish()
+    }
+}
+impl ::std::ops::Deref for NetworkState_Persistent {
+    type Target = NetworkState_Data;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl ::std::ops::DerefMut for NetworkState_Persistent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+impl NetworkState_Persistent {
+    pub fn save(&self) -> ::rpstate::Result<()> {
+        self.inner.__rpstate_save_to(&self.store, &self.prefix)
+    }
+    pub fn mutate(
+        &mut self,
+        f: impl FnOnce(&mut NetworkState_Data),
+    ) -> ::rpstate::Result<()> {
+        f(&mut self.inner);
+        self.save()
+    }
+}
+impl NetworkState_Data {
+    #[doc(hidden)]
+    pub fn __rpstate_load_from(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        prefix: &str,
+    ) -> ::rpstate::Result<Self> {
+        Ok(Self {
+            host: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
+                String,
+            >(&**store, &Self::__rpstate_path(prefix, "host"))?
+                .unwrap_or_else(|| "127.0.0.1".to_string()),
+            port: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
+                u16,
+            >(&**store, &Self::__rpstate_path(prefix, "port"))?
+                .unwrap_or_else(|| 8080),
+        })
+    }
+    #[doc(hidden)]
+    pub fn __rpstate_save_to(
+        &self,
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        prefix: &str,
+    ) -> ::rpstate::Result<()> {
+        <::rpstate::DefaultStore as ::rpstate::Store>::set(
+            &**store,
+            &Self::__rpstate_path(prefix, "host"),
+            &self.host,
+        )?;
+        <::rpstate::DefaultStore as ::rpstate::Store>::set(
+            &**store,
+            &Self::__rpstate_path(prefix, "port"),
+            &self.port,
+        )?;
+        Ok(())
+    }
+    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
+        if prefix.is_empty() {
+            key.to_string()
+        } else {
+            ::alloc::__export::must_use({
+                ::alloc::fmt::format(
+                    format_args!(
+                        "{0}.{1}", prefix.trim_end_matches('.'), key
+                        .trim_start_matches('.'),
+                    ),
+                )
+            })
+        }
+    }
+}
 impl ::rpstate::migration::types::RpType for NetworkState_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "NetworkState_Data".as_bytes(),
@@ -399,6 +483,17 @@ impl ::rpstate::migration::fields::RpStateFields for NetworkState_Data {
 }
 impl ::rpstate::RpState for NetworkState {
     type Data = NetworkState_Data;
+}
+impl NetworkState {
+    pub fn load(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<NetworkState_Persistent> {
+        Ok(NetworkState_Persistent {
+            inner: NetworkState_Data::__rpstate_load_from(store, "net")?,
+            store: ::std::sync::Arc::clone(store),
+            prefix: ::std::sync::Arc::from("net"),
+        })
+    }
 }
 pub struct UiState {
     pub proxy_port: ::rpstate::Field<
@@ -727,6 +822,71 @@ impl ::core::fmt::Debug for UiState_Data {
         ::core::fmt::Formatter::write_str(f, "UiState_Data")
     }
 }
+#[allow(non_camel_case_types)]
+pub struct UiState_Persistent {
+    inner: UiState_Data,
+    store: ::std::sync::Arc<::rpstate::DefaultStore>,
+    prefix: ::std::sync::Arc<str>,
+}
+impl ::std::fmt::Debug for UiState_Persistent {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        f.debug_struct("UiState_Persistent").field("inner", &self.inner).finish()
+    }
+}
+impl ::std::ops::Deref for UiState_Persistent {
+    type Target = UiState_Data;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl ::std::ops::DerefMut for UiState_Persistent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+impl UiState_Persistent {
+    pub fn save(&self) -> ::rpstate::Result<()> {
+        self.inner.__rpstate_save_to(&self.store, &self.prefix)
+    }
+    pub fn mutate(
+        &mut self,
+        f: impl FnOnce(&mut UiState_Data),
+    ) -> ::rpstate::Result<()> {
+        f(&mut self.inner);
+        self.save()
+    }
+}
+impl UiState_Data {
+    #[doc(hidden)]
+    pub fn __rpstate_load_from(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        prefix: &str,
+    ) -> ::rpstate::Result<Self> {
+        Ok(Self {})
+    }
+    #[doc(hidden)]
+    pub fn __rpstate_save_to(
+        &self,
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        prefix: &str,
+    ) -> ::rpstate::Result<()> {
+        Ok(())
+    }
+    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
+        if prefix.is_empty() {
+            key.to_string()
+        } else {
+            ::alloc::__export::must_use({
+                ::alloc::fmt::format(
+                    format_args!(
+                        "{0}.{1}", prefix.trim_end_matches('.'), key
+                        .trim_start_matches('.'),
+                    ),
+                )
+            })
+        }
+    }
+}
 impl ::rpstate::migration::types::RpType for UiState_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a("UiState_Data".as_bytes());
     const TYPE_NAME: &'static str = "UiState_Data";
@@ -752,5 +912,16 @@ impl ::rpstate::migration::fields::RpStateFields for UiState_Data {
 }
 impl ::rpstate::RpState for UiState {
     type Data = UiState_Data;
+}
+impl UiState {
+    pub fn load(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<UiState_Persistent> {
+        Ok(UiState_Persistent {
+            inner: UiState_Data::__rpstate_load_from(store, "ui")?,
+            store: ::std::sync::Arc::clone(store),
+            prefix: ::std::sync::Arc::from("ui"),
+        })
+    }
 }
 fn main() {}

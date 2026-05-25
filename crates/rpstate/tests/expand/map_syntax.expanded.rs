@@ -926,6 +926,81 @@ impl ::core::fmt::Debug for DatabaseConfig_Data {
         )
     }
 }
+#[allow(non_camel_case_types)]
+pub struct DatabaseConfig_Persistent {
+    inner: DatabaseConfig_Data,
+    store: ::std::sync::Arc<::rpstate::DefaultStore>,
+    prefix: ::std::sync::Arc<str>,
+}
+impl ::std::fmt::Debug for DatabaseConfig_Persistent {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        f.debug_struct("DatabaseConfig_Persistent").field("inner", &self.inner).finish()
+    }
+}
+impl ::std::ops::Deref for DatabaseConfig_Persistent {
+    type Target = DatabaseConfig_Data;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl ::std::ops::DerefMut for DatabaseConfig_Persistent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+impl DatabaseConfig_Persistent {
+    pub fn save(&self) -> ::rpstate::Result<()> {
+        self.inner.__rpstate_save_to(&self.store, &self.prefix)
+    }
+    pub fn mutate(
+        &mut self,
+        f: impl FnOnce(&mut DatabaseConfig_Data),
+    ) -> ::rpstate::Result<()> {
+        f(&mut self.inner);
+        self.save()
+    }
+}
+impl DatabaseConfig_Data {
+    #[doc(hidden)]
+    pub fn __rpstate_load_from(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        prefix: &str,
+    ) -> ::rpstate::Result<Self> {
+        Ok(Self {
+            host: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
+                String,
+            >(&**store, &Self::__rpstate_path(prefix, "host"))?
+                .unwrap_or_else(|| "localhost".to_string()),
+        })
+    }
+    #[doc(hidden)]
+    pub fn __rpstate_save_to(
+        &self,
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        prefix: &str,
+    ) -> ::rpstate::Result<()> {
+        <::rpstate::DefaultStore as ::rpstate::Store>::set(
+            &**store,
+            &Self::__rpstate_path(prefix, "host"),
+            &self.host,
+        )?;
+        Ok(())
+    }
+    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
+        if prefix.is_empty() {
+            key.to_string()
+        } else {
+            ::alloc::__export::must_use({
+                ::alloc::fmt::format(
+                    format_args!(
+                        "{0}.{1}", prefix.trim_end_matches('.'), key
+                        .trim_start_matches('.'),
+                    ),
+                )
+            })
+        }
+    }
+}
 impl ::rpstate::migration::types::RpType for DatabaseConfig_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "DatabaseConfig_Data".as_bytes(),
@@ -959,6 +1034,17 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseConfig_Data {
 }
 impl ::rpstate::RpState for DatabaseConfig {
     type Data = DatabaseConfig_Data;
+}
+impl DatabaseConfig {
+    pub fn load(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<DatabaseConfig_Persistent> {
+        Ok(DatabaseConfig_Persistent {
+            inner: DatabaseConfig_Data::__rpstate_load_from(store, "")?,
+            store: ::std::sync::Arc::clone(store),
+            prefix: ::std::sync::Arc::from(""),
+        })
+    }
 }
 pub struct SystemSettings {
     pub db: ::std::sync::Arc<DatabaseConfig>,
@@ -1552,6 +1638,154 @@ impl ::core::fmt::Debug for SystemSettings_Data {
         )
     }
 }
+#[allow(non_camel_case_types)]
+pub struct SystemSettings_Persistent {
+    inner: SystemSettings_Data,
+    store: ::std::sync::Arc<::rpstate::DefaultStore>,
+    prefix: ::std::sync::Arc<str>,
+}
+impl ::std::fmt::Debug for SystemSettings_Persistent {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        f.debug_struct("SystemSettings_Persistent").field("inner", &self.inner).finish()
+    }
+}
+impl ::std::ops::Deref for SystemSettings_Persistent {
+    type Target = SystemSettings_Data;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl ::std::ops::DerefMut for SystemSettings_Persistent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+impl SystemSettings_Persistent {
+    pub fn save(&self) -> ::rpstate::Result<()> {
+        self.inner.__rpstate_save_to(&self.store, &self.prefix)
+    }
+    pub fn mutate(
+        &mut self,
+        f: impl FnOnce(&mut SystemSettings_Data),
+    ) -> ::rpstate::Result<()> {
+        f(&mut self.inner);
+        self.save()
+    }
+}
+impl SystemSettings_Data {
+    #[doc(hidden)]
+    pub fn __rpstate_load_from(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        prefix: &str,
+    ) -> ::rpstate::Result<Self> {
+        Ok(Self {
+            db: <DatabaseConfig as ::rpstate::RpState>::Data::__rpstate_load_from(
+                store,
+                &Self::__rpstate_path(prefix, "db"),
+            )?,
+            limits: {
+                let path = Self::__rpstate_path(prefix, "limits");
+                let raw = <::rpstate::DefaultStore as ::rpstate::Store>::scan_prefix(
+                    &**store,
+                    &::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("{0}.", path))
+                    }),
+                )?;
+                let mut map = ::std::collections::HashMap::<
+                    String,
+                    AlertThresholds,
+                >::new();
+                for (stored_path, bytes) in raw {
+                    if let Some(k_str) = stored_path
+                        .strip_prefix(
+                            &::alloc::__export::must_use({
+                                ::alloc::fmt::format(format_args!("{0}.", path))
+                            }),
+                        )
+                        && let Ok(kv) = <String as ::std::str::FromStr>::from_str(k_str)
+                    {
+                        let vv = <::rpstate::DefaultStore as ::rpstate::Store>::decode::<
+                            AlertThresholds,
+                        >(&**store, &bytes)?;
+                        map.insert(kv, vv);
+                    }
+                }
+                map
+            },
+            monitoring: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
+                MonitoringConfig,
+            >(&**store, &Self::__rpstate_path(prefix, "monitoring"))?
+                .unwrap_or_else(|| MonitoringConfig {
+                    enabled: true,
+                    thresholds: AlertThresholds {
+                        warning: 50,
+                        critical: 80,
+                    },
+                }),
+            presets: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
+                Vec<AlertThresholds>,
+            >(&**store, &Self::__rpstate_path(prefix, "presets"))?
+                .unwrap_or_else(|| <[_]>::into_vec(
+                    ::alloc::boxed::box_new([
+                        AlertThresholds {
+                            warning: 10,
+                            critical: 20,
+                        },
+                        AlertThresholds {
+                            warning: 30,
+                            critical: 40,
+                        },
+                    ]),
+                )),
+        })
+    }
+    #[doc(hidden)]
+    pub fn __rpstate_save_to(
+        &self,
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        prefix: &str,
+    ) -> ::rpstate::Result<()> {
+        self.db.__rpstate_save_to(store, &Self::__rpstate_path(prefix, "db"))?;
+        {
+            let path = Self::__rpstate_path(prefix, "limits");
+            for (k, v) in &self.limits {
+                let full_path = ::alloc::__export::must_use({
+                    ::alloc::fmt::format(format_args!("{0}.{1}", path, k))
+                });
+                <::rpstate::DefaultStore as ::rpstate::Store>::set(
+                    &**store,
+                    &full_path,
+                    v,
+                )?;
+            }
+        }
+        <::rpstate::DefaultStore as ::rpstate::Store>::set(
+            &**store,
+            &Self::__rpstate_path(prefix, "monitoring"),
+            &self.monitoring,
+        )?;
+        <::rpstate::DefaultStore as ::rpstate::Store>::set(
+            &**store,
+            &Self::__rpstate_path(prefix, "presets"),
+            &self.presets,
+        )?;
+        Ok(())
+    }
+    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
+        if prefix.is_empty() {
+            key.to_string()
+        } else {
+            ::alloc::__export::must_use({
+                ::alloc::fmt::format(
+                    format_args!(
+                        "{0}.{1}", prefix.trim_end_matches('.'), key
+                        .trim_start_matches('.'),
+                    ),
+                )
+            })
+        }
+    }
+}
 impl ::rpstate::migration::types::RpType for SystemSettings_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "SystemSettings_Data".as_bytes(),
@@ -1646,5 +1880,16 @@ impl ::rpstate::migration::fields::RpStateFields for SystemSettings_Data {
 }
 impl ::rpstate::RpState for SystemSettings {
     type Data = SystemSettings_Data;
+}
+impl SystemSettings {
+    pub fn load(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<SystemSettings_Persistent> {
+        Ok(SystemSettings_Persistent {
+            inner: SystemSettings_Data::__rpstate_load_from(store, "sys")?,
+            store: ::std::sync::Arc::clone(store),
+            prefix: ::std::sync::Arc::from("sys"),
+        })
+    }
 }
 fn main() {}

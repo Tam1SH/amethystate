@@ -322,6 +322,81 @@ impl ::core::fmt::Debug for AppConfig_Data {
         )
     }
 }
+#[allow(non_camel_case_types)]
+pub struct AppConfig_Persistent {
+    inner: AppConfig_Data,
+    store: ::std::sync::Arc<::rpstate::DefaultStore>,
+    prefix: ::std::sync::Arc<str>,
+}
+impl ::std::fmt::Debug for AppConfig_Persistent {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        f.debug_struct("AppConfig_Persistent").field("inner", &self.inner).finish()
+    }
+}
+impl ::std::ops::Deref for AppConfig_Persistent {
+    type Target = AppConfig_Data;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl ::std::ops::DerefMut for AppConfig_Persistent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+impl AppConfig_Persistent {
+    pub fn save(&self) -> ::rpstate::Result<()> {
+        self.inner.__rpstate_save_to(&self.store, &self.prefix)
+    }
+    pub fn mutate(
+        &mut self,
+        f: impl FnOnce(&mut AppConfig_Data),
+    ) -> ::rpstate::Result<()> {
+        f(&mut self.inner);
+        self.save()
+    }
+}
+impl AppConfig_Data {
+    #[doc(hidden)]
+    pub fn __rpstate_load_from(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        prefix: &str,
+    ) -> ::rpstate::Result<Self> {
+        Ok(Self {
+            port: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
+                u16,
+            >(&**store, &Self::__rpstate_path(prefix, "port"))?
+                .unwrap_or_else(|| 8080),
+        })
+    }
+    #[doc(hidden)]
+    pub fn __rpstate_save_to(
+        &self,
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        prefix: &str,
+    ) -> ::rpstate::Result<()> {
+        <::rpstate::DefaultStore as ::rpstate::Store>::set(
+            &**store,
+            &Self::__rpstate_path(prefix, "port"),
+            &self.port,
+        )?;
+        Ok(())
+    }
+    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
+        if prefix.is_empty() {
+            key.to_string()
+        } else {
+            ::alloc::__export::must_use({
+                ::alloc::fmt::format(
+                    format_args!(
+                        "{0}.{1}", prefix.trim_end_matches('.'), key
+                        .trim_start_matches('.'),
+                    ),
+                )
+            })
+        }
+    }
+}
 impl ::rpstate::migration::types::RpType for AppConfig_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "AppConfig_Data".as_bytes(),
@@ -355,5 +430,16 @@ impl ::rpstate::migration::fields::RpStateFields for AppConfig_Data {
 }
 impl ::rpstate::RpState for AppConfig {
     type Data = AppConfig_Data;
+}
+impl AppConfig {
+    pub fn load(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<AppConfig_Persistent> {
+        Ok(AppConfig_Persistent {
+            inner: AppConfig_Data::__rpstate_load_from(store, "app")?,
+            store: ::std::sync::Arc::clone(store),
+            prefix: ::std::sync::Arc::from("app"),
+        })
+    }
 }
 fn main() {}
