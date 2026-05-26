@@ -22,7 +22,7 @@ and compile-time verified relations.*
 - derived reactive pipelines for small synchronous transformations;
 - feature-local state that can be composed, shared, versioned, and checked for schema drift.
 
-Use `State::new(&store)` for reactive fields and `State::load(&store)` when you only want persistence and migrations.
+Use `State::new(&store)` for reactive fields and `State::load(&store)` when you only want persistence (and migrations).
 
 ## Status
 
@@ -46,7 +46,7 @@ cargo run --manifest-path examples/dioxus-settings/Cargo.toml
 | `iced-settings`   | TEA/MVU                           | persistent-only `State::load`, plain data mutation in `update`                                                         |
 | `slint-settings`  | property bindings + event loop    | reactive fields, `ReactiveScope`, pipeline subscription updating Slint properties                                      |
 | `dioxus-settings` | components + fine-grained signals | custom hooks bridging reactive fields and pipelines to Dioxus signals via async channels                               |
-| `tauri-settings`  | Tauri v2 + vanilla TS frontend    | `AppSettings.load()`, optimistic `.value` writes, `.subscribe()` for cross-component sync, theme + counter persistence |
+| `tauri-settings`  | Tauri v2 + vanilla TS frontend    | `AppSettings.load()`, sync `.value` reads/writes, `.subscribe()` for cross-component sync, theme + counter persistence |
 
 ## Quick start
 
@@ -161,25 +161,8 @@ schedules a debounced flush to disk—all in one call. There's no separate save 
 
 Migrations I built because… I can.
 
-## Alternatives
-
-`rpstate` is for singleton application state: settings, feature flags, UI preferences, window/session state, and other
-feature-local values that need to survive restarts.
-
-It is not trying to replace a database. If your data is naturally a collection of records—users, messages, logs,
-documents, transactions—use SQLite, redb directly, sled, or another database-shaped tool.
-
-| If you need... | Use... |
-|----------------|--------|
-| A plain in-memory app model | `Arc<Mutex<AppState>>`, channels, or the state model provided by your GUI framework |
-| Human-editable config with no reactivity | `confy`, `figment`, `twelf`, or a serde config file |
-| Reactive values without persistence | Framework-local signals, or crates such as `rustato` / `reactive-state` if their maintenance status fits your risk tolerance |
-| Collections, queries, indexes, or relational data | SQLite, redb/sled directly, or an ORM |
-| Tauri frontend storage only | `tauri-plugin-store` |
-| Persistent GUI state with field-level reactivity, migrations, and typed feature slices | `rpstate` |
-
-The line is **state-oriented vs. collection-oriented**. `rpstate` works best when each feature owns a small slice of
-application state and wants persistence, migration, and reactive updates without building that plumbing by hand.
+If your data is naturally a collection of records, use SQLite, redb/sled directly, or an ORM. If you need
+human-editable config collected from multiple sources, `confy`, `figment`, or `twelf` are a better fit.
 
 ## A note on naming
 

@@ -44,9 +44,9 @@ export class Field<T> {
     }
 
     /**
-     * Synchronous optimistic getter.
+     * Synchronous in-memory getter.
      *
-     * @returns The optimistically updated local value.
+     * @returns The locally cached value.
      * @tradeoff Resolved in-memory. Might not reflect the actual persistent store
      * if background sync is pending or failed. Use `get()` for transaction-safe checks.
      */
@@ -55,17 +55,17 @@ export class Field<T> {
     }
 
     /**
-     * Synchronous optimistic setter.
+     * Synchronous in-memory setter.
      *
      * @param newValue The new value to assign.
-     * @tradeoff Immediately updates the local cache to keep the UI lag-free (optimistic update),
+     * @tradeoff Immediately updates the local cache to keep the UI lag-free,
      * while firing an asynchronous write in the background. Note that writes are debounced/buffered;
      * call and await the `save()` method on the parent slice class to guarantee immediate disk persistence.
      */
     set value(newValue: T) {
         this._value = newValue;
         this.set(newValue).catch((err) => {
-            console.error(`Optimistic update failed for key ${this.key}:`, err);
+            console.error(`Sync write failed for key ${this.key}:`, err);
         });
     }
 
@@ -145,9 +145,9 @@ export class ReadonlyField<T> {
     }
 
     /**
-     * Synchronous optimistic getter.
+     * Synchronous in-memory getter.
      *
-     * @returns The optimistically updated local value.
+     * @returns The locally cached value.
      * @tradeoff Resolved in-memory. Might not reflect the actual persistent store
      * if background sync is pending or failed. Use `get()` for transaction-safe checks.
      */
@@ -257,7 +257,7 @@ export class ReactiveMapField<K extends string, V> {
     }
 
     /**
-     * Synchronous optimistic getter.
+     * Synchronous in-memory getter.
      *
      * @param key The map key to look up.
      * @returns The locally cached value.
@@ -268,22 +268,22 @@ export class ReactiveMapField<K extends string, V> {
     }
 
     /**
-     * Synchronous optimistic setter.
+     * Synchronous in-memory setter.
      *
      * @param key The map key to assign.
      * @param value The value to write.
-     * @tradeoff Instantly updates the local memory map (optimistic update) while initiating background write.
+     * @tradeoff Instantly updates the local memory map while initiating background write.
      * Writes are debounced/buffered; call and await `save()` on the parent slice class to flush changes to disk.
      */
     setSync(key: K, value: V): void {
         this._map.set(key, value);
         this.set(key, value).catch((err) => {
-            console.error(`Optimistic map update failed for ${this.prefix}.${key}:`, err);
+            console.error(`Sync map write failed for ${this.prefix}.${key}:`, err);
         });
     }
 
     /**
-     * Synchronous optimistic key lookup.
+     * Synchronous in-memory key lookup.
      *
      * @param key The map key to check.
      * @returns True if the key is present in the local cache.

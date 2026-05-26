@@ -21,7 +21,6 @@ pub struct TestRoot {
     pub child: TestNested,
 }
 
-#[cfg(windows)]
 #[test]
 fn test_schema_inventory_registrations() {
     let mut found_root = false;
@@ -47,7 +46,6 @@ fn test_schema_inventory_registrations() {
     assert!(found_nested, "TestNested was not registered in inventory!");
 }
 
-#[cfg(windows)]
 #[test]
 fn test_typescript_codegen_export() {
     let out_path = std::env::temp_dir().join("rpstate_test_export.ts");
@@ -87,7 +85,6 @@ fn test_typescript_codegen_export() {
     ));
 }
 
-#[cfg(windows)]
 #[tokio::test]
 async fn test_tauri_plugin_commands() {
     let db_path = std::env::temp_dir().join("rpstate_tauri_test_store.redb");

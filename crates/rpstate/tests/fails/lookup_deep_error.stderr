@@ -5,3 +5,8 @@ error[E0599]: no method named `__schema_field_wrong` found for struct `ReadOnly<
    | ^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = note: this error originates in the attribute macro `rpstate` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: there is a method `__schema_field_value` with a similar name
+   |
+15 - #[rpstate(prefix = "ui")]
+15 + __schema_field_value
+   |
