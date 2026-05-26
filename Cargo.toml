@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Tam1SH <ignatternyev54@gmail.com>"]
 edition = "2024"
 license = "MIT"
@@ -17,8 +17,8 @@ rust-version = "1.89.0"
 
 [workspace.dependencies]
 # internal
-rpstate = { path = "crates/rpstate", version = "0.4.1" }
-rpstate-macros = { path = "crates/rpstate-macros", version = "0.4.1" }
+rpstate = { path = "crates/rpstate", version = "0.4.2" }
+rpstate-macros = { path = "crates/rpstate-macros", version = "0.4.2" }
 
 # external
 anyhow = "1.0.102"

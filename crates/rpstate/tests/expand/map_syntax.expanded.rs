@@ -1001,6 +1001,34 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseConfig_Data {
 impl ::rpstate::RpState for DatabaseConfig {
     type Data = DatabaseConfig_Data;
 }
+#[allow(non_upper_case_globals)]
+const _: () = {
+    static __INVENTORY: ::inventory::Node = ::inventory::Node {
+        value: &{
+            ::rpstate::tauri_codegen::SchemaExportEntry {
+                prefix: None,
+                struct_name: "DatabaseConfig",
+                fields: &[
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "host",
+                        ts_type: "string",
+                        full_ts_type: "string",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
+                    },
+                ],
+            }
+        },
+        next: ::inventory::__private::UnsafeCell::new(
+            ::inventory::__private::Option::None,
+        ),
+    };
+    unsafe extern "C" fn __ctor() {
+        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+    }
+    #[used]
+    #[link_section = ".CRT$XCU"]
+    static __CTOR: unsafe extern "C" fn() = __ctor;
+};
 pub struct SystemSettings {
     pub db: ::std::sync::Arc<DatabaseConfig>,
     pub monitoring: ::rpstate::Field<
@@ -1802,4 +1830,55 @@ impl ::rpstate::migration::fields::RpStateFields for SystemSettings_Data {
 impl ::rpstate::RpState for SystemSettings {
     type Data = SystemSettings_Data;
 }
+#[allow(non_upper_case_globals)]
+const _: () = {
+    static __INVENTORY: ::inventory::Node = ::inventory::Node {
+        value: &{
+            ::rpstate::tauri_codegen::SchemaExportEntry {
+                prefix: Some("sys"),
+                struct_name: "SystemSettings",
+                fields: &[
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "db",
+                        ts_type: "DatabaseConfig",
+                        full_ts_type: "DatabaseConfig",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Nested {
+                            struct_name: "DatabaseConfig",
+                        },
+                    },
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "monitoring",
+                        ts_type: "MonitoringConfig",
+                        full_ts_type: "MonitoringConfig",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
+                    },
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "limits",
+                        ts_type: "ReactiveMap",
+                        full_ts_type: "ReactiveMap",
+                        kind: ::rpstate::tauri_codegen::FieldKind::ReactiveMap {
+                            key_type: "string",
+                            value_type: "AlertThresholds",
+                        },
+                    },
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "presets",
+                        ts_type: "AlertThresholds",
+                        full_ts_type: "AlertThresholds[]",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
+                    },
+                ],
+            }
+        },
+        next: ::inventory::__private::UnsafeCell::new(
+            ::inventory::__private::Option::None,
+        ),
+    };
+    unsafe extern "C" fn __ctor() {
+        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+    }
+    #[used]
+    #[link_section = ".CRT$XCU"]
+    static __CTOR: unsafe extern "C" fn() = __ctor;
+};
 fn main() {}

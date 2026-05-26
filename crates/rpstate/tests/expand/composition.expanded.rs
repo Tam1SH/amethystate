@@ -450,6 +450,40 @@ impl ::rpstate::migration::fields::RpStateFields for NetworkState_Data {
 impl ::rpstate::RpState for NetworkState {
     type Data = NetworkState_Data;
 }
+#[allow(non_upper_case_globals)]
+const _: () = {
+    static __INVENTORY: ::inventory::Node = ::inventory::Node {
+        value: &{
+            ::rpstate::tauri_codegen::SchemaExportEntry {
+                prefix: Some("net"),
+                struct_name: "NetworkState",
+                fields: &[
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "port",
+                        ts_type: "number",
+                        full_ts_type: "number",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
+                    },
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "host",
+                        ts_type: "string",
+                        full_ts_type: "string",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
+                    },
+                ],
+            }
+        },
+        next: ::inventory::__private::UnsafeCell::new(
+            ::inventory::__private::Option::None,
+        ),
+    };
+    unsafe extern "C" fn __ctor() {
+        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+    }
+    #[used]
+    #[link_section = ".CRT$XCU"]
+    static __CTOR: unsafe extern "C" fn() = __ctor;
+};
 pub struct UiState {
     pub proxy_port: ::rpstate::Field<
         u16,
@@ -834,4 +868,44 @@ impl ::rpstate::migration::fields::RpStateFields for UiState_Data {
 impl ::rpstate::RpState for UiState {
     type Data = UiState_Data;
 }
+#[allow(non_upper_case_globals)]
+const _: () = {
+    static __INVENTORY: ::inventory::Node = ::inventory::Node {
+        value: &{
+            ::rpstate::tauri_codegen::SchemaExportEntry {
+                prefix: Some("ui"),
+                struct_name: "UiState",
+                fields: &[
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "proxy_port",
+                        ts_type: "number",
+                        full_ts_type: "number",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Lookup {
+                            target_key: "port",
+                            mutable: false,
+                        },
+                    },
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "proxy_host",
+                        ts_type: "string",
+                        full_ts_type: "string",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Lookup {
+                            target_key: "host",
+                            mutable: false,
+                        },
+                    },
+                ],
+            }
+        },
+        next: ::inventory::__private::UnsafeCell::new(
+            ::inventory::__private::Option::None,
+        ),
+    };
+    unsafe extern "C" fn __ctor() {
+        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+    }
+    #[used]
+    #[link_section = ".CRT$XCU"]
+    static __CTOR: unsafe extern "C" fn() = __ctor;
+};
 fn main() {}

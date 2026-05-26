@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="/src/styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tauri App</title>
+  <script type="module" src="/src/main.ts" defer></script>
+</head>
+
+<body>
+<main class="container">
+  <h1>Tauri + rpstate</h1>
+
+  <div class="row">
+    <a href="https://vite.dev" target="_blank">
+      <img src="/src/assets/vite.svg" class="logo vite" alt="Vite logo" />
+    </a>
+    <a href="https://tauri.app" target="_blank">
+      <img
+              src="/src/assets/tauri.svg"
+              class="logo tauri"
+              alt="Tauri logo"
+      />
+    </a>
+    <a href="https://www.typescriptlang.org/docs" target="_blank">
+      <img
+              src="/src/assets/typescript.svg"
+              class="logo typescript"
+              alt="typescript logo"
+      />
+    </a>
+  </div>
+
+  <div class="demo-section">
+    <h2>rpstate persistent & reactive demo</h2>
+
+    <div class="row" style="margin-bottom: 1rem; align-items: center; gap: 10px;">
+      <label for="username-input">Username:</label>
+      <input id="username-input" placeholder="Type a username..." />
+    </div>
+    <p>Current username in store: <strong id="username-display">...</strong></p>
+
+    <div class="row" style="margin-top: 1.5rem; gap: 10px;">
+      <button id="counter-btn">Increment Counter</button>
+      <button id="theme-btn">Toggle Theme</button>
+    </div>
+    <p>Counter value (persists on app restart): <strong id="counter-display">0</strong></p>
+    <p>Current Theme: <strong id="theme-display">light</strong></p>
+  </div>
+</main>
+</body>
+</html>

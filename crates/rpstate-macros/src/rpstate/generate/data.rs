@@ -12,7 +12,9 @@ pub(crate) fn persistent_fields(entries: &[StoreFieldEntry]) -> Vec<&StoreFieldE
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn data_impl(
+    crate_name: &TokenStream2,
     vis: &syn::Visibility,
     name: &Ident,
     attrs: &[syn::Attribute],
@@ -37,7 +39,7 @@ pub(crate) fn data_impl(
         let fname = e.ident.as_ref().unwrap();
         let ty = &e.ty;
         if e.nested {
-            quote! { pub #fname: <#ty as ::rpstate::RpState>::Data }
+            quote! { pub #fname: <#ty as #crate_name::RpState>::Data }
         } else if let Some((k, v)) = e.get_map_types() {
             quote! { pub #fname: ::std::collections::HashMap<#k, #v> }
         } else {
@@ -54,25 +56,25 @@ pub(crate) fn data_impl(
 
         if e.nested {
             quote! {
-                ::rpstate::migration::fields::FieldDescriptor {
+                #crate_name::migration::fields::FieldDescriptor {
                     name: #fname_str,
-                    type_hash: 0xDEADBEEF ^ < <#ty as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
+                    type_hash: 0xDEADBEEF ^ < <#ty as #crate_name::RpState>::Data as #crate_name::migration::types::RpType>::TYPE_HASH,
                     type_name: #type_name,
                 }
             }
         } else if let Some((k, v)) = e.get_map_types() {
             quote! {
-                ::rpstate::migration::fields::FieldDescriptor {
+                #crate_name::migration::fields::FieldDescriptor {
                     name: #fname_str,
-                    type_hash: <::std::collections::HashMap<#k, #v> as ::rpstate::migration::types::RpType>::TYPE_HASH,
+                    type_hash: <::std::collections::HashMap<#k, #v> as #crate_name::migration::types::RpType>::TYPE_HASH,
                     type_name: #type_name,
                 }
             }
         } else {
             quote! {
-                ::rpstate::migration::fields::FieldDescriptor {
+                #crate_name::migration::fields::FieldDescriptor {
                     name: #fname_str,
-                    type_hash: <#ty as ::rpstate::migration::types::RpType>::TYPE_HASH,
+                    type_hash: <#ty as #crate_name::migration::types::RpType>::TYPE_HASH,
                     type_name: #type_name,
                 }
             }
@@ -88,7 +90,7 @@ pub(crate) fn data_impl(
             quote! {
                 #fname: {
                     let mut sub_ctx = ctx.scoped(#key);
-                    < <#ty as ::rpstate::RpState>::Data as ::rpstate::migration::fields::RpStateFields>::load_struct(&mut sub_ctx)?
+                    < <#ty as #crate_name::RpState>::Data as #crate_name::migration::fields::RpStateFields>::load_struct(&mut sub_ctx)?
                 }
             }
         } else if let Some((k, v)) = e.get_map_types() {
@@ -137,7 +139,7 @@ pub(crate) fn data_impl(
 
         if e.nested {
             quote! {
-                #fname: <#ty as ::rpstate::RpState>::Data::__rpstate_load_from(
+                #fname: <#ty as #crate_name::RpState>::Data::__rpstate_load_from(
                     store,
                     &Self::__rpstate_path(prefix, #key),
                 )?
@@ -146,7 +148,7 @@ pub(crate) fn data_impl(
             quote! {
                 #fname: {
                     let path = Self::__rpstate_path(prefix, #key);
-                    let raw = <::rpstate::DefaultStore as ::rpstate::Store>::scan_prefix(
+                    let raw = <#crate_name::DefaultStore as #crate_name::Store>::scan_prefix(
                         &**store,
                         &format!("{}.", path),
                     )?;
@@ -155,7 +157,7 @@ pub(crate) fn data_impl(
                         if let Some(k_str) = stored_path.strip_prefix(&format!("{}.", path))
                             && let Ok(kv) = <#k as ::std::str::FromStr>::from_str(k_str)
                         {
-                            let vv = <::rpstate::DefaultStore as ::rpstate::Store>::decode::<#v>(
+                            let vv = <#crate_name::DefaultStore as #crate_name::Store>::decode::<#v>(
                                 &**store,
                                 &bytes,
                             )?;
@@ -172,7 +174,7 @@ pub(crate) fn data_impl(
                 .map(parse_default)
                 .unwrap_or_else(|| quote! { <#ty as ::std::default::Default>::default() });
             quote! {
-                #fname: <::rpstate::DefaultStore as ::rpstate::Store>::get::<#ty>(
+                #fname: <#crate_name::DefaultStore as #crate_name::Store>::get::<#ty>(
                     &**store,
                     &Self::__rpstate_path(prefix, #key),
                 )?.unwrap_or_else(|| #fallback)
@@ -194,13 +196,13 @@ pub(crate) fn data_impl(
                     let path = Self::__rpstate_path(prefix, #key);
                     for (k, v) in &self.#fname {
                         let full_path = format!("{}.{}", path, k);
-                        <::rpstate::DefaultStore as ::rpstate::Store>::set(&**store, &full_path, v)?;
+                        <#crate_name::DefaultStore as #crate_name::Store>::set(&**store, &full_path, v)?;
                     }
                 }
             }
         } else {
             quote! {
-                <::rpstate::DefaultStore as ::rpstate::Store>::set(
+                <#crate_name::DefaultStore as #crate_name::Store>::set(
                     &**store,
                     &Self::__rpstate_path(prefix, #key),
                     &self.#fname,
@@ -210,7 +212,7 @@ pub(crate) fn data_impl(
     });
 
     let prefix_expr = prefix.unwrap_or_default();
-    let deps = migration_deps(entries);
+    let deps = migration_deps(crate_name, entries);
 
     let persistent_wrapper_tokens = match rp_mode {
         RpMode::Reactive => {
@@ -220,7 +222,7 @@ pub(crate) fn data_impl(
             quote! {
                 #[derive(Clone)] #(#attrs)* #vis struct #name {
                     inner: #data_struct_name,
-                    store: ::std::sync::Arc<::rpstate::DefaultStore>,
+                    store: ::std::sync::Arc<#crate_name::DefaultStore>,
                     prefix: ::std::sync::Arc<str>,
                 }
 
@@ -247,26 +249,26 @@ pub(crate) fn data_impl(
                 }
 
                 impl #name {
-                    pub fn save_lazy(&self) -> ::rpstate::Result<()> {
+                    pub fn save_lazy(&self) -> #crate_name::Result<()> {
                         self.inner.__rpstate_save_to(&self.store, &self.prefix)
                     }
 
-                    pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> ::rpstate::Result<()> {
+                    pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::Result<()> {
                         f(&mut self.inner);
                         self.save_lazy()
                     }
 
-                    pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> ::rpstate::Result<()> {
+                    pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::Result<()> {
                         f(&mut self.inner);
                         self.save()
                     }
 
-                    pub fn save(&self) -> ::rpstate::Result<()> {
+                    pub fn save(&self) -> #crate_name::Result<()> {
                         self.save_lazy()?;
-                        <::rpstate::DefaultStore as ::rpstate::Store>::flush_prefix(&*self.store, &self.prefix)
+                        <#crate_name::DefaultStore as #crate_name::Store>::flush_prefix(&*self.store, &self.prefix)
                     }
 
-                    pub fn load(store: &::std::sync::Arc<::rpstate::DefaultStore>) -> ::rpstate::Result<Self> {
+                    pub fn load(store: &::std::sync::Arc<#crate_name::DefaultStore>) -> #crate_name::Result<Self> {
                         Ok(Self {
                             inner: #data_struct_name::__rpstate_load_from(store, #prefix_expr)?,
                             store: ::std::sync::Arc::clone(store),
@@ -282,7 +284,7 @@ pub(crate) fn data_impl(
                 #[allow(non_camel_case_types)]
                 pub struct #persisted_struct_name {
                     inner: #data_struct_name,
-                    store: ::std::sync::Arc<::rpstate::DefaultStore>,
+                    store: ::std::sync::Arc<#crate_name::DefaultStore>,
                     prefix: ::std::sync::Arc<str>,
                 }
 
@@ -310,29 +312,29 @@ pub(crate) fn data_impl(
 
                 impl #persisted_struct_name {
 
-                    pub fn save_lazy(&self) -> ::rpstate::Result<()> {
+                    pub fn save_lazy(&self) -> #crate_name::Result<()> {
                         self.inner.__rpstate_save_to(&self.store, &self.prefix)
                     }
 
 
-                    pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> ::rpstate::Result<()> {
+                    pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::Result<()> {
                         f(&mut self.inner);
                         self.save_lazy()
                     }
 
-                    pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> ::rpstate::Result<()> {
+                    pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::Result<()> {
                         f(&mut self.inner);
                         self.save()
                     }
 
-                    pub fn save(&self) -> ::rpstate::Result<()> {
+                    pub fn save(&self) -> #crate_name::Result<()> {
                         self.save_lazy()?;
-                        <::rpstate::DefaultStore as ::rpstate::Store>::flush_prefix(&*self.store, &self.prefix)
+                        <#crate_name::DefaultStore as #crate_name::Store>::flush_prefix(&*self.store, &self.prefix)
                     }
                 }
 
                 impl #name {
-                    pub fn load(store: &::std::sync::Arc<::rpstate::DefaultStore>) -> ::rpstate::Result<#persisted_struct_name> {
+                    pub fn load(store: &::std::sync::Arc<#crate_name::DefaultStore>) -> #crate_name::Result<#persisted_struct_name> {
                         Ok(#persisted_struct_name {
                             inner: #data_struct_name::__rpstate_load_from(store, #prefix_expr)?,
                             store: ::std::sync::Arc::clone(store),
@@ -345,7 +347,7 @@ pub(crate) fn data_impl(
     };
 
     quote! {
-        #[derive(::rpstate::serde::Serialize, ::rpstate::serde::Deserialize, Default, Clone, Debug)]
+        #[derive(#crate_name::serde::Serialize, #crate_name::serde::Deserialize, Default, Clone, Debug)]
         #[doc(hidden)]
         #[allow(non_camel_case_types)]
         pub struct #data_struct_name {
@@ -357,9 +359,9 @@ pub(crate) fn data_impl(
         impl #data_struct_name {
             #[doc(hidden)]
             pub fn __rpstate_load_from(
-                store: &::std::sync::Arc<::rpstate::DefaultStore>,
+                store: &::std::sync::Arc<#crate_name::DefaultStore>,
                 prefix: &str,
-            ) -> ::rpstate::Result<Self> {
+            ) -> #crate_name::Result<Self> {
                 Ok(Self {
                     #(#store_load_fields,)*
                 })
@@ -368,9 +370,9 @@ pub(crate) fn data_impl(
             #[doc(hidden)]
             pub fn __rpstate_save_to(
                 &self,
-                store: &::std::sync::Arc<::rpstate::DefaultStore>,
+                store: &::std::sync::Arc<#crate_name::DefaultStore>,
                 prefix: &str,
-            ) -> ::rpstate::Result<()> {
+            ) -> #crate_name::Result<()> {
                 #(#store_save_fields)*
                 Ok(())
             }
@@ -384,42 +386,42 @@ pub(crate) fn data_impl(
             }
         }
 
-        impl ::rpstate::migration::types::RpType for #data_struct_name {
-            const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(stringify!(#data_struct_name).as_bytes());
+        impl #crate_name::migration::types::RpType for #data_struct_name {
+            const TYPE_HASH: u64 = #crate_name::migration::types::fnv1a(stringify!(#data_struct_name).as_bytes());
             const TYPE_NAME: &'static str = stringify!(#data_struct_name);
         }
 
-       impl ::rpstate::migration::fields::RpStateFields for #data_struct_name {
-            const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[
+       impl #crate_name::migration::fields::RpStateFields for #data_struct_name {
+            const FIELDS: &'static [#crate_name::migration::fields::FieldDescriptor] = &[
                 #(#field_descriptors),*
             ];
             const VERSION: u32 = #version_val;
-            const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
+            const SCHEMA_HASH: u64 = #crate_name::migration::types::schema_hash(Self::FIELDS);
             const PARENT_PREFIX: &'static str = #prefix_expr;
             const MIGRATION_DEPS: &'static [&'static str] = &[ #(#deps),* ];
 
-            fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
+            fn load_struct(ctx: &mut #crate_name::MigrationContext) -> #crate_name::Result<Self> {
                 Ok(Self {
                     #(#load_fields,)*
                 })
             }
 
-            fn save_struct(&self, ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<()> {
+            fn save_struct(&self, ctx: &mut #crate_name::MigrationContext) -> #crate_name::Result<()> {
                 #(#save_fields)*
                 Ok(())
             }
         }
 
-        impl ::rpstate::RpState for #name {
+        impl #crate_name::RpState for #name {
             type Data = #data_struct_name;
         }
     }
 }
 
-fn migration_deps(entries: &[StoreFieldEntry]) -> Vec<TokenStream2> {
+fn migration_deps(crate_name: &TokenStream2, entries: &[StoreFieldEntry]) -> Vec<TokenStream2> {
     entries
         .iter()
         .filter_map(|e| e.parent.as_ref())
-        .map(|p| quote! { <#p as ::rpstate::StateScope>::PREFIX })
+        .map(|p| quote! { <#p as #crate_name::StateScope>::PREFIX })
         .collect::<Vec<_>>()
 }

@@ -1,0 +1,10 @@
+[default]
+description = "Allows access to the default rpstate commands"
+permissions = [
+    "allow-rpstate-get",
+    "allow-rpstate-set",
+    "allow-rpstate-subscribe",
+    "allow-rpstate-unsubscribe",
+    "allow-rpstate-get-prefix",
+    "allow-rpstate-flush"
+]

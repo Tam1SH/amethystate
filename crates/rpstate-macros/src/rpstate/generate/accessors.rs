@@ -3,17 +3,18 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
 use syn::{Ident, Visibility};
 
-pub(crate) fn schema_methods(
-    entries: &[StoreFieldEntry],
-) -> impl Iterator<Item = TokenStream2> + '_ {
-    entries.iter().map(|e| {
+pub(crate) fn schema_methods<'a>(
+    crate_name: &'a TokenStream2,
+    entries: &'a [StoreFieldEntry],
+) -> impl Iterator<Item = TokenStream2> + 'a {
+    entries.iter().map(move |e| {
         let fname = e.ident.as_ref().unwrap();
         let mname = format_ident!("__schema_field_{}", fname, span = fname.span());
         let ty = &e.ty;
         let wrapper = if e.export_mut {
-            quote!(::rpstate::Writable)
+            quote!(#crate_name::Writable)
         } else {
-            quote!(::rpstate::ReadOnly)
+            quote!(#crate_name::ReadOnly)
         };
         quote_spanned! { fname.span() =>
             #[doc(hidden)]
@@ -22,10 +23,11 @@ pub(crate) fn schema_methods(
     })
 }
 
-pub(crate) fn struct_fields(
-    entries: &[StoreFieldEntry],
-) -> impl Iterator<Item = TokenStream2> + '_ {
-    entries.iter().map(|e| {
+pub(crate) fn struct_fields<'a>(
+    crate_name: &'a TokenStream2,
+    entries: &'a [StoreFieldEntry],
+) -> impl Iterator<Item = TokenStream2> + 'a {
+    entries.iter().map(move |e| {
         let fname = e.ident.as_ref().unwrap();
         let fvis = &e.vis;
         let ty = &e.ty;
@@ -33,33 +35,36 @@ pub(crate) fn struct_fields(
         if e.nested || e.lookup_node.is_some() {
             quote! { #fvis #fname: ::std::sync::Arc<#ty> }
         } else if let Some((k, v)) = e.get_map_types() {
-            let mode = field_mode(e);
-            quote! { #fvis #fname: ::rpstate::ReactiveMap<#k, #v, ::rpstate::DefaultStore, #mode> }
+            let mode = field_mode(crate_name, e);
+            quote! { #fvis #fname: #crate_name::ReactiveMap<#k, #v, #crate_name::DefaultStore, #mode> }
         } else {
-            let mode = field_mode(e);
-            quote! { #fvis #fname: ::rpstate::Field<#ty, ::rpstate::DefaultStore, #mode> }
+            let mode = field_mode(crate_name, e);
+            quote! { #fvis #fname: #crate_name::Field<#ty, #crate_name::DefaultStore, #mode> }
         }
     })
 }
 
-pub(crate) fn methods(entries: &[StoreFieldEntry]) -> impl Iterator<Item = TokenStream2> + '_ {
-    entries.iter().map(|e| {
+pub(crate) fn methods<'a>(
+    crate_name: &'a TokenStream2,
+    entries: &'a [StoreFieldEntry],
+) -> impl Iterator<Item = TokenStream2> + 'a {
+    entries.iter().map(move |e| {
         let fname = e.ident.as_ref().unwrap();
         let ty = &e.ty;
 
         if e.nested || e.lookup_node.is_some() {
             quote! { pub fn #fname(&self) -> ::std::sync::Arc<#ty> { self.#fname.clone() } }
         } else if let Some((k, v)) = e.get_map_types() {
-            let mode = field_mode(e);
+            let mode = field_mode(crate_name, e);
             quote! {
-                pub fn #fname(&self) -> ::rpstate::ReactiveMap<#k, #v, ::rpstate::DefaultStore, #mode> {
+                pub fn #fname(&self) -> #crate_name::ReactiveMap<#k, #v, #crate_name::DefaultStore, #mode> {
                     self.#fname.clone()
                 }
             }
         } else {
-            let mode = field_mode(e);
+            let mode = field_mode(crate_name, e);
             quote! {
-                pub fn #fname(&self) -> ::rpstate::Field<#ty, ::rpstate::DefaultStore, #mode> {
+                pub fn #fname(&self) -> #crate_name::Field<#ty, #crate_name::DefaultStore, #mode> {
                     self.#fname.clone()
                 }
             }
@@ -67,19 +72,19 @@ pub(crate) fn methods(entries: &[StoreFieldEntry]) -> impl Iterator<Item = Token
     })
 }
 
-pub(crate) fn node_impl(name: &Ident, is_root: bool) -> TokenStream2 {
+pub(crate) fn node_impl(crate_name: &TokenStream2, name: &Ident, is_root: bool) -> TokenStream2 {
     if is_root {
         quote! {
-            impl ::rpstate::RpStateNode for #name {
-                fn new_node(store: &::std::sync::Arc<::rpstate::DefaultStore>, _path: &str) -> ::rpstate::Result<Self> {
+            impl #crate_name::RpStateNode for #name {
+                fn new_node(store: &::std::sync::Arc<#crate_name::DefaultStore>, _path: &str) -> #crate_name::Result<Self> {
                     Self::new(store)
                 }
             }
         }
     } else {
         quote! {
-            impl ::rpstate::RpStateNode for #name {
-                fn new_node(store: &::std::sync::Arc<::rpstate::DefaultStore>, path: &str) -> ::rpstate::Result<Self> {
+            impl #crate_name::RpStateNode for #name {
+                fn new_node(store: &::std::sync::Arc<#crate_name::DefaultStore>, path: &str) -> #crate_name::Result<Self> {
                     Self::new(store, path)
                 }
             }
@@ -87,17 +92,25 @@ pub(crate) fn node_impl(name: &Ident, is_root: bool) -> TokenStream2 {
     }
 }
 
-pub(crate) fn scope(name: &Ident, prefix: Option<String>) -> Option<TokenStream2> {
+pub(crate) fn scope(
+    crate_name: &TokenStream2,
+    name: &Ident,
+    prefix: Option<String>,
+) -> Option<TokenStream2> {
     prefix.map(
-        |p| quote! { impl ::rpstate::StateScope for #name { const PREFIX: &'static str = #p; } },
+        |p| quote! { impl #crate_name::StateScope for #name { const PREFIX: &'static str = #p; } },
     )
 }
 
-pub(crate) fn constructor(is_root: bool, init_fields: &[TokenStream2]) -> TokenStream2 {
+pub(crate) fn constructor(
+    crate_name: &TokenStream2,
+    is_root: bool,
+    init_fields: &[TokenStream2],
+) -> TokenStream2 {
     if is_root {
-        quote! { pub fn new(store: &::std::sync::Arc<::rpstate::DefaultStore>) -> ::rpstate::Result<Self> { Ok(Self { #(#init_fields,)* }) } }
+        quote! { pub fn new(store: &::std::sync::Arc<#crate_name::DefaultStore>) -> #crate_name::Result<Self> { Ok(Self { #(#init_fields,)* }) } }
     } else {
-        quote! { pub fn new(store: &::std::sync::Arc<::rpstate::DefaultStore>, namespace: &str) -> ::rpstate::Result<Self> { Ok(Self { #(#init_fields,)* }) } }
+        quote! { pub fn new(store: &::std::sync::Arc<#crate_name::DefaultStore>, namespace: &str) -> #crate_name::Result<Self> { Ok(Self { #(#init_fields,)* }) } }
     }
 }
 
@@ -117,15 +130,15 @@ pub(crate) fn lookup_chain(
     chain
 }
 
-pub(crate) fn field_mode(e: &StoreFieldEntry) -> TokenStream2 {
+pub(crate) fn field_mode(crate_name: &TokenStream2, e: &StoreFieldEntry) -> TokenStream2 {
     if e.lookup.is_some() {
         if e.export_mut {
-            quote!(::rpstate::WritableMode)
+            quote!(#crate_name::WritableMode)
         } else {
-            quote!(::rpstate::ReadOnlyMode)
+            quote!(#crate_name::ReadOnlyMode)
         }
     } else {
-        quote!(::rpstate::WritableMode)
+        quote!(#crate_name::WritableMode)
     }
 }
 

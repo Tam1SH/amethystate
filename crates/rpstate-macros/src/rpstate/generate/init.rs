@@ -4,14 +4,18 @@ use crate::rpstate::model::StoreFieldEntry;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, quote_spanned};
 
-pub(crate) fn init_fields(entries: &[StoreFieldEntry], is_root: bool) -> Vec<TokenStream2> {
+pub(crate) fn init_fields(
+    crate_name: &TokenStream2,
+    entries: &[StoreFieldEntry],
+    is_root: bool,
+) -> Vec<TokenStream2> {
     entries
         .iter()
-        .map(|e| init_field(e, is_root))
+        .map(|e| init_field(crate_name, e, is_root))
         .collect::<Vec<_>>()
 }
 
-fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
+fn init_field(crate_name: &TokenStream2, e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
     let fname = e.ident.as_ref().unwrap();
     let ty = &e.ty;
     let key = e.key.clone().unwrap_or_else(|| fname.to_string());
@@ -24,12 +28,12 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
         quote_spanned! {target_span=>
             #fname: {
                 const _: fn() = || {
-                    fn assert_node_type<T>(_: ::rpstate::ReadOnly<T>) {}
+                    fn assert_node_type<T>(_: #crate_name::ReadOnly<T>) {}
                     let _ = || assert_node_type(#chain);
                     let _ = #chain;
                 };
-                let path = format!("{}.{}", <#parent as ::rpstate::StateScope>::PREFIX, #target_str);
-                ::std::sync::Arc::new(<#ty as ::rpstate::RpStateNode>::new_node(store, &path)?)
+                let path = format!("{}.{}", <#parent as #crate_name::StateScope>::PREFIX, #target_str);
+                ::std::sync::Arc::new(<#ty as #crate_name::RpStateNode>::new_node(store, &path)?)
             }
         }
     } else if let Some(target) = &e.lookup {
@@ -43,10 +47,10 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
             .map(parse_default)
             .unwrap_or_else(|| quote!(::std::default::Default::default()));
 
-        let mode = field_mode(e);
+        let mode = field_mode(crate_name, e);
         let write_check = if e.export_mut {
             quote_spanned! { target.span() =>
-                fn assert_writable<T>(_: ::rpstate::Writable<T>) {}
+                fn assert_writable<T>(_: #crate_name::Writable<T>) {}
                 assert_writable(#chain);
             }
         } else {
@@ -58,13 +62,13 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
                 const _: fn() = || {
                     #write_check
                     trait TypeCheck<T> {}
-                    impl<T> TypeCheck<T> for ::rpstate::ReadOnly<T> {}
-                    impl<T> TypeCheck<T> for ::rpstate::Writable<T> {}
+                    impl<T> TypeCheck<T> for #crate_name::ReadOnly<T> {}
+                    impl<T> TypeCheck<T> for #crate_name::Writable<T> {}
                     fn assert_field_type_matches_lookup<T, M: TypeCheck<T>>(_: M) {}
                     assert_field_type_matches_lookup::<#ty, _>(#chain);
                 };
-                let path = format!("{}.{}", <#parent as ::rpstate::StateScope>::PREFIX, #target_str);
-                ::rpstate::store::field_with_path::<#ty, _, #mode>(store, ::std::sync::Arc::from(path), #def)?
+                let path = format!("{}.{}", <#parent as #crate_name::StateScope>::PREFIX, #target_str);
+                #crate_name::store::field_with_path::<#ty, _, #mode>(store, ::std::sync::Arc::from(path), #def)?
             }
         }
     } else if e.nested {
@@ -72,7 +76,7 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
             quote! {
                 #fname: ::std::sync::Arc::new(#ty::new(
                     store,
-                    &format!("{}.{}", <Self as ::rpstate::StateScope>::PREFIX, #key)
+                    &format!("{}.{}", <Self as #crate_name::StateScope>::PREFIX, #key)
                 )?)
             }
         } else {
@@ -87,11 +91,11 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
 
         if is_root {
             quote! {
-                #fname: ::rpstate::reactive_map::<Self, #k, #v, _>(store, #key, #def)?
+                #fname: #crate_name::reactive_map::<Self, #k, #v, _>(store, #key, #def)?
             }
         } else {
             quote! {
-                #fname: ::rpstate::store::reactive_map_with_path::<#k, #v, _, _>(
+                #fname: #crate_name::store::reactive_map_with_path::<#k, #v, _, _>(
                     store,
                     ::std::sync::Arc::from(format!("{}.{}", namespace, #key)),
                     #def
@@ -113,15 +117,15 @@ fn init_field(e: &StoreFieldEntry, is_root: bool) -> TokenStream2 {
 
         if e.volatile {
             let path_expr = if is_root {
-                quote! { format!("{}.{}", <Self as ::rpstate::StateScope>::PREFIX, #key) }
+                quote! { format!("{}.{}", <Self as #crate_name::StateScope>::PREFIX, #key) }
             } else {
                 quote! { format!("{}.{}", namespace, #key) }
             };
-            quote! { #fname: ::rpstate::Field::new_volatile(::std::sync::Arc::from(#path_expr), #def) }
+            quote! { #fname: #crate_name::Field::new_volatile(::std::sync::Arc::from(#path_expr), #def) }
         } else if is_root {
-            quote! { #fname: ::rpstate::field::<Self, #ty>(store, #key, #def)? }
+            quote! { #fname: #crate_name::field::<Self, #ty>(store, #key, #def)? }
         } else {
-            quote! { #fname: ::rpstate::store::field_with_path(store, ::std::sync::Arc::from(#path_expr), #def)? }
+            quote! { #fname: #crate_name::store::field_with_path(store, ::std::sync::Arc::from(#path_expr), #def)? }
         }
     }
 }

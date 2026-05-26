@@ -477,6 +477,40 @@ impl ::rpstate::migration::fields::RpStateFields for ConnectionPool_Data {
 impl ::rpstate::RpState for ConnectionPool {
     type Data = ConnectionPool_Data;
 }
+#[allow(non_upper_case_globals)]
+const _: () = {
+    static __INVENTORY: ::inventory::Node = ::inventory::Node {
+        value: &{
+            ::rpstate::tauri_codegen::SchemaExportEntry {
+                prefix: None,
+                struct_name: "ConnectionPool",
+                fields: &[
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "max_connections",
+                        ts_type: "number",
+                        full_ts_type: "number",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
+                    },
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "timeout_secs",
+                        ts_type: "number",
+                        full_ts_type: "number",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
+                    },
+                ],
+            }
+        },
+        next: ::inventory::__private::UnsafeCell::new(
+            ::inventory::__private::Option::None,
+        ),
+    };
+    unsafe extern "C" fn __ctor() {
+        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+    }
+    #[used]
+    #[link_section = ".CRT$XCU"]
+    static __CTOR: unsafe extern "C" fn() = __ctor;
+};
 pub struct DatabaseState {
     pub pool: ::std::sync::Arc<ConnectionPool>,
 }
@@ -870,6 +904,36 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseState_Data {
 impl ::rpstate::RpState for DatabaseState {
     type Data = DatabaseState_Data;
 }
+#[allow(non_upper_case_globals)]
+const _: () = {
+    static __INVENTORY: ::inventory::Node = ::inventory::Node {
+        value: &{
+            ::rpstate::tauri_codegen::SchemaExportEntry {
+                prefix: Some("sys.database"),
+                struct_name: "DatabaseState",
+                fields: &[
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "pool",
+                        ts_type: "ConnectionPool",
+                        full_ts_type: "ConnectionPool",
+                        kind: ::rpstate::tauri_codegen::FieldKind::Nested {
+                            struct_name: "ConnectionPool",
+                        },
+                    },
+                ],
+            }
+        },
+        next: ::inventory::__private::UnsafeCell::new(
+            ::inventory::__private::Option::None,
+        ),
+    };
+    unsafe extern "C" fn __ctor() {
+        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+    }
+    #[used]
+    #[link_section = ".CRT$XCU"]
+    static __CTOR: unsafe extern "C" fn() = __ctor;
+};
 pub struct InspectorState {
     pub db_pool_view: ::std::sync::Arc<ConnectionPool>,
 }
@@ -1192,4 +1256,35 @@ impl ::rpstate::migration::fields::RpStateFields for InspectorState_Data {
 impl ::rpstate::RpState for InspectorState {
     type Data = InspectorState_Data;
 }
+#[allow(non_upper_case_globals)]
+const _: () = {
+    static __INVENTORY: ::inventory::Node = ::inventory::Node {
+        value: &{
+            ::rpstate::tauri_codegen::SchemaExportEntry {
+                prefix: Some("ui.inspector"),
+                struct_name: "InspectorState",
+                fields: &[
+                    ::rpstate::tauri_codegen::FieldExportMeta {
+                        name: "db_pool_view",
+                        ts_type: "ConnectionPool",
+                        full_ts_type: "ConnectionPool",
+                        kind: ::rpstate::tauri_codegen::FieldKind::LookupNode {
+                            target_prefix: "pool",
+                            struct_name: "ConnectionPool",
+                        },
+                    },
+                ],
+            }
+        },
+        next: ::inventory::__private::UnsafeCell::new(
+            ::inventory::__private::Option::None,
+        ),
+    };
+    unsafe extern "C" fn __ctor() {
+        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+    }
+    #[used]
+    #[link_section = ".CRT$XCU"]
+    static __CTOR: unsafe extern "C" fn() = __ctor;
+};
 fn main() {}

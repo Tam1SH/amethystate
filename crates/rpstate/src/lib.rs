@@ -195,3 +195,5 @@ macro_rules! migrate_field {
         $ctx.nested::<_, _>($key, $old_val)?
     };
 }
+
+pub mod tauri_codegen;

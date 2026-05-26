@@ -17,6 +17,7 @@ pub(crate) enum RpMode {
 }
 
 pub(crate) fn generate_code(
+    crate_name: TokenStream2,
     vis: &Visibility,
     name: &Ident,
     attrs: &[Attribute],
@@ -38,8 +39,9 @@ pub(crate) fn generate_code(
     };
 
     let is_root = prefix.is_some();
-    let schema_methods = accessors::schema_methods(entries);
+    let schema_methods = accessors::schema_methods(&crate_name, entries);
     let fields_impl = data::data_impl(
+        &crate_name,
         vis,
         name,
         attrs,
@@ -48,12 +50,14 @@ pub(crate) fn generate_code(
         &macro_args,
         rp_mode,
     );
-    let struct_fields = accessors::struct_fields(entries);
-    let init_fields = init::init_fields(entries, is_root);
-    let node_impl = accessors::node_impl(name, is_root);
-    let methods = accessors::methods(entries);
-    let scope = accessors::scope(name, prefix);
-    let constructor = accessors::constructor(is_root, &init_fields);
+    let struct_fields = accessors::struct_fields(&crate_name, entries);
+    let init_fields = init::init_fields(&crate_name, entries, is_root);
+    let node_impl = accessors::node_impl(&crate_name, name, is_root);
+    let methods = accessors::methods(&crate_name, entries);
+    let scope = accessors::scope(&crate_name, name, prefix.clone());
+    let constructor = accessors::constructor(&crate_name, is_root, &init_fields);
+
+    let schema_export = generate_schema_export(&crate_name, name, &prefix, entries);
 
     match rp_mode {
         RpMode::Reactive => {
@@ -63,12 +67,14 @@ pub(crate) fn generate_code(
                 impl #name { #constructor #(#schema_methods)* #(#methods)* }
                 #node_impl
                 #fields_impl
+                #schema_export
             }
         }
         RpMode::Persistent => {
             quote! {
                 #scope
                 #fields_impl
+                #schema_export
             }
         }
         RpMode::Both => {
@@ -78,9 +84,121 @@ pub(crate) fn generate_code(
                 impl #name { #constructor #(#schema_methods)* #(#methods)* }
                 #node_impl
                 #fields_impl
+                #schema_export
             }
         }
     }
+}
+
+fn generate_schema_export(
+    crate_name: &TokenStream2,
+    name: &Ident,
+    prefix: &Option<String>,
+    entries: &[StoreFieldEntry],
+) -> TokenStream2 {
+    let struct_name_str = name.to_string();
+    let prefix_tokens = match prefix {
+        Some(p) => quote! { Some(#p) },
+        None => quote! { None },
+    };
+
+    let field_metas = entries.iter().map(|e| {
+        let fname = e.ident.as_ref().unwrap();
+        let fname_str = fname.to_string();
+        let (ts_type, full_ts_type) = map_type_to_ts(&e.ty);
+
+        let kind_tokens = if e.volatile {
+            quote! { #crate_name::tauri_codegen::FieldKind::Volatile }
+        } else if e.nested {
+            let sname = get_type_ident_str(&e.ty);
+            quote! { #crate_name::tauri_codegen::FieldKind::Nested { struct_name: #sname } }
+        } else if let Some(target) = &e.lookup {
+            let target_str = target.to_string();
+            let mutable = e.export_mut;
+            quote! { #crate_name::tauri_codegen::FieldKind::Lookup { target_key: #target_str, mutable: #mutable } }
+        } else if let Some(target) = &e.lookup_node {
+            let target_str = target.to_string();
+            let sname = get_type_ident_str(&e.ty);
+            quote! { #crate_name::tauri_codegen::FieldKind::LookupNode { target_prefix: #target_str, struct_name: #sname } }
+        } else if let Some((k, v)) = e.get_map_types() {
+            let k_ts = map_type_to_ts(k).1;
+            let v_ts = map_type_to_ts(v).1;
+            quote! { #crate_name::tauri_codegen::FieldKind::ReactiveMap { key_type: #k_ts, value_type: #v_ts } }
+        } else {
+            quote! { #crate_name::tauri_codegen::FieldKind::Plain }
+        };
+
+        quote! {
+            #crate_name::tauri_codegen::FieldExportMeta {
+                name: #fname_str,
+                ts_type: #ts_type,
+                full_ts_type: #full_ts_type,
+                kind: #kind_tokens,
+            }
+        }
+    });
+
+    quote! {
+        #[cfg(not(target_arch = "wasm32"))]
+        #crate_name::inventory::submit! {
+            #crate_name::tauri_codegen::SchemaExportEntry {
+                prefix: #prefix_tokens,
+                struct_name: #struct_name_str,
+                fields: &[
+                    #(#field_metas),*
+                ],
+            }
+        }
+    }
+}
+
+fn map_type_to_ts(ty: &syn::Type) -> (String, String) {
+    match ty {
+        syn::Type::Path(type_path) => {
+            if let Some(segment) = type_path.path.segments.last() {
+                let ident_str = segment.ident.to_string();
+                match ident_str.as_str() {
+                    "String" => ("string".to_string(), "string".to_string()),
+                    "bool" => ("boolean".to_string(), "boolean".to_string()),
+                    "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32"
+                    | "i64" | "i128" | "isize" | "f32" | "f64" => {
+                        ("number".to_string(), "number".to_string())
+                    }
+                    "Vec" => {
+                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                            && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
+                        {
+                            let (inner_base, inner_full) = map_type_to_ts(inner_ty);
+                            return (inner_base, format!("{}[]", inner_full));
+                        }
+                        ("any".to_string(), "any[]".to_string())
+                    }
+                    "Option" => {
+                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                            && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
+                        {
+                            let (inner_base, inner_full) = map_type_to_ts(inner_ty);
+                            return (inner_base, format!("{} | null", inner_full));
+                        }
+                        ("any".to_string(), "any | null".to_string())
+                    }
+                    other => (other.to_string(), other.to_string()),
+                }
+            } else {
+                ("any".to_string(), "any".to_string())
+            }
+        }
+        _ => ("any".to_string(), "any".to_string()),
+    }
+}
+
+fn get_type_ident_str(ty: &syn::Type) -> String {
+    if let syn::Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+    {
+        return segment.ident.to_string();
+    }
+    "any".to_string()
 }
 
 struct MapEntry {

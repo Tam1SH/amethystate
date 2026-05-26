@@ -4,6 +4,10 @@ mod model;
 use darling::{FromField, FromMeta, ast::NestedMeta};
 use generate::generate_code;
 use model::{MacroArgs, StoreFieldEntry};
+use proc_macro_crate::{FoundCrate, crate_name};
+use proc_macro2::Span;
+use quote::quote;
+use syn::__private::TokenStream2;
 use syn::{Data, DataStruct, DeriveInput, Fields, parse_macro_input};
 
 pub fn rpstate_impl(
@@ -24,6 +28,7 @@ pub fn rpstate_impl(
     let struct_name = &input.ident;
     let struct_vis = &input.vis;
     let attrs = &input.attrs;
+    let rpstate = rpstate_crate_path();
 
     let named_fields = match &input.data {
         Data::Struct(DataStruct {
@@ -49,6 +54,7 @@ pub fn rpstate_impl(
     }
 
     let expanded = generate_code(
+        rpstate,
         struct_vis,
         struct_name,
         attrs,
@@ -58,4 +64,15 @@ pub fn rpstate_impl(
     );
 
     proc_macro::TokenStream::from(expanded)
+}
+
+pub fn rpstate_crate_path() -> TokenStream2 {
+    match crate_name("rpstate") {
+        Ok(FoundCrate::Itself) => quote!(crate),
+        Ok(FoundCrate::Name(name)) => {
+            let ident = syn::Ident::new(&name, Span::call_site());
+            quote!(::#ident)
+        }
+        _ => quote!(::rpstate),
+    }
 }
