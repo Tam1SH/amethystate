@@ -19,7 +19,7 @@ impl<S: Store> Drop for StoreSubscription<S> {
 }
 
 pub struct Field<TValue, S: Store, M: AccessMode = ReadOnlyMode> {
-    pub signal: Arc<Signal<TValue>>,
+    pub signal: Signal<TValue>,
     pub path: Arc<str>,
     pub store_sub: Option<Arc<StoreSubscription<S>>>,
     pub(crate) _mode: std::marker::PhantomData<M>,
@@ -39,7 +39,7 @@ pub struct Field<TValue, S: Store, M: AccessMode = ReadOnlyMode> {
 impl<TValue, S: Store, M: AccessMode> Clone for Field<TValue, S, M> {
     fn clone(&self) -> Self {
         Self {
-            signal: Arc::clone(&self.signal),
+            signal: self.signal.clone(),
             path: Arc::clone(&self.path),
             store_sub: self.store_sub.clone(),
             _mode: std::marker::PhantomData,
@@ -68,7 +68,7 @@ where
         self.path.clone()
     }
 
-    pub fn as_signal(&self) -> Arc<Signal<TValue>> {
+    pub fn as_signal(&self) -> Signal<TValue> {
         self.signal.clone()
     }
 
@@ -136,7 +136,7 @@ where
 
     pub fn new_volatile(path: Arc<str>, default: TValue) -> Self {
         Self {
-            signal: Arc::new(Signal::new(default)),
+            signal: Signal::new(default),
             path,
             store_sub: None,
             _mode: std::marker::PhantomData,
@@ -149,7 +149,7 @@ where
 
 impl<TValue, S: Store, M: AccessMode> PartialEq for Field<TValue, S, M> {
     fn eq(&self, other: &Self) -> bool {
-        self.path == other.path && Arc::ptr_eq(&self.signal, &other.signal)
+        self.path == other.path && Arc::ptr_eq(&self.signal.value, &other.signal.value)
     }
 }
 
@@ -210,7 +210,7 @@ mod tests {
     fn store_subscription_drop_unsubscribes() {
         let store = unique_store("drop-unsub");
         let calls = Arc::new(AtomicUsize::new(0));
-        let signal = Arc::new(Signal::new("test_val".to_string()));
+        let signal = Signal::new("test_val".to_string());
 
         let cap = calls.clone();
 
@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn field_as_signal_returns_same_arc() {
         let store = unique_store("as-signal");
-        let signal = Arc::new(Signal::new(100i32));
+        let signal = Signal::new(100i32);
         let sub_id = store.subscribe(crate::store::SubscriptionKind::Any, Arc::new(|_| {}));
         let field: Field<i32, DefaultStore> = Field {
             signal: signal.clone(),
@@ -268,7 +268,7 @@ mod tests {
         };
 
         let extracted = field.as_signal();
-        assert!(Arc::ptr_eq(&signal, &extracted));
+        assert!(Arc::ptr_eq(&signal.value, &extracted.value));
     }
 
     #[test]

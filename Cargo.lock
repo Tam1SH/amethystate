@@ -2504,7 +2504,7 @@ dependencies = [
 
 [[package]]
 name = "rpstate"
-version = "0.4.3"
+version = "0.5.0"
 dependencies = [
  "arc-swap",
  "bytes",
@@ -2528,7 +2528,7 @@ dependencies = [
 
 [[package]]
 name = "rpstate-macros"
-version = "0.4.3"
+version = "0.5.0"
 dependencies = [
  "darling",
  "proc-macro-crate 3.5.0",
@@ -3171,7 +3171,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-rpstate"
-version = "0.4.3"
+version = "0.5.0"
 dependencies = [
  "inventory",
  "rpstate",

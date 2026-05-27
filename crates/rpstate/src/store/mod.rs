@@ -112,9 +112,9 @@ where
     let current = store
         .get::<TValue>(&path)?
         .unwrap_or_else(|| default.clone());
-    let signal = Arc::new(Signal::new(current));
+    let signal = Signal::new(current);
 
-    let sig_clone = Arc::clone(&signal);
+    let sig_clone = signal.clone();
     let store_clone = Arc::clone(store);
     let path_log = Arc::clone(&path);
 

@@ -5,11 +5,20 @@ use std::sync::{Arc, Mutex};
 type SignalCallback<T> = Arc<dyn Fn(&T) + Send + Sync + 'static>;
 type SignalSubscribers<T> = Arc<Mutex<Vec<(u64, SignalCallback<T>)>>>;
 
-#[derive(Clone)]
 pub struct Signal<T> {
     pub(crate) value: Arc<ArcSwap<T>>,
     pub(crate) subscribers: SignalSubscribers<T>,
     pub(crate) next_id: Arc<AtomicU64>,
+}
+
+impl<T> Clone for Signal<T> {
+    fn clone(&self) -> Self {
+        Self {
+            value: self.value.clone(),
+            next_id: self.next_id.clone(),
+            subscribers: self.subscribers.clone(),
+        }
+    }
 }
 
 #[derive(Clone)]
