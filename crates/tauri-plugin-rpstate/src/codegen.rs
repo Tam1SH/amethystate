@@ -1,3 +1,4 @@
+use heck::ToLowerCamelCase;
 use rpstate::tauri_codegen::{FieldExportMeta, FieldKind, SchemaExportEntry};
 use std::collections::HashMap;
 
@@ -388,7 +389,7 @@ export class ReactiveMapField<K extends string, V> {
             None => {
                 nested_classes.push_str(&format!("class {}Fields {{\n", entry.struct_name));
                 for field in entry.fields {
-                    let prop_name = to_camel_case(field.name);
+                    let prop_name = field.name.to_lower_camel_case();
                     let prop_type = match &field.kind {
                         FieldKind::Plain | FieldKind::Volatile => {
                             format!("Field<{}>", field.full_ts_type)
@@ -417,7 +418,7 @@ export class ReactiveMapField<K extends string, V> {
                     "    constructor(prefix: string, initialValues?: Record<string, any>) {\n",
                 );
                 for field in entry.fields {
-                    let prop_name = to_camel_case(field.name);
+                    let prop_name = field.name.to_lower_camel_case();
                     match &field.kind {
                         FieldKind::Plain | FieldKind::Volatile => {
                             nested_classes.push_str(&format!(
@@ -484,7 +485,7 @@ export class ReactiveMapField<K extends string, V> {
                 root_classes.push_str(&format!("export class {} {{\n", entry.struct_name));
 
                 for field in entry.fields {
-                    let prop_name = to_camel_case(field.name);
+                    let prop_name = field.name.to_lower_camel_case();
                     let prop_type = match &field.kind {
                         FieldKind::Plain | FieldKind::Volatile => {
                             format!("Field<{}>", field.full_ts_type)
@@ -513,7 +514,7 @@ export class ReactiveMapField<K extends string, V> {
                     schema_name
                 ));
                 for field in entry.fields {
-                    let prop_name = to_camel_case(field.name);
+                    let prop_name = field.name.to_lower_camel_case();
                     let full_key = format!("{}.{}", prefix, field.name);
                     match &field.kind {
                         FieldKind::Plain => {
@@ -665,20 +666,4 @@ fn resolve_fields(
             }
         }
     }
-}
-
-fn to_camel_case(s: &str) -> String {
-    let mut result = String::new();
-    let mut capitalize = false;
-    for c in s.chars() {
-        if c == '_' {
-            capitalize = true;
-        } else if capitalize {
-            result.push(c.to_ascii_uppercase());
-            capitalize = false;
-        } else {
-            result.push(c);
-        }
-    }
-    result
 }

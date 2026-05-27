@@ -19,6 +19,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", default-features = false }
 inventory = { workspace = true }
+heck.workspace = true
 
 [dev-dependencies]
 tauri = { version = "2", default-features = false, features = ["test"] }

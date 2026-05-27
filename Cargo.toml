@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Tam1SH <ignatternyev54@gmail.com>"]
 edition = "2024"
 license = "MIT"
@@ -17,8 +17,8 @@ rust-version = "1.89.0"
 
 [workspace.dependencies]
 # internal
-rpstate = { path = "crates/rpstate", version = "0.5.0" }
-rpstate-macros = { path = "crates/rpstate-macros", version = "0.5.0" }
+rpstate = { path = "crates/rpstate", version = "0.5.1" }
+rpstate-macros = { path = "crates/rpstate-macros", version = "0.5.1" }
 
 # external
 anyhow = "1.0.102"
@@ -34,6 +34,7 @@ serde_json = "1.0.149"
 smol_str = "0.3.6"
 thiserror = "2.0.18"
 tracing = "0.1.44"
+heck = "0.5.0"
 
 # proc-macro
 darling = "0.23.0"
