@@ -540,11 +540,9 @@ To run all auto-generated migrations on startup without any custom steps:
 
 ```rust
 fn auto_migrations() -> rpstate::Result<()> {
-    let store = Arc::new(
-        StoreBuilder::new("./app.redb")
-            .collect_migrations()
-            .build()?
-    );
+    let store = StoreBuilder::new("./app.redb")
+        .collect_migrations()
+        .build()?;
     Ok(())
 }
 ```
