@@ -1,8 +1,8 @@
 use crate::migration::fields::FieldDescriptor;
-use crate::migration::registry::{MigrationDependency, MigrationStepEntry};
+use crate::migration::registry::MigrationDependency;
 use crate::migration::set::MigrationSet;
 use crate::{MigrationContext, Migrator, StateScope};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 #[derive(Default)]
 pub struct MigrationBuilder {
@@ -23,7 +23,10 @@ pub struct PrefixMigrationBuilder<'a> {
 }
 
 impl MigrationBuilder {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn collect_codegen(&mut self) -> &mut Self {
+        use crate::migration::registry::MigrationStepEntry;
+        use std::collections::HashSet;
         let mut groups: HashMap<&'static str, Vec<&'static MigrationStepEntry>> = HashMap::new();
 
         for entry in inventory::iter::<MigrationStepEntry> {

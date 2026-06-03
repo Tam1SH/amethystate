@@ -3,30 +3,29 @@ use darling::util::SpannedValue;
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use syn::{Expr, GenericArgument, Ident, PathArguments, Type, TypePath, Visibility};
 
-#[derive(Debug, darling::FromMeta)]
-pub(crate) struct MacroArgs {
+#[derive(Debug, darling::FromMeta, Clone)]
+pub struct MacroArgs {
     #[darling(default)]
-    pub(crate) prefix: Option<String>,
+    pub prefix: Option<String>,
     #[darling(default)]
-    pub(crate) version: Option<u32>,
+    pub version: Option<u32>,
     #[darling(default)]
-    pub(crate) mode: Option<String>,
+    pub mode: Option<String>,
 }
 
-#[derive(Debug)]
-pub(crate) struct StoreFieldEntry {
-    pub(crate) ident: Option<Ident>,
-    pub(crate) vis: Visibility,
-    pub(crate) ty: Type,
-    #[allow(dead_code)]
-    pub(crate) key: Option<String>,
-    pub(crate) default: Option<TokenStream2>,
-    pub(crate) nested: bool,
-    pub(crate) lookup: Option<SpannedValue<String>>,
-    pub(crate) lookup_node: Option<SpannedValue<String>>,
-    pub(crate) parent: Option<Expr>,
-    pub(crate) export_mut: bool,
-    pub(crate) volatile: bool,
+#[derive(Debug, Clone)]
+pub struct StoreFieldEntry {
+    pub ident: Option<Ident>,
+    pub vis: Visibility,
+    pub ty: Type,
+    pub key: Option<String>,
+    pub default: Option<TokenStream2>,
+    pub nested: bool,
+    pub lookup: Option<SpannedValue<String>>,
+    pub lookup_node: Option<SpannedValue<String>>,
+    pub parent: Option<Expr>,
+    pub export_mut: bool,
+    pub volatile: bool,
 }
 
 impl FromField for StoreFieldEntry {

@@ -14,13 +14,16 @@ use std::str::FromStr;
 pub use backend::redb::RedbStore;
 
 use crate::migration::set::MigrationSet;
-use crate::reactive::{MapChange, ReactiveMap, SubscriberAny, SubscriberKey};
-use crate::{AccessMode, Field, MigrationReport, Result, Signal, StoreSubscription, WritableMode};
+use crate::reactive::{MapChange, ReactiveMap};
+use crate::{
+    AccessMode, DefaultStore, Field, MigrationReport, Result, Signal, StoreSubscription,
+    WritableMode,
+};
 use bytes::Bytes;
+use rpstate_core::{FieldCore, ReactiveMapCore};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use std::sync::atomic::AtomicUsize;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub type SubscriptionId = u64;
 pub type StoreCallback = Arc<dyn Fn(&StoreEvent) + Send + Sync + 'static>;
@@ -60,6 +63,8 @@ pub trait Store: Send + Sync + 'static {
     fn unsubscribe(&self, id: SubscriptionId);
     fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T>;
     fn flush_prefix(&self, prefix: &str) -> Result<()>;
+    fn is_initialized(&self, namespace: &str) -> Result<bool>;
+    fn mark_initialized(&self, namespace: &str) -> Result<()>;
 }
 
 pub trait SchemaAwareStore: Store {
@@ -68,6 +73,10 @@ pub trait SchemaAwareStore: Store {
 
 pub trait StateScope {
     const PREFIX: &'static str;
+}
+
+pub trait RpStateSlice: Sized {
+    fn load_slice(store: &Arc<DefaultStore>) -> Result<Self>;
 }
 
 pub fn scoped_path<T: StateScope>(key: &str) -> String {
@@ -131,16 +140,13 @@ where
     );
 
     Ok(Field {
-        signal,
+        core: FieldCore::new_with_signal(signal),
         path,
         store_sub: Some(Arc::new(StoreSubscription {
             store: Arc::clone(store),
             id,
         })),
         _mode: std::marker::PhantomData,
-        interceptors: Arc::new(Mutex::new(Vec::new())),
-        next_interceptor_id: Arc::new(AtomicUsize::new(0)),
-        intercept_depth: Arc::new(AtomicUsize::new(0)),
     })
 }
 
@@ -156,15 +162,16 @@ where
     V: Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
 {
     let path: Arc<str> = scoped_path::<TScope>(key).into();
-    reactive_map_with_path(store, path, default)
+    reactive_map_with_path::<TScope, _, _, _, _>(store, path, default)
 }
 
-pub fn reactive_map_with_path<K, V, S, M>(
+pub fn reactive_map_with_path<TScope, K, V, S, M>(
     store: &Arc<S>,
     path: Arc<str>,
-    default: HashMap<K, V>,
+    defaults: HashMap<K, V>,
 ) -> Result<ReactiveMap<K, V, S, M>>
 where
+    TScope: StateScope,
     S: Store,
     K: FromStr + Display + Clone + Hash + Eq + Send + Sync + 'static,
     V: Serialize + Default + DeserializeOwned + Clone + Send + Sync + 'static,
@@ -182,26 +189,24 @@ where
         }
     }
 
-    for (k, v) in default {
-        let full_path = format!("{}.{}", path, k);
-        if store.get::<V>(&full_path)?.is_none() {
+    if !store.is_initialized(TScope::PREFIX)? {
+        for (k, v) in defaults {
+            let full_path = format!("{}.{}", path, k);
             store.set(&full_path, &v)?;
+            known_keys.insert(k);
         }
     }
 
-    let known_keys = Arc::new(std::sync::Mutex::new(known_keys));
-    let subscribers_any = Arc::new(Mutex::new(Vec::<(u64, SubscriberAny<K, V>)>::new()));
-    let subscribers_key = Arc::new(Mutex::new(
-        HashMap::<K, Vec<(u64, SubscriberKey<K, V>)>>::new(),
-    ));
+    let core = ReactiveMapCore::new();
+    {
+        let mut keys = core.known_keys.lock().unwrap();
+        *keys = known_keys;
+    }
 
-    let subs_any = Arc::clone(&subscribers_any);
-    let subs_key = Arc::clone(&subscribers_key);
-    let keys_tracker = Arc::clone(&known_keys);
-
-    let path_for_sub = path.clone();
+    let core_clone = core.clone();
     let prefix_for_strip = format!("{}.", path);
     let store_clone = Arc::clone(store);
+    let path_for_sub = path.clone();
 
     let id = store.subscribe(
         SubscriptionKind::Prefix(path_for_sub),
@@ -209,7 +214,7 @@ where
             if let Some(key_str) = event.path.strip_prefix(&prefix_for_strip)
                 && let Ok(k) = K::from_str(key_str)
             {
-                let mut keys = keys_tracker.lock().unwrap();
+                let mut keys = core_clone.known_keys.lock().unwrap();
 
                 let new_val = event
                     .new
@@ -245,39 +250,20 @@ where
                     }
                 };
 
-                if let Ok(lock) = subs_key.lock()
-                    && let Some(cbs) = lock.get(&k)
-                {
-                    for (_, cb) in cbs {
-                        cb(&change);
-                    }
-                }
-                if let Ok(lock) = subs_any.lock() {
-                    for (_, cb) in lock.iter() {
-                        cb(&change);
-                    }
-                }
+                core_clone.notify(&change);
             }
         }),
     );
 
     Ok(ReactiveMap {
+        core,
         path,
         store: Arc::clone(store),
-        _mode: std::marker::PhantomData,
-        _key: std::marker::PhantomData,
-        _value: std::marker::PhantomData,
-        interceptors_any: Arc::new(std::sync::Mutex::new(Vec::new())),
-        interceptors_key: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
-        subscribers_any,
-        subscribers_key,
-        next_id: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        intercept_depth: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         store_sub: Arc::new(StoreSubscription {
             store: Arc::clone(store),
             id,
         }),
-        known_keys,
+        _mode: std::marker::PhantomData,
     })
 }
 

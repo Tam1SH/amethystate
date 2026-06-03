@@ -2,9 +2,9 @@ mod accessors;
 mod data;
 mod init;
 
-use crate::rpstate::model::{MacroArgs, StoreFieldEntry};
 use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
+use rpstate_macros_core::{MacroArgs, StoreFieldEntry};
 use syn::parse::{Parse, ParseStream, Parser};
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Expr, Ident, Token, Visibility};
@@ -50,6 +50,7 @@ pub(crate) fn generate_code(
         &macro_args,
         rp_mode,
     );
+
     let struct_fields = accessors::struct_fields(&crate_name, entries);
     let init_fields = init::init_fields(&crate_name, entries, is_root);
     let node_impl = accessors::node_impl(&crate_name, name, is_root);
@@ -59,8 +60,20 @@ pub(crate) fn generate_code(
 
     let schema_export = generate_schema_export(&crate_name, name, &prefix, entries);
 
+    let slice_impl = if is_root {
+        quote! {
+            impl #crate_name::RpStateSlice for #name {
+                fn load_slice(store: &::std::sync::Arc<#crate_name::DefaultStore>) -> #crate_name::Result<Self> {
+                    Self::new(store)
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     match rp_mode {
-        RpMode::Reactive => {
+        RpMode::Reactive | RpMode::Both => {
             quote! {
                 #[derive(Clone)] #(#attrs)* #vis struct #name { #(#struct_fields,)* }
                 #scope
@@ -68,6 +81,7 @@ pub(crate) fn generate_code(
                 #node_impl
                 #fields_impl
                 #schema_export
+                #slice_impl
             }
         }
         RpMode::Persistent => {
@@ -75,16 +89,7 @@ pub(crate) fn generate_code(
                 #scope
                 #fields_impl
                 #schema_export
-            }
-        }
-        RpMode::Both => {
-            quote! {
-                #[derive(Clone)] #(#attrs)* #vis struct #name { #(#struct_fields,)* }
-                #scope
-                impl #name { #constructor #(#schema_methods)* #(#methods)* }
-                #node_impl
-                #fields_impl
-                #schema_export
+                #slice_impl
             }
         }
     }
@@ -107,6 +112,9 @@ fn generate_schema_export(
         let fname_str = fname.to_string();
         let (ts_type, full_ts_type) = map_type_to_ts(&e.ty);
 
+        let ty = &e.ty;
+        let rust_type_str = quote!(#ty).to_string();
+
         let kind_tokens = if e.volatile {
             quote! { #crate_name::tauri_codegen::FieldKind::Volatile }
         } else if e.nested {
@@ -123,7 +131,16 @@ fn generate_schema_export(
         } else if let Some((k, v)) = e.get_map_types() {
             let k_ts = map_type_to_ts(k).1;
             let v_ts = map_type_to_ts(v).1;
-            quote! { #crate_name::tauri_codegen::FieldKind::ReactiveMap { key_type: #k_ts, value_type: #v_ts } }
+            let k_rust = quote!(#k).to_string();
+            let v_rust = quote!(#v).to_string();
+            quote! {
+                #crate_name::tauri_codegen::FieldKind::ReactiveMap {
+                    key_type: #k_ts,
+                    value_type: #v_ts,
+                    key_rust_type: #k_rust,
+                    value_rust_type: #v_rust,
+                }
+            }
         } else {
             quote! { #crate_name::tauri_codegen::FieldKind::Plain }
         };
@@ -133,22 +150,27 @@ fn generate_schema_export(
                 name: #fname_str,
                 ts_type: #ts_type,
                 full_ts_type: #full_ts_type,
+                rust_type: #rust_type_str,
                 kind: #kind_tokens,
             }
         }
     });
 
-    quote! {
-        #[cfg(not(target_arch = "wasm32"))]
-        #crate_name::inventory::submit! {
-            #crate_name::tauri_codegen::SchemaExportEntry {
-                prefix: #prefix_tokens,
-                struct_name: #struct_name_str,
-                fields: &[
-                    #(#field_metas),*
-                ],
+    if cfg!(feature = "codegen") {
+        quote! {
+            #[cfg(not(target_arch = "wasm32"))]
+            #crate_name::inventory::submit! {
+                #crate_name::tauri_codegen::SchemaExportEntry {
+                    prefix: #prefix_tokens,
+                    struct_name: #struct_name_str,
+                    fields: &[
+                        #(#field_metas),*
+                    ],
+                }
             }
         }
+    } else {
+        quote!()
     }
 }
 

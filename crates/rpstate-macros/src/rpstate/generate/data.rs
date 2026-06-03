@@ -1,8 +1,8 @@
 use super::RpMode;
 use crate::rpstate::generate::parse_default;
-use crate::rpstate::model::{MacroArgs, StoreFieldEntry};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
+use rpstate_macros_core::{MacroArgs, StoreFieldEntry};
 use syn::Ident;
 
 pub(crate) fn persistent_fields(entries: &[StoreFieldEntry]) -> Vec<&StoreFieldEntry> {

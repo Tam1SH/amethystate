@@ -24,7 +24,8 @@ impl AppConfig {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
     ) -> ::rpstate::Result<Self> {
-        Ok(Self {
+        use ::rpstate::Store;
+        let result = Self {
             port: ::rpstate::field::<Self, u16>(store, "port", 8080)?,
             session_id: ::rpstate::Field::new_volatile(
                 ::std::sync::Arc::from(
@@ -39,7 +40,9 @@ impl AppConfig {
                 ),
                 "localhost".to_string(),
             ),
-        })
+        };
+        store.mark_initialized(<Self as ::rpstate::StateScope>::PREFIX)?;
+        Ok(result)
     }
     #[doc(hidden)]
     pub fn __schema_field_port(&self) -> ::rpstate::ReadOnly<u16> {
@@ -397,38 +400,11 @@ impl ::rpstate::migration::fields::RpStateFields for AppConfig_Data {
 impl ::rpstate::RpState for AppConfig {
     type Data = AppConfig_Data;
 }
-#[allow(non_upper_case_globals)]
-const _: () = {
-    static __INVENTORY: ::inventory::Node = ::inventory::Node {
-        value: &{
-            ::rpstate::tauri_codegen::SchemaExportEntry {
-                prefix: Some("app"),
-                struct_name: "AppConfig",
-                fields: &[
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "port",
-                        ts_type: "number",
-                        full_ts_type: "number",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
-                    },
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "session_id",
-                        ts_type: "string",
-                        full_ts_type: "string",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Volatile,
-                    },
-                ],
-            }
-        },
-        next: ::inventory::__private::UnsafeCell::new(
-            ::inventory::__private::Option::None,
-        ),
-    };
-    unsafe extern "C" fn __ctor() {
-        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+impl ::rpstate::RpStateSlice for AppConfig {
+    fn load_slice(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<Self> {
+        Self::new(store)
     }
-    #[used]
-    #[link_section = ".CRT$XCU"]
-    static __CTOR: unsafe extern "C" fn() = __ctor;
-};
+}
 fn main() {}

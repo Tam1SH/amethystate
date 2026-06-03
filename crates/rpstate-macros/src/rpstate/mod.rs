@@ -1,12 +1,11 @@
 mod generate;
-mod model;
 
 use darling::{FromField, FromMeta, ast::NestedMeta};
 use generate::generate_code;
-use model::{MacroArgs, StoreFieldEntry};
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::Span;
 use quote::quote;
+use rpstate_macros_core::{MacroArgs, StoreFieldEntry};
 use syn::__private::TokenStream2;
 use syn::{Data, DataStruct, DeriveInput, Fields, parse_macro_input};
 

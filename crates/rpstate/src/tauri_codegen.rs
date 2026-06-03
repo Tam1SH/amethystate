@@ -8,6 +8,8 @@ pub enum FieldKind {
     ReactiveMap {
         key_type: &'static str,
         value_type: &'static str,
+        key_rust_type: &'static str,
+        value_rust_type: &'static str,
     },
     Lookup {
         target_key: &'static str,
@@ -24,6 +26,7 @@ pub struct FieldExportMeta {
     pub name: &'static str,
     pub ts_type: &'static str,
     pub full_ts_type: &'static str,
+    pub rust_type: &'static str,
     pub kind: FieldKind,
 }
 

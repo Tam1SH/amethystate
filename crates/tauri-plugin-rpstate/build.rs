@@ -1,6 +1,7 @@
 const COMMANDS: &[&str] = &[
     "rpstate_get",
     "rpstate_set",
+    "rpstate_delete",
     "rpstate_subscribe",
     "rpstate_unsubscribe",
     "rpstate_get_prefix",

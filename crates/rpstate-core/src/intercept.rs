@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(crate) const MAX_INTERCEPT_DEPTH: usize = 10;
 
-pub(crate) struct InterceptGuard {
+pub struct InterceptGuard {
     depth: Arc<AtomicUsize>,
 }
 

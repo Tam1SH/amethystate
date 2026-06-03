@@ -12,6 +12,12 @@ use crate::{DefaultStore, MigrationReport, Result};
 pub struct NoMigrations;
 pub struct WithMigrations;
 
+#[cfg(feature = "redb")]
+const FILE_EXTENSION: &str = "redb";
+
+#[cfg(all(feature = "json", not(feature = "redb")))]
+const FILE_EXTENSION: &str = "json";
+
 pub struct StoreBuilder<M = NoMigrations> {
     config: StoreConfig,
     migration_set: MigrationSet,
@@ -20,11 +26,35 @@ pub struct StoreBuilder<M = NoMigrations> {
 
 impl StoreBuilder<NoMigrations> {
     pub fn new(path: impl Into<PathBuf>) -> Self {
+        let mut path: PathBuf = path.into();
+
+        if path.extension().is_none() {
+            path.set_extension(FILE_EXTENSION);
+        }
+
         Self {
             config: StoreConfig::new(path),
             migration_set: MigrationSet::default(),
             _state: PhantomData,
         }
+    }
+
+    pub fn for_app(app_name: impl AsRef<str>) -> std::io::Result<Self> {
+        let app_name = app_name.as_ref();
+
+        let proj_dirs = directories::ProjectDirs::from("", "", app_name).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Failed to resolve system application directories",
+            )
+        })?;
+
+        let data_dir = proj_dirs.data_dir();
+        std::fs::create_dir_all(data_dir)?;
+
+        let path = data_dir.join(app_name);
+
+        Ok(Self::new(path))
     }
 }
 
@@ -52,6 +82,7 @@ impl<M> StoreBuilder<M> {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn collect_migrations(self) -> StoreBuilder<WithMigrations> {
         let mut builder = MigrationBuilder::default();
         builder.collect_codegen();

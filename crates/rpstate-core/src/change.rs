@@ -3,12 +3,7 @@ pub struct Change<T> {
     pub old_value: T,
     pub new_value: T,
 }
-impl<T> Change<T> {
-    pub fn with_value(mut self, value: T) -> Self {
-        self.new_value = value;
-        self
-    }
-}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum MapChange<K, V> {
     Insert { key: K, value: V },
@@ -16,6 +11,7 @@ pub enum MapChange<K, V> {
     Remove { key: K, old_value: V },
     Clear,
 }
+
 impl<K, V> MapChange<K, V> {
     pub fn key(&self) -> Option<&K> {
         match self {

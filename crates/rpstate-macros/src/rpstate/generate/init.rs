@@ -1,8 +1,8 @@
 use crate::rpstate::generate::accessors::{field_mode, lookup_chain};
 use crate::rpstate::generate::parse_default;
-use crate::rpstate::model::StoreFieldEntry;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, quote_spanned};
+use rpstate_macros_core::StoreFieldEntry;
 
 pub(crate) fn init_fields(
     crate_name: &TokenStream2,
@@ -91,7 +91,7 @@ fn init_field(crate_name: &TokenStream2, e: &StoreFieldEntry, is_root: bool) -> 
 
         if is_root {
             quote! {
-                #fname: #crate_name::reactive_map::<Self, #k, #v, _>(store, #key, #def)?
+                #fname: #crate_name::reactive_map::<Self, #k, #v>(store, #key, #def)?
             }
         } else {
             quote! {

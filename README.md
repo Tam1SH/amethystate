@@ -31,30 +31,22 @@ reason, though minor releases may still contain breaking changes if real usage e
 
 ## Examples
 
-Run the examples from the repository root:
-
-```shell
-cargo run --manifest-path examples/egui-settings/Cargo.toml
-cargo run --manifest-path examples/iced-settings/Cargo.toml
-cargo run --manifest-path examples/slint-settings/Cargo.toml
-cargo run --manifest-path examples/dioxus-settings/Cargo.toml
-```
-
-| Example           | GUI model                         | rpstate usage                                                                                                          |
-|-------------------|-----------------------------------|------------------------------------------------------------------------------------------------------------------------|
-| `egui-settings`   | immediate-mode UI                 | reactive fields read during `update`, writes from widgets, derived pipeline                                            |
-| `iced-settings`   | TEA/MVU                           | persistent-only `State::load`, plain data mutation in `update`                                                         |
-| `slint-settings`  | property bindings + event loop    | reactive fields, `ReactiveScope`, pipeline subscription updating Slint properties                                      |
-| `dioxus-settings` | components + fine-grained signals | custom hooks bridging reactive fields and pipelines to Dioxus signals via async channels                               |
-| `tauri-settings`  | Tauri v2 + vanilla TS frontend    | `AppSettings.load()`, sync `.value` reads/writes, `.subscribe()` for cross-component sync, theme + counter persistence |
+| Example            | GUI model                         | rpstate usage                                                                                                                             |
+|--------------------|-----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `egui-settings`    | immediate-mode UI                 | reactive fields read during `update`, writes from widgets, derived pipeline                                                               |
+| `iced-settings`    | TEA/MVU                           | persistent-only `State::load`, plain data mutation in `update`                                                                            |
+| `slint-settings`   | property bindings + event loop    | reactive fields, `ReactiveScope`, pipeline subscription updating Slint properties                                                         |
+| `dioxus-settings`  | components + fine-grained signals | custom hooks bridging reactive fields and pipelines to Dioxus signals via async channels                                                  |
+| `ratatui-settings` | TUI poll loop                     | persistent-only `State::load`, direct struct reads in loop, `mutate_lazy()` for deferred writes                                           |
+| `tauri-settings`   | Tauri v2 + vanilla TS frontend    | `AppSettings.load()`, sync `.value` reads/writes, `.subscribe()`, generated bindings                                                      |
+| `tauri-leptos`     | Tauri v2 + Leptos frontend        | `use_rpstate_field` hooks bridging `Field<T>` to Leptos signals, nested state, `ReactiveMap`, pipelines via `.pipe()`, generated bindings |
 
 ## Quick start
 
 By default, `rpstate` structures are compiled in **`reactive`** mode. This exposes reactive `Field<T>` handles with automatic change propagation.
 
 ```rust
-use rpstate::{IntoPipeline, ReactiveScope, rpstate};
-use rpstate::store::builder::StoreBuilder;
+use rpstate::{StoreBuilder, IntoPipeline, ReactiveScope, rpstate};
 
 #[rpstate(prefix = "network")]
 pub struct NetworkState {
@@ -66,7 +58,7 @@ pub struct NetworkState {
 }
 
 fn main() -> rpstate::Result<()> {
-    let store = StoreBuilder::new("./app.redb").build()?;
+    let store = StoreBuilder::new("./app").build()?;
 
     let state = NetworkState::new(&store)?;
 
@@ -421,6 +413,12 @@ state.limits().intercept(|change| {
     Some(change)
 });
 ```
+
+
+
+### Default values
+
+`#[state(default = ...)]` is applied only on first initialization. To add new default entries in a later version, use a migration step.
 
 ### Storage
 Data is persisted using the path format `{prefix}.{field_name}.{key}` (e.g., `sys.limits.cpu`).

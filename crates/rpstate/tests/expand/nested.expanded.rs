@@ -16,7 +16,8 @@ impl DatabaseConfig {
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         namespace: &str,
     ) -> ::rpstate::Result<Self> {
-        Ok(Self {
+        use ::rpstate::Store;
+        let result = Self {
             host: ::rpstate::store::field_with_path(
                 store,
                 ::std::sync::Arc::from(
@@ -26,7 +27,9 @@ impl DatabaseConfig {
                 ),
                 "localhost".to_string(),
             )?,
-        })
+        };
+        store.mark_initialized(namespace)?;
+        Ok(result)
     }
     #[doc(hidden)]
     pub fn __schema_field_host(&self) -> ::rpstate::ReadOnly<String> {
@@ -379,34 +382,6 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseConfig_Data {
 impl ::rpstate::RpState for DatabaseConfig {
     type Data = DatabaseConfig_Data;
 }
-#[allow(non_upper_case_globals)]
-const _: () = {
-    static __INVENTORY: ::inventory::Node = ::inventory::Node {
-        value: &{
-            ::rpstate::tauri_codegen::SchemaExportEntry {
-                prefix: None,
-                struct_name: "DatabaseConfig",
-                fields: &[
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "host",
-                        ts_type: "string",
-                        full_ts_type: "string",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
-                    },
-                ],
-            }
-        },
-        next: ::inventory::__private::UnsafeCell::new(
-            ::inventory::__private::Option::None,
-        ),
-    };
-    unsafe extern "C" fn __ctor() {
-        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
-    }
-    #[used]
-    #[link_section = ".CRT$XCU"]
-    static __CTOR: unsafe extern "C" fn() = __ctor;
-};
 pub struct SystemSettings {
     pub db: ::std::sync::Arc<DatabaseConfig>,
 }
@@ -426,7 +401,8 @@ impl SystemSettings {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
     ) -> ::rpstate::Result<Self> {
-        Ok(Self {
+        use ::rpstate::Store;
+        let result = Self {
             db: ::std::sync::Arc::new(
                 DatabaseConfig::new(
                     store,
@@ -439,7 +415,9 @@ impl SystemSettings {
                     }),
                 )?,
             ),
-        })
+        };
+        store.mark_initialized(<Self as ::rpstate::StateScope>::PREFIX)?;
+        Ok(result)
     }
     #[doc(hidden)]
     pub fn __schema_field_db(&self) -> ::rpstate::ReadOnly<DatabaseConfig> {
@@ -799,34 +777,11 @@ impl ::rpstate::migration::fields::RpStateFields for SystemSettings_Data {
 impl ::rpstate::RpState for SystemSettings {
     type Data = SystemSettings_Data;
 }
-#[allow(non_upper_case_globals)]
-const _: () = {
-    static __INVENTORY: ::inventory::Node = ::inventory::Node {
-        value: &{
-            ::rpstate::tauri_codegen::SchemaExportEntry {
-                prefix: Some("sys"),
-                struct_name: "SystemSettings",
-                fields: &[
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "db",
-                        ts_type: "DatabaseConfig",
-                        full_ts_type: "DatabaseConfig",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Nested {
-                            struct_name: "DatabaseConfig",
-                        },
-                    },
-                ],
-            }
-        },
-        next: ::inventory::__private::UnsafeCell::new(
-            ::inventory::__private::Option::None,
-        ),
-    };
-    unsafe extern "C" fn __ctor() {
-        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+impl ::rpstate::RpStateSlice for SystemSettings {
+    fn load_slice(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<Self> {
+        Self::new(store)
     }
-    #[used]
-    #[link_section = ".CRT$XCU"]
-    static __CTOR: unsafe extern "C" fn() = __ctor;
-};
+}
 fn main() {}

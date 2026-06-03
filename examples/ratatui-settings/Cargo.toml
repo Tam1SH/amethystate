@@ -1,0 +1,12 @@
+[package]
+name = "ratatui-settings"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+ratatui = { version = "0.30" }
+crossterm = { version = "0.28", features = ["events"] }
+rpstate = { path = "../../crates/rpstate" }
+serde = { version = "1.0.228", features = ["derive"] }

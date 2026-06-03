@@ -8,18 +8,28 @@ repository.workspace = true
 rust-version.workspace = true
 links = "tauri-plugin-rpstate"
 
-description = "Tauri v2 plugin that exposes rpstate reactive persistent state to the frontend, with TypeScript codegen"
+description = "Tauri v2 plugin that exposes rpstate reactive persistent state to the frontend, with TypeScript/Rust codegen"
 readme = "README.md"
 keywords = ["tauri", "state", "reactive", "persistence", "gui"]
 categories = ["gui", "config"]
 
 [dependencies]
-rpstate = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tauri = { version = "2", default-features = false }
+log = "0.4.30"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rpstate = { workspace = true, features = ["codegen"] }
 inventory = { workspace = true }
+tauri = { version = "2", default-features = false }
 heck.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+rpstate-core = { path = "../rpstate-core" }
+wasm-bindgen-futures = "0.4.72"
+tauri-sys = { git = "https://github.com/JonasKruckenberg/tauri-sys", features = ["all"] }
+futures = "0.3.32"
+serde-wasm-bindgen = "0.6.5"
 
 [dev-dependencies]
 tauri = { version = "2", default-features = false, features = ["test"] }

@@ -1,73 +1,65 @@
 use crate::error::Error;
-use crate::reactive::change::MapChange;
-use crate::reactive::intercept::{InterceptDisposer, InterceptGuard};
 use crate::store::Store;
-use crate::{AccessMode, DefaultStore, ReadOnlyMode, Result, StoreSubscription, WritableMode};
+use crate::{
+    AccessMode, DefaultStore, Field, ReadOnlyMode, Result, StoreSubscription, WritableMode,
+};
+use rpstate_core::{InterceptDisposer, MapChange, ReactiveMapCore, SignalSubscription};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
-
-pub struct MapSubscription {
-    pub(crate) id: u64,
-    pub(crate) cleanup: Arc<dyn Fn(u64) + Send + Sync + 'static>,
-}
-
-impl Drop for MapSubscription {
-    fn drop(&mut self) {
-        (self.cleanup)(self.id);
-    }
-}
-
-pub type InterceptorAny<K, V> =
-    Arc<dyn Fn(MapChange<K, V>) -> Option<MapChange<K, V>> + Send + Sync + 'static>;
-pub type InterceptorKey<K, V> =
-    Arc<dyn Fn(MapChange<K, V>) -> Option<MapChange<K, V>> + Send + Sync + 'static>;
-pub type SubscriberAny<K, V> = Arc<dyn Fn(&MapChange<K, V>) + Send + Sync + 'static>;
-pub type SubscriberKey<K, V> = Arc<dyn Fn(&MapChange<K, V>) + Send + Sync + 'static>;
+use std::sync::Arc;
 
 pub struct ReactiveMap<K, V, S: Store = DefaultStore, M: AccessMode = ReadOnlyMode> {
+    pub core: ReactiveMapCore<K, V>,
     pub path: Arc<str>,
     pub store: Arc<S>,
-    pub(crate) _mode: PhantomData<M>,
-    pub(crate) _key: PhantomData<K>,
-    pub(crate) _value: PhantomData<V>,
-
-    pub(crate) interceptors_any: Arc<Mutex<Vec<(u64, InterceptorAny<K, V>)>>>,
-    pub(crate) interceptors_key: Arc<Mutex<HashMap<K, Vec<(u64, InterceptorKey<K, V>)>>>>,
-
-    pub(crate) subscribers_any: Arc<Mutex<Vec<(u64, SubscriberAny<K, V>)>>>,
-    pub(crate) subscribers_key: Arc<Mutex<HashMap<K, Vec<(u64, SubscriberKey<K, V>)>>>>,
-
-    pub(crate) next_id: Arc<AtomicU64>,
-    pub(crate) intercept_depth: Arc<AtomicUsize>,
     pub(crate) store_sub: Arc<StoreSubscription<S>>,
-
-    pub(crate) known_keys: Arc<Mutex<std::collections::HashSet<K>>>,
+    pub(crate) _mode: PhantomData<M>,
 }
+
+pub type ReadOnlyReactiveMap<TValue, S> = Field<TValue, S, ReadOnlyMode>;
+pub type WritableReactiveMap<TValue, S> = Field<TValue, S, WritableMode>;
 
 impl<K, V, S: Store, M: AccessMode> Clone for ReactiveMap<K, V, S, M> {
     fn clone(&self) -> Self {
         Self {
+            core: self.core.clone(),
             path: self.path.clone(),
             store: self.store.clone(),
-            _mode: PhantomData,
-            _key: PhantomData,
-            _value: PhantomData,
-            interceptors_any: self.interceptors_any.clone(),
-            interceptors_key: self.interceptors_key.clone(),
-            subscribers_any: self.subscribers_any.clone(),
-            subscribers_key: self.subscribers_key.clone(),
-            next_id: self.next_id.clone(),
-            intercept_depth: self.intercept_depth.clone(),
             store_sub: self.store_sub.clone(),
-            known_keys: self.known_keys.clone(),
+            _mode: PhantomData,
         }
+    }
+}
+
+impl<K, V, S, M> std::fmt::Debug for ReactiveMap<K, V, S, M>
+where
+    K: std::fmt::Debug + FromStr + Display + Clone + Hash + Eq + Send + Sync + 'static,
+    V: std::fmt::Debug + Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
+    S: Store,
+    M: AccessMode,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut d = f.debug_struct("ReactiveMap");
+        d.field("path", &self.path);
+
+        match self.entries() {
+            Ok(entries) => {
+                d.field("entries", &entries);
+            }
+            Err(e) => {
+                d.field("entries_error", &format_args!("{:?}", e));
+
+                if let Ok(keys) = self.core.known_keys.try_lock() {
+                    d.field("known_keys", &*keys);
+                }
+            }
+        }
+
+        d.field("core", &self.core).finish()
     }
 }
 
@@ -112,48 +104,18 @@ where
         self.len().map(|l| l == 0)
     }
 
-    pub fn subscribe_any<F>(&self, callback: F) -> MapSubscription
+    pub fn subscribe_any<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
     {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.subscribers_any
-            .lock()
-            .unwrap()
-            .push((id, Arc::new(callback)));
-        let subs = self.subscribers_any.clone();
-        MapSubscription {
-            id,
-            cleanup: Arc::new(move |id| {
-                if let Ok(mut lock) = subs.lock() {
-                    lock.retain(|(i, _)| *i != id);
-                }
-            }),
-        }
+        self.core.subscribe_any(callback)
     }
 
-    pub fn subscribe_key<F>(&self, key: K, callback: F) -> MapSubscription
+    pub fn subscribe_key<F>(&self, key: K, callback: F) -> SignalSubscription
     where
         F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
     {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.subscribers_key
-            .lock()
-            .unwrap()
-            .entry(key.clone())
-            .or_default()
-            .push((id, Arc::new(callback)));
-        let subs = self.subscribers_key.clone();
-        MapSubscription {
-            id,
-            cleanup: Arc::new(move |id| {
-                if let Ok(mut lock) = subs.lock()
-                    && let Some(list) = lock.get_mut(&key)
-                {
-                    list.retain(|(i, _)| *i != id);
-                }
-            }),
-        }
+        self.core.subscribe_key(key, callback)
     }
 }
 
@@ -196,7 +158,7 @@ where
 
     pub fn remove(&self, key: K) -> Result<Option<V>> {
         let exists = {
-            let keys = self.known_keys.lock().unwrap();
+            let keys = self.core.known_keys.lock().unwrap();
             keys.contains(&key)
         };
 
@@ -213,7 +175,7 @@ where
             self.apply_change(change)?;
             Ok(Some(old))
         } else {
-            self.known_keys.lock().unwrap().remove(&key);
+            self.core.known_keys.lock().unwrap().remove(&key);
             Ok(None)
         }
     }
@@ -222,54 +184,18 @@ where
         self.apply_change(MapChange::Clear)
     }
 
-    fn apply_change(&self, mut change: MapChange<K, V>) -> Result<()> {
+    fn apply_change(&self, change: MapChange<K, V>) -> Result<()> {
         let context_path: Arc<str> = match change.key() {
             Some(key) => format!("{}.{}", self.path, key).into(),
             None => self.path.clone(),
         };
 
-        if let Some(_guard) = InterceptGuard::enter(&self.intercept_depth, context_path) {
-            let mut keys_to_intercept = Vec::new();
-            if let Some(k) = change.key() {
-                keys_to_intercept.push(k.clone());
-            } else {
-                let lock = self.interceptors_key.lock().unwrap();
-                keys_to_intercept = lock.keys().cloned().collect();
-            }
+        let processed_change = self
+            .core
+            .run_interceptors(context_path, change)
+            .map_err(|_| Error::Intercepted)?;
 
-            for key in keys_to_intercept {
-                let interceptors = {
-                    let lock = self.interceptors_key.lock().unwrap();
-                    lock.get(&key).cloned().unwrap_or_default()
-                };
-                for (_, interceptor) in interceptors {
-                    if let Some(new_change) = interceptor(change.clone()) {
-                        change = new_change;
-                    } else {
-                        return Err(Error::Intercepted);
-                    }
-                }
-            }
-
-            let interceptors_any = {
-                let lock = self.interceptors_any.lock().unwrap();
-                lock.clone()
-            };
-            for (_, interceptor) in interceptors_any {
-                if let Some(new_change) = interceptor(change.clone()) {
-                    change = new_change;
-                } else {
-                    return Err(Error::Intercepted);
-                }
-            }
-        } else {
-            tracing::warn!(
-                path = %self.path,
-                "max intercept depth reached, skipping map interceptors"
-            );
-        }
-
-        match &change {
+        match &processed_change {
             MapChange::Insert { key, value }
             | MapChange::Update {
                 key,
@@ -289,6 +215,7 @@ where
                 for (full_path, _) in kvs {
                     self.store.delete(&full_path)?;
                 }
+                self.core.notify(&processed_change);
             }
         }
 
@@ -299,56 +226,39 @@ where
     where
         F: Fn(MapChange<K, V>) -> Option<MapChange<K, V>> + Send + Sync + 'static,
     {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.interceptors_any
-            .lock()
-            .unwrap()
-            .push((id, Arc::new(callback)));
-        let subs = self.interceptors_any.clone();
-        InterceptDisposer {
-            id,
-            path: self.path.clone(),
-            cleanup: Arc::new(move |id| {
-                if let Ok(mut lock) = subs.lock() {
-                    lock.retain(|(i, _)| *i != id);
-                }
-            }),
-        }
+        self.core.intercept(self.path.clone(), callback)
     }
 
     pub fn intercept_key<F>(&self, key: K, callback: F) -> InterceptDisposer
     where
         F: Fn(MapChange<K, V>) -> Option<MapChange<K, V>> + Send + Sync + 'static,
     {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.interceptors_key
-            .lock()
-            .unwrap()
-            .entry(key.clone())
-            .or_default()
-            .push((id, Arc::new(callback)));
-        let subs = self.interceptors_key.clone();
-        InterceptDisposer {
-            id,
-            path: self.path.clone(),
-            cleanup: Arc::new(move |id| {
-                if let Ok(mut lock) = subs.lock()
-                    && let Some(list) = lock.get_mut(&key)
-                {
-                    list.retain(|(i, _)| *i != id);
-                }
-            }),
-        }
+        self.core.intercept_key(key, callback)
     }
 }
 
+impl<K, V, S: Store, M: AccessMode> PartialEq for ReactiveMap<K, V, S, M> {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path && Arc::ptr_eq(&self.core.next_id, &other.core.next_id)
+    }
+}
+
+impl<K, V, S: Store, M: AccessMode> Eq for ReactiveMap<K, V, S, M> {}
+
 #[cfg(test)]
 mod tests {
+    struct TestScope;
+    impl crate::StateScope for TestScope {
+        const PREFIX: &'static str = "test";
+    }
+
     use super::*;
     use crate::DefaultStore;
-    use crate::reactive::access::WritableMode;
     use crate::store::builder::StoreBuilder;
+    use rpstate_core::WritableMode;
+    use std::collections::HashMap;
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
     use tracing_test::traced_test;
 
@@ -370,7 +280,12 @@ mod tests {
         let path: Arc<str> = Arc::from("test_map.data");
 
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(&store, path, HashMap::new()).unwrap();
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
+                &store,
+                path,
+                HashMap::new(),
+            )
+            .unwrap();
 
         map.set_or_create("a".into(), &10).unwrap();
         assert_eq!(map.get(&"a".into()).unwrap(), Some(10));
@@ -398,7 +313,7 @@ mod tests {
     fn test_map_intercept_and_reject() {
         let store = setup_store("reject");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
                 Arc::from("test.intercept"),
                 HashMap::new(),
@@ -427,7 +342,7 @@ mod tests {
     fn test_map_intercept_transform() {
         let store = setup_store("transform");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
                 Arc::from("test.transform"),
                 HashMap::new(),
@@ -459,8 +374,12 @@ mod tests {
     fn test_map_subscriptions() {
         let store = setup_store("subs");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(&store, Arc::from("test.subs"), HashMap::new())
-                .unwrap();
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
+                &store,
+                Arc::from("test.subs"),
+                HashMap::new(),
+            )
+            .unwrap();
 
         let events = Arc::new(Mutex::new(Vec::new()));
         let e_clone = events.clone();
@@ -487,7 +406,7 @@ mod tests {
     fn test_reentrancy_guard() {
         let store = setup_store("reentrancy");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
                 Arc::from("test.reentrancy"),
                 HashMap::new(),
@@ -514,25 +433,41 @@ mod tests {
     fn test_map_clear() {
         let store = setup_store("clear");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(&store, Arc::from("test.clear"), HashMap::new())
-                .unwrap();
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
+                &store,
+                Arc::from("test.clear"),
+                HashMap::new(),
+            )
+            .unwrap();
 
         map.set_or_create("k1".into(), &1).unwrap();
         map.set_or_create("k2".into(), &2).unwrap();
 
         assert_eq!(map.len().unwrap(), 2);
 
+        let clear_events_count = Arc::new(AtomicUsize::new(0));
+        let clear_events_count_clone = clear_events_count.clone();
+
+        let _sub = map.subscribe_any(move |change| {
+            if let MapChange::Clear = change {
+                clear_events_count_clone.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+
         map.clear().unwrap();
         store.save_now().unwrap();
 
         assert_eq!(map.len().unwrap(), 0);
         assert!(map.is_empty().unwrap());
+
+        assert_eq!(clear_events_count.load(Ordering::SeqCst), 1);
     }
+
     #[test]
     fn test_contains_key_and_cleanup() {
         let store = setup_store("contains");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
                 Arc::from("test.contains"),
                 HashMap::new(),
@@ -562,8 +497,12 @@ mod tests {
     fn test_key_specific_logic() {
         let store = setup_store("key_spec");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(&store, Arc::from("test.keyspec"), HashMap::new())
-                .unwrap();
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
+                &store,
+                Arc::from("test.keyspec"),
+                HashMap::new(),
+            )
+            .unwrap();
 
         map.set_or_create("target".into(), &10).unwrap();
         map.set_or_create("other".into(), &20).unwrap();
@@ -601,7 +540,12 @@ mod tests {
 
         {
             let map_str: ReactiveMap<String, String, DefaultStore, WritableMode> =
-                crate::store::reactive_map_with_path(&store, path.clone(), HashMap::new()).unwrap();
+                crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
+                    &store,
+                    path.clone(),
+                    HashMap::new(),
+                )
+                .unwrap();
 
             map_str
                 .set_or_create("not_int_key".into(), &"1".into())
@@ -612,7 +556,12 @@ mod tests {
         }
 
         let map_int: ReactiveMap<i32, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(&store, path, HashMap::new()).unwrap();
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
+                &store,
+                path,
+                HashMap::new(),
+            )
+            .unwrap();
 
         let entries = map_int.entries().unwrap();
 
@@ -625,8 +574,12 @@ mod tests {
     fn test_remove_edge_cases() {
         let store = setup_store("remove_edge");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(&store, Arc::from("test.remove"), HashMap::new())
-                .unwrap();
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
+                &store,
+                Arc::from("test.remove"),
+                HashMap::new(),
+            )
+            .unwrap();
 
         let res = map.remove("none".into()).unwrap();
         assert!(res.is_none());
@@ -644,7 +597,7 @@ mod tests {
     fn test_map_recursion_warning() {
         let store = setup_store("map_trace");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
-            crate::store::reactive_map_with_path(
+            crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
                 Arc::from("test.recursive_map"),
                 HashMap::new(),

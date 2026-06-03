@@ -132,3 +132,10 @@ pub async fn rpstate_unsubscribe(
     }
     Ok(())
 }
+#[tauri::command]
+pub async fn rpstate_delete(
+    store: State<'_, Arc<rpstate::DefaultStore>>,
+    key: String,
+) -> Result<(), String> {
+    store.delete(&key).map_err(|e| e.to_string())
+}

@@ -1,6 +1,6 @@
-use crate::rpstate::model::StoreFieldEntry;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
+use rpstate_macros_core::StoreFieldEntry;
 use syn::{Ident, Visibility};
 
 pub(crate) fn schema_methods<'a>(
@@ -108,9 +108,23 @@ pub(crate) fn constructor(
     init_fields: &[TokenStream2],
 ) -> TokenStream2 {
     if is_root {
-        quote! { pub fn new(store: &::std::sync::Arc<#crate_name::DefaultStore>) -> #crate_name::Result<Self> { Ok(Self { #(#init_fields,)* }) } }
+        quote! {
+            pub fn new(store: &::std::sync::Arc<#crate_name::DefaultStore>) -> #crate_name::Result<Self> {
+                use #crate_name::Store;
+                let result = Self { #(#init_fields,)* };
+                store.mark_initialized(<Self as #crate_name::StateScope>::PREFIX)?;
+                Ok(result)
+            }
+        }
     } else {
-        quote! { pub fn new(store: &::std::sync::Arc<#crate_name::DefaultStore>, namespace: &str) -> #crate_name::Result<Self> { Ok(Self { #(#init_fields,)* }) } }
+        quote! {
+            pub fn new(store: &::std::sync::Arc<#crate_name::DefaultStore>, namespace: &str) -> #crate_name::Result<Self> {
+                use #crate_name::Store;
+                let result = Self { #(#init_fields,)* };
+                store.mark_initialized(namespace)?;
+                Ok(result)
+            }
+        }
     }
 }
 

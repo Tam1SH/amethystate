@@ -166,6 +166,20 @@ impl Store for JsonStore {
     fn flush_prefix(&self, _prefix: &str) -> Result<()> {
         Ok(())
     }
+
+    fn is_initialized(&self, namespace: &str) -> Result<bool> {
+        let key = format!("__init.{namespace}");
+        let guard = self.map.read().map_err(|_| JsonStoreError::Poisoned)?;
+        Ok(get_at_path(&guard, split_path(&key)).is_some())
+    }
+
+    fn mark_initialized(&self, namespace: &str) -> Result<()> {
+        let key = format!("__init.{namespace}");
+        let mut guard = self.map.write().map_err(|_| JsonStoreError::Poisoned)?;
+        set_at_path(&mut guard, &key, serde_json::Value::Bool(true))?;
+        self.debouncer.schedule();
+        Ok(())
+    }
 }
 
 impl JsonStore {
@@ -846,5 +860,42 @@ mod tests {
 
             assert_eq!(target.get(&key), Some(&val));
         }
+    }
+
+    #[test]
+    fn test_is_initialized_false_on_fresh_store() {
+        let store = make_store("json_init_fresh");
+        assert!(!store.is_initialized("settings").unwrap());
+    }
+
+    #[test]
+    fn test_mark_and_is_initialized() {
+        let store = make_store("json_init_mark");
+        assert!(!store.is_initialized("settings").unwrap());
+        store.mark_initialized("settings").unwrap();
+        assert!(store.is_initialized("settings").unwrap());
+    }
+
+    #[test]
+    fn test_initialized_namespaces_are_independent() {
+        let store = make_store("json_init_namespaces");
+        store.mark_initialized("settings").unwrap();
+        assert!(store.is_initialized("settings").unwrap());
+        assert!(!store.is_initialized("other").unwrap());
+    }
+
+    #[test]
+    fn test_init_key_does_not_appear_in_scan_prefix() {
+        let store = make_store("json_init_scan");
+        store.mark_initialized("settings").unwrap();
+        store
+            .set("settings.host", &"localhost".to_string())
+            .unwrap();
+
+        let entries = store.scan_prefix("settings").unwrap();
+        assert!(
+            entries.iter().all(|(k, _)| !k.contains("__init")),
+            "init key should not appear in scan_prefix results"
+        );
     }
 }

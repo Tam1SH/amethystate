@@ -100,6 +100,7 @@ impl RedbStore {
         let write_lock = Arc::new(Mutex::new(()));
         let write_lock_save = write_lock.clone();
 
+        //TODO: if debouncer thread is down...
         let debouncer = Debouncer::new(config.save_debounce, move || {
             let _write_guard = write_lock_save.lock().unwrap();
 
@@ -700,6 +701,33 @@ impl Store for RedbStore {
 
     fn flush_prefix(&self, prefix: &str) -> Result<()> {
         Self::flush_prefix(self, prefix)
+    }
+
+    fn is_initialized(&self, namespace: &str) -> Result<bool> {
+        let key = format!("__init::{namespace}");
+        let read_txn = self.db.begin_read().map_err(RedbStoreError::from)?;
+        let table = read_txn
+            .open_table(TABLE_META)
+            .map_err(RedbStoreError::from)?;
+        Ok(table
+            .get(key.as_str())
+            .map_err(RedbStoreError::from)?
+            .is_some())
+    }
+
+    fn mark_initialized(&self, namespace: &str) -> Result<()> {
+        let key = format!("__init::{namespace}");
+        let write_txn = self.db.begin_write().map_err(RedbStoreError::from)?;
+        {
+            let mut table = write_txn
+                .open_table(TABLE_META)
+                .map_err(RedbStoreError::from)?;
+            table
+                .insert(key.as_str(), &[][..])
+                .map_err(RedbStoreError::from)?;
+        }
+        write_txn.commit().map_err(RedbStoreError::from)?;
+        Ok(())
     }
 }
 
@@ -1694,5 +1722,29 @@ mod tests {
                 "UI should now be persisted on disk"
             );
         }
+    }
+    #[test]
+    fn test_is_initialized_false_on_fresh_store() {
+        let path = unique_path("init_fresh");
+        let (store, _) = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
+        assert!(!store.is_initialized("settings").unwrap());
+    }
+
+    #[test]
+    fn test_mark_and_is_initialized() {
+        let path = unique_path("init_mark");
+        let (store, _) = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
+        assert!(!store.is_initialized("settings").unwrap());
+        store.mark_initialized("settings").unwrap();
+        assert!(store.is_initialized("settings").unwrap());
+    }
+
+    #[test]
+    fn test_initialized_namespaces_are_independent() {
+        let path = unique_path("init_namespaces");
+        let (store, _) = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
+        store.mark_initialized("settings").unwrap();
+        assert!(store.is_initialized("settings").unwrap());
+        assert!(!store.is_initialized("other").unwrap());
     }
 }

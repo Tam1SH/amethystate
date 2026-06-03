@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-rpstate-delete"
+description = "Enables the rpstate_delete command without any pre-configured scope."
+commands.allow = ["rpstate_delete"]
+
+[[permission]]
+identifier = "deny-rpstate-delete"
+description = "Denies the rpstate_delete command without any pre-configured scope."
+commands.deny = ["rpstate_delete"]

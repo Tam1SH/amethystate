@@ -12,9 +12,11 @@ rust-version.workspace = true
 [features]
 default = ["redb"]
 json = []
+codegen = ["rpstate-macros/codegen"]
 redb = ["dep:redb", "dep:rmp-serde"]
 
 [dependencies]
+rpstate-core = { path = "../rpstate-core" }
 arc-swap = { workspace = true }
 bytes = { workspace = true }
 inventory = { workspace = true }
@@ -23,10 +25,10 @@ rpstate-macros = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-
 redb = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
 serde_json = { workspace = true }
+directories = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

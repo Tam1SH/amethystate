@@ -20,13 +20,16 @@ impl NetworkState {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
     ) -> ::rpstate::Result<Self> {
-        Ok(Self {
+        use ::rpstate::Store;
+        let result = Self {
             port: ::rpstate::field::<Self, u16>(store, "port", 8080)?,
             host: ::rpstate::field::<
                 Self,
                 String,
             >(store, "host", "127.0.0.1".to_string())?,
-        })
+        };
+        store.mark_initialized(<Self as ::rpstate::StateScope>::PREFIX)?;
+        Ok(result)
     }
     #[doc(hidden)]
     pub fn __schema_field_port(&self) -> ::rpstate::Writable<u16> {
@@ -450,40 +453,13 @@ impl ::rpstate::migration::fields::RpStateFields for NetworkState_Data {
 impl ::rpstate::RpState for NetworkState {
     type Data = NetworkState_Data;
 }
-#[allow(non_upper_case_globals)]
-const _: () = {
-    static __INVENTORY: ::inventory::Node = ::inventory::Node {
-        value: &{
-            ::rpstate::tauri_codegen::SchemaExportEntry {
-                prefix: Some("net"),
-                struct_name: "NetworkState",
-                fields: &[
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "port",
-                        ts_type: "number",
-                        full_ts_type: "number",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
-                    },
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "host",
-                        ts_type: "string",
-                        full_ts_type: "string",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
-                    },
-                ],
-            }
-        },
-        next: ::inventory::__private::UnsafeCell::new(
-            ::inventory::__private::Option::None,
-        ),
-    };
-    unsafe extern "C" fn __ctor() {
-        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+impl ::rpstate::RpStateSlice for NetworkState {
+    fn load_slice(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<Self> {
+        Self::new(store)
     }
-    #[used]
-    #[link_section = ".CRT$XCU"]
-    static __CTOR: unsafe extern "C" fn() = __ctor;
-};
+}
 pub struct UiState {
     pub proxy_port: ::rpstate::Field<
         u16,
@@ -513,7 +489,8 @@ impl UiState {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
     ) -> ::rpstate::Result<Self> {
-        Ok(Self {
+        use ::rpstate::Store;
+        let result = Self {
             proxy_port: {
                 const _: fn() = || {
                     trait TypeCheck<T> {}
@@ -578,7 +555,9 @@ impl UiState {
                     ::std::default::Default::default(),
                 )?
             },
-        })
+        };
+        store.mark_initialized(<Self as ::rpstate::StateScope>::PREFIX)?;
+        Ok(result)
     }
     #[doc(hidden)]
     pub fn __schema_field_proxy_port(&self) -> ::rpstate::ReadOnly<u16> {
@@ -868,44 +847,11 @@ impl ::rpstate::migration::fields::RpStateFields for UiState_Data {
 impl ::rpstate::RpState for UiState {
     type Data = UiState_Data;
 }
-#[allow(non_upper_case_globals)]
-const _: () = {
-    static __INVENTORY: ::inventory::Node = ::inventory::Node {
-        value: &{
-            ::rpstate::tauri_codegen::SchemaExportEntry {
-                prefix: Some("ui"),
-                struct_name: "UiState",
-                fields: &[
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "proxy_port",
-                        ts_type: "number",
-                        full_ts_type: "number",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Lookup {
-                            target_key: "port",
-                            mutable: false,
-                        },
-                    },
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "proxy_host",
-                        ts_type: "string",
-                        full_ts_type: "string",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Lookup {
-                            target_key: "host",
-                            mutable: false,
-                        },
-                    },
-                ],
-            }
-        },
-        next: ::inventory::__private::UnsafeCell::new(
-            ::inventory::__private::Option::None,
-        ),
-    };
-    unsafe extern "C" fn __ctor() {
-        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+impl ::rpstate::RpStateSlice for UiState {
+    fn load_slice(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<Self> {
+        Self::new(store)
     }
-    #[used]
-    #[link_section = ".CRT$XCU"]
-    static __CTOR: unsafe extern "C" fn() = __ctor;
-};
+}
 fn main() {}

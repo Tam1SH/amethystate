@@ -7,25 +7,32 @@ pub mod store;
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use std::collections::HashMap;
+use std::fmt::Display;
+use std::hash::Hash;
+use std::str::FromStr;
 use std::sync::Arc;
 
 pub use error::Result;
 pub use inventory;
 pub use reactive::{
-    AccessMode, Change, Field, InterceptDisposer, IntoPipeline, MapChange, MapSubscription,
-    Pipeline, Reactive, ReactiveMap, ReactiveScope, ReadOnly, ReadOnlyMode, RpState, RpStateNode,
-    Signal, SignalSubscription, StoreSubscription, Writable, WritableMode,
+    AccessMode, Change, Field, InterceptDisposer, IntoPipeline, MapChange, Pipeline, Reactive,
+    ReactiveMap, ReactiveScope, ReadOnly, ReadOnlyField, ReadOnlyMode, RpState, RpStateNode,
+    Signal, SignalSubscription, StoreSubscription, Writable, WritableField, WritableMode,
 };
 pub use serde;
 pub use serde_json;
 
 pub use store::{
-    StateScope, Store, StoreEvent, StoreOp, SubscriptionKind, builder::StoreBuilder,
-    config::StoreConfig, reactive_map, reactive_map_with_path, scoped_path,
+    RpStateSlice, StateScope, Store, StoreEvent, StoreOp, SubscriptionKind, builder::StoreBuilder,
+    config::StoreConfig, reactive_map_with_path, scoped_path,
 };
 
 pub use migration::{MigrationContext, MigrationError, MigrationReport, Migrator};
 pub use rpstate_macros::{RpType, rpstate};
+
+#[cfg(feature = "codegen")]
+pub mod tauri_codegen;
 
 #[cfg(feature = "json")]
 pub use store::backend::json::JsonStore;
@@ -54,7 +61,20 @@ where
     TScope: StateScope,
     TValue: Serialize + Default + DeserializeOwned + Clone + Send + Sync + 'static,
 {
-    store::field::<TScope, TValue, DefaultStore>(store, key, default)
+    store::field::<TScope, _, _>(store, key, default)
+}
+
+pub fn reactive_map<TScope, K, V>(
+    store: &Arc<DefaultStore>,
+    key: &str,
+    default: HashMap<K, V>,
+) -> Result<ReactiveMap<K, V, DefaultStore, WritableMode>>
+where
+    TScope: StateScope,
+    K: FromStr + Display + Clone + Hash + Eq + Send + Sync + 'static,
+    V: Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
+{
+    store::reactive_map::<TScope, _, _, _>(store, key, default)
 }
 
 #[macro_export]
@@ -195,5 +215,3 @@ macro_rules! migrate_field {
         $ctx.nested::<_, _>($key, $old_val)?
     };
 }
-
-pub mod tauri_codegen;

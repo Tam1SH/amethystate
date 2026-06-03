@@ -27,10 +27,6 @@ help: there is a method `get` with a similar name, but with different arguments
    |
    |     pub fn get(&self) -> TValue {
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: one of the expressions' fields has a method of the same name
-   |
-18 |     dummy_field.signal.set(9090);
-   |                 +++++++
 help: consider pinning the expression
    |
 18 ~     let mut pinned = std::pin::pin!(dummy_field);

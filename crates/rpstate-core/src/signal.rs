@@ -6,9 +6,9 @@ type SignalCallback<T> = Arc<dyn Fn(&T) + Send + Sync + 'static>;
 type SignalSubscribers<T> = Arc<Mutex<Vec<(u64, SignalCallback<T>)>>>;
 
 pub struct Signal<T> {
-    pub(crate) value: Arc<ArcSwap<T>>,
-    pub(crate) subscribers: SignalSubscribers<T>,
-    pub(crate) next_id: Arc<AtomicU64>,
+    pub value: Arc<ArcSwap<T>>,
+    pub subscribers: SignalSubscribers<T>,
+    pub next_id: Arc<AtomicU64>,
 }
 
 impl<T> Clone for Signal<T> {
@@ -23,8 +23,8 @@ impl<T> Clone for Signal<T> {
 
 #[derive(Clone)]
 pub struct SignalSubscription {
-    pub(crate) id: u64,
-    pub(crate) cleanup: Arc<dyn Fn(u64) + Send + Sync + 'static>,
+    pub id: u64,
+    pub cleanup: Arc<dyn Fn(u64) + Send + Sync + 'static>,
 }
 
 impl Drop for SignalSubscription {
@@ -58,12 +58,10 @@ impl<T: 'static> Signal<T> {
 
     fn emit(&self) {
         let val = self.value.load_full();
-
         let callbacks: Vec<_> = {
             let subs = self.subscribers.lock().unwrap();
             subs.iter().map(|(_, cb)| cb.clone()).collect()
         };
-
         for cb in callbacks {
             cb(&val);
         }

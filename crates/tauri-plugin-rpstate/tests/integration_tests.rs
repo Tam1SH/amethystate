@@ -1,7 +1,6 @@
-use rpstate::{DefaultStore, Store, StoreBuilder, rpstate};
-use std::sync::Arc;
-use tauri::Manager;
-use tauri_plugin_rpstate::codegen;
+use rpstate::{Store, rpstate};
+#[cfg(not(target_arch = "wasm32"))]
+use tauri_plugin_rpstate::backend::codegen::CodegenRegistry;
 
 #[rpstate]
 pub struct TestNested {
@@ -21,6 +20,52 @@ pub struct TestRoot {
     pub child: TestNested,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_rust_codegen_export() {
+    let out_path = std::env::temp_dir().join("rpstate_test_export.rs");
+    if out_path.exists() {
+        let _ = std::fs::remove_file(&out_path);
+    }
+
+    let reg = CodegenRegistry::new();
+    reg.export_rust(&out_path)
+        .expect("Failed to export Rust bindings");
+
+    assert!(out_path.exists());
+    let rust_content =
+        std::fs::read_to_string(&out_path).expect("Failed to read exported Rust file");
+
+    assert!(rust_content.contains("use tauri_plugin_rpstate::client::field::Field;"));
+    assert!(rust_content.contains("use tauri_plugin_rpstate::client::map::ReactiveMap;"));
+    assert!(
+        rust_content
+            .contains("use tauri_plugin_rpstate::client::{invoke_get_prefix, invoke_flush};")
+    );
+
+    assert!(rust_content.contains("pub struct TestRoot {"));
+    assert!(rust_content.contains("pub value: Field<i32>,"));
+    assert!(rust_content.contains("pub session: Field<String>,"));
+    assert!(rust_content.contains("pub child: TestNestedFields,"));
+
+    assert!(rust_content.contains("impl TestRoot {"));
+    assert!(rust_content.contains("pub async fn load() -> Result<Self, String> {"));
+    assert!(rust_content.contains("let initial = invoke_get_prefix(\"test_root\").await?;"));
+    assert!(rust_content.contains("pub async fn save(&self) -> Result<(), String> {"));
+    assert!(rust_content.contains("invoke_flush(\"test_root\").await"));
+
+    assert!(rust_content.contains("value: Field::new(\"test_root.value\", initial.get(\"test_root.value\").and_then(|v| tauri_plugin_rpstate::serde_json::from_value::<i32>((*v).clone()).ok()).unwrap_or_default()),"));
+    assert!(rust_content.contains("session: Field::new(\"test_root.session\", initial.get(\"test_root.session\").and_then(|v| tauri_plugin_rpstate::serde_json::from_value::<String>((*v).clone()).ok()).unwrap_or_default()),"));
+    assert!(rust_content.contains("child: TestNestedFields::new(\"test_root.child\", &initial),"));
+
+    assert!(rust_content.contains("pub struct TestNestedFields {"));
+    assert!(rust_content.contains("pub name: Field<String>,"));
+    assert!(rust_content.contains("impl TestNestedFields {"));
+    assert!(rust_content.contains("pub fn new(prefix: &str, initial: &std::collections::HashMap<String, tauri_plugin_rpstate::serde_json::Value>) -> Self {"));
+    assert!(rust_content.contains("name: Field::new(format!(\"{}.name\", prefix), initial.get(&format!(\"{}.name\", prefix)).and_then(|v| tauri_plugin_rpstate::serde_json::from_value::<String>((*v).clone()).ok()).unwrap_or_default()),"));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test_schema_inventory_registrations() {
     let mut found_root = false;
@@ -46,6 +91,7 @@ fn test_schema_inventory_registrations() {
     assert!(found_nested, "TestNested was not registered in inventory!");
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test_typescript_codegen_export() {
     let out_path = std::env::temp_dir().join("rpstate_test_export.ts");
@@ -53,7 +99,9 @@ fn test_typescript_codegen_export() {
         let _ = std::fs::remove_file(&out_path);
     }
 
-    codegen::export(&out_path).expect("Failed to export TS bindings");
+    let reg = CodegenRegistry::new();
+    reg.export_ts(&out_path)
+        .expect("Failed to export TS bindings");
 
     assert!(out_path.exists());
     let ts_content = std::fs::read_to_string(&out_path).expect("Failed to read exported TS file");
@@ -85,8 +133,12 @@ fn test_typescript_codegen_export() {
     ));
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn test_tauri_plugin_commands() {
+    use rpstate::{DefaultStore, StoreBuilder};
+    use std::sync::Arc;
+    use tauri::Manager;
     let db_path = std::env::temp_dir().join("rpstate_tauri_test_store.redb");
     if db_path.exists() {
         let _ = std::fs::remove_file(&db_path);
@@ -102,14 +154,14 @@ async fn test_tauri_plugin_commands() {
 
     let state_store = app.state::<Arc<DefaultStore>>();
 
-    let val = tauri_plugin_rpstate::commands::rpstate_get(
+    let val = tauri_plugin_rpstate::backend::commands::rpstate_get(
         state_store.clone(),
         "test_root.value".to_string(),
     )
     .await;
     assert_eq!(val, Ok(Some(serde_json::json!(100))));
 
-    let set_res = tauri_plugin_rpstate::commands::rpstate_set(
+    let set_res = tauri_plugin_rpstate::backend::commands::rpstate_set(
         state_store.clone(),
         "test_root.value".to_string(),
         serde_json::json!(200),

@@ -6,6 +6,7 @@ Allows access to the default rpstate commands
 
 - `allow-rpstate-get`
 - `allow-rpstate-set`
+- `allow-rpstate-delete`
 - `allow-rpstate-subscribe`
 - `allow-rpstate-unsubscribe`
 - `allow-rpstate-get-prefix`
@@ -19,6 +20,32 @@ Allows access to the default rpstate commands
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`rpstate:allow-rpstate-delete`
+
+</td>
+<td>
+
+Enables the rpstate_delete command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`rpstate:deny-rpstate-delete`
+
+</td>
+<td>
+
+Denies the rpstate_delete command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>

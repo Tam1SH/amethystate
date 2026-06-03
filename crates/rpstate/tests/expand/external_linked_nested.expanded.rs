@@ -26,7 +26,8 @@ impl ConnectionPool {
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
         namespace: &str,
     ) -> ::rpstate::Result<Self> {
-        Ok(Self {
+        use ::rpstate::Store;
+        let result = Self {
             max_connections: ::rpstate::store::field_with_path(
                 store,
                 ::std::sync::Arc::from(
@@ -49,7 +50,9 @@ impl ConnectionPool {
                 ),
                 30,
             )?,
-        })
+        };
+        store.mark_initialized(namespace)?;
+        Ok(result)
     }
     #[doc(hidden)]
     pub fn __schema_field_max_connections(&self) -> ::rpstate::ReadOnly<u32> {
@@ -477,40 +480,6 @@ impl ::rpstate::migration::fields::RpStateFields for ConnectionPool_Data {
 impl ::rpstate::RpState for ConnectionPool {
     type Data = ConnectionPool_Data;
 }
-#[allow(non_upper_case_globals)]
-const _: () = {
-    static __INVENTORY: ::inventory::Node = ::inventory::Node {
-        value: &{
-            ::rpstate::tauri_codegen::SchemaExportEntry {
-                prefix: None,
-                struct_name: "ConnectionPool",
-                fields: &[
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "max_connections",
-                        ts_type: "number",
-                        full_ts_type: "number",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
-                    },
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "timeout_secs",
-                        ts_type: "number",
-                        full_ts_type: "number",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Plain,
-                    },
-                ],
-            }
-        },
-        next: ::inventory::__private::UnsafeCell::new(
-            ::inventory::__private::Option::None,
-        ),
-    };
-    unsafe extern "C" fn __ctor() {
-        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
-    }
-    #[used]
-    #[link_section = ".CRT$XCU"]
-    static __CTOR: unsafe extern "C" fn() = __ctor;
-};
 pub struct DatabaseState {
     pub pool: ::std::sync::Arc<ConnectionPool>,
 }
@@ -530,7 +499,8 @@ impl DatabaseState {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
     ) -> ::rpstate::Result<Self> {
-        Ok(Self {
+        use ::rpstate::Store;
+        let result = Self {
             pool: ::std::sync::Arc::new(
                 ConnectionPool::new(
                     store,
@@ -544,7 +514,9 @@ impl DatabaseState {
                     }),
                 )?,
             ),
-        })
+        };
+        store.mark_initialized(<Self as ::rpstate::StateScope>::PREFIX)?;
+        Ok(result)
     }
     #[doc(hidden)]
     pub fn __schema_field_pool(&self) -> ::rpstate::ReadOnly<ConnectionPool> {
@@ -904,36 +876,13 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseState_Data {
 impl ::rpstate::RpState for DatabaseState {
     type Data = DatabaseState_Data;
 }
-#[allow(non_upper_case_globals)]
-const _: () = {
-    static __INVENTORY: ::inventory::Node = ::inventory::Node {
-        value: &{
-            ::rpstate::tauri_codegen::SchemaExportEntry {
-                prefix: Some("sys.database"),
-                struct_name: "DatabaseState",
-                fields: &[
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "pool",
-                        ts_type: "ConnectionPool",
-                        full_ts_type: "ConnectionPool",
-                        kind: ::rpstate::tauri_codegen::FieldKind::Nested {
-                            struct_name: "ConnectionPool",
-                        },
-                    },
-                ],
-            }
-        },
-        next: ::inventory::__private::UnsafeCell::new(
-            ::inventory::__private::Option::None,
-        ),
-    };
-    unsafe extern "C" fn __ctor() {
-        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+impl ::rpstate::RpStateSlice for DatabaseState {
+    fn load_slice(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<Self> {
+        Self::new(store)
     }
-    #[used]
-    #[link_section = ".CRT$XCU"]
-    static __CTOR: unsafe extern "C" fn() = __ctor;
-};
+}
 pub struct InspectorState {
     pub db_pool_view: ::std::sync::Arc<ConnectionPool>,
 }
@@ -953,7 +902,8 @@ impl InspectorState {
     pub fn new(
         store: &::std::sync::Arc<::rpstate::DefaultStore>,
     ) -> ::rpstate::Result<Self> {
-        Ok(Self {
+        use ::rpstate::Store;
+        let result = Self {
             db_pool_view: {
                 const _: fn() = || {
                     fn assert_node_type<T>(_: ::rpstate::ReadOnly<T>) {}
@@ -976,7 +926,9 @@ impl InspectorState {
                     <ConnectionPool as ::rpstate::RpStateNode>::new_node(store, &path)?,
                 )
             },
-        })
+        };
+        store.mark_initialized(<Self as ::rpstate::StateScope>::PREFIX)?;
+        Ok(result)
     }
     #[doc(hidden)]
     pub fn __schema_field_db_pool_view(&self) -> ::rpstate::ReadOnly<ConnectionPool> {
@@ -1256,35 +1208,11 @@ impl ::rpstate::migration::fields::RpStateFields for InspectorState_Data {
 impl ::rpstate::RpState for InspectorState {
     type Data = InspectorState_Data;
 }
-#[allow(non_upper_case_globals)]
-const _: () = {
-    static __INVENTORY: ::inventory::Node = ::inventory::Node {
-        value: &{
-            ::rpstate::tauri_codegen::SchemaExportEntry {
-                prefix: Some("ui.inspector"),
-                struct_name: "InspectorState",
-                fields: &[
-                    ::rpstate::tauri_codegen::FieldExportMeta {
-                        name: "db_pool_view",
-                        ts_type: "ConnectionPool",
-                        full_ts_type: "ConnectionPool",
-                        kind: ::rpstate::tauri_codegen::FieldKind::LookupNode {
-                            target_prefix: "pool",
-                            struct_name: "ConnectionPool",
-                        },
-                    },
-                ],
-            }
-        },
-        next: ::inventory::__private::UnsafeCell::new(
-            ::inventory::__private::Option::None,
-        ),
-    };
-    unsafe extern "C" fn __ctor() {
-        unsafe { ::inventory::ErasedNode::submit(__INVENTORY.value, &__INVENTORY) }
+impl ::rpstate::RpStateSlice for InspectorState {
+    fn load_slice(
+        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    ) -> ::rpstate::Result<Self> {
+        Self::new(store)
     }
-    #[used]
-    #[link_section = ".CRT$XCU"]
-    static __CTOR: unsafe extern "C" fn() = __ctor;
-};
+}
 fn main() {}

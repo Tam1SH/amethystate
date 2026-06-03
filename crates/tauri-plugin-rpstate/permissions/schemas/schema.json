@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the rpstate_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-rpstate-delete",
+          "markdownDescription": "Enables the rpstate_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the rpstate_delete command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-rpstate-delete",
+          "markdownDescription": "Denies the rpstate_delete command without any pre-configured scope."
+        },
+        {
           "description": "Enables the rpstate_flush command without any pre-configured scope.",
           "type": "string",
           "const": "allow-rpstate-flush",
@@ -367,10 +379,10 @@
           "markdownDescription": "Denies the rpstate_unsubscribe command without any pre-configured scope."
         },
         {
-          "description": "Allows access to the default rpstate commands\n#### This default permission set includes:\n\n- `allow-rpstate-get`\n- `allow-rpstate-set`\n- `allow-rpstate-subscribe`\n- `allow-rpstate-unsubscribe`\n- `allow-rpstate-get-prefix`\n- `allow-rpstate-flush`",
+          "description": "Allows access to the default rpstate commands\n#### This default permission set includes:\n\n- `allow-rpstate-get`\n- `allow-rpstate-set`\n- `allow-rpstate-delete`\n- `allow-rpstate-subscribe`\n- `allow-rpstate-unsubscribe`\n- `allow-rpstate-get-prefix`\n- `allow-rpstate-flush`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows access to the default rpstate commands\n#### This default permission set includes:\n\n- `allow-rpstate-get`\n- `allow-rpstate-set`\n- `allow-rpstate-subscribe`\n- `allow-rpstate-unsubscribe`\n- `allow-rpstate-get-prefix`\n- `allow-rpstate-flush`"
+          "markdownDescription": "Allows access to the default rpstate commands\n#### This default permission set includes:\n\n- `allow-rpstate-get`\n- `allow-rpstate-set`\n- `allow-rpstate-delete`\n- `allow-rpstate-subscribe`\n- `allow-rpstate-unsubscribe`\n- `allow-rpstate-get-prefix`\n- `allow-rpstate-flush`"
         }
       ]
     }

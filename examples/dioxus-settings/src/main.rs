@@ -1,181 +1,294 @@
 use dioxus::prelude::*;
 use futures_util::StreamExt;
-use rpstate::store::builder::StoreBuilder;
-use rpstate::{rpstate, DefaultStore, Field, IntoPipeline, Pipeline, WritableMode};
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use tokio::sync::mpsc;
 
-#[rpstate(prefix = "dioxus_settings")]
-#[derive(PartialEq)]
-pub struct SettingsState {
-    #[state(default = "127.0.0.1".to_string())]
-    pub host: String,
+use rpstate_dioxus::{
+    rpstate, rpstate_dioxus, use_field, use_map, use_map_entry, use_pipeline,
+    use_rpstate, DioxusIntoPipeline, Handle, MapChange, MapHandle, ReactiveMap, ReadOnlyMapHandle,
+    RpStateProvider, RpType, StoreBuilder, WritableMapHandle
+};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
-    #[state(default = 8080)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, RpType)]
+pub struct ProxyProfile {
+    pub name: String,
+    pub address: String,
     pub port: u16,
-
-    #[state(default = true)]
-    pub dark_mode: bool,
+    pub enabled: bool,
 }
 
-// ─── Hook: field ────────────────────────────────────────────────────────────
-//
-// Bridges an rpstate `Field<T>` to a read-only signal and a write closure.
-// Uses an async channel to safely update the signal from any thread.
-fn use_rpstate_field<T>(field: Field<T, DefaultStore, WritableMode>) -> (ReadSignal<T>, impl Fn(T))
-where
-    T: DeserializeOwned + Serialize + Clone + Send + Sync + PartialEq + 'static,
-{
-    let mut signal = use_signal(|| field.get());
-
-    let tx = use_hook(|| {
-        let (tx, mut rx) = mpsc::unbounded_channel::<T>();
-
-        // This task runs on Dioxus's UI thread, ensuring zero concurrent access to the signal.
-        spawn(async move {
-            while let Some(val) = rx.recv().await {
-                signal.set(val);
-            }
-        });
-
-        tx
-    });
-
-    let field_for_sub = field.clone();
-
-    use_hook(move || {
-        let sub = field_for_sub.subscribe(move |val| {
-            let _ = tx.send(val);
-        });
-        std::sync::Arc::new(sub)
-    });
-
-    let setter = move |val: T| {
-        let _ = field.set(val);
-    };
-
-    (signal.into(), setter)
+impl Default for ProxyProfile {
+    fn default() -> Self {
+        Self {
+            name: "Default Proxy".to_string(),
+            address: "127.0.0.1".to_string(),
+            port: 8080,
+            enabled: false,
+        }
+    }
 }
 
-// ─── Hook: pipeline ──────────────────────────────────────────────────────────
-//
-// Bridges a read-only rpstate `Pipeline<T>` to a Dioxus signal.
-// Keeps the pipeline and its subscription alive in a hook slot.
-fn use_rpstate_pipeline<T>(make: impl FnOnce() -> Pipeline<T>) -> ReadSignal<T>
-where
-    T: Clone + Send + Sync + PartialEq + 'static,
-{
-    let slot = use_hook(|| {
-        let pipeline = make();
-        let mut sig = Signal::new(pipeline.get());
-        let (tx, mut rx) = mpsc::unbounded_channel::<T>();
+#[rpstate_dioxus]
+#[rpstate(prefix = "settings")]
+pub struct AppSettings {
+    #[state(default = "Guest".to_string())]
+    pub username: String,
 
-        spawn(async move {
-            while let Some(val) = rx.recv().await {
-                sig.set(val);
-            }
-        });
+    #[state(default = 0)]
+    pub counter: i32,
 
-        let sub = pipeline.subscribe(move |val| {
-            let _ = tx.send(val);
-        });
+    #[state(nested)]
+    pub theme: Theme,
 
-        (sig, std::sync::Arc::new((pipeline, sub)))
-    });
+    #[state(default = Default::default())]
+    pub proxy: ProxyProfile,
 
-    slot.0.into()
+    #[state(default = {
+        "HTTP_PROXY": "http://127.0.0.1:8080".to_string(),
+        "NO_PROXY": "localhost".to_string()
+    })]
+    pub env: ReactiveMap<String, String>,
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+#[rpstate_dioxus]
+#[rpstate]
+pub struct Theme {
+    #[state(default = "light".to_string())]
+    pub mode: String,
+
+    #[state(default = "#ffffff".to_string())]
+    pub background: String,
+
+    #[state(default = "#000000".to_string())]
+    pub foreground: String,
+}
 
 #[component]
-fn Settings(state: SettingsState) -> Element {
-    let (host, set_host) = use_rpstate_field(state.host());
-    let (port, set_port) = use_rpstate_field(state.port());
-    let (dark_mode, set_dark_mode) = use_rpstate_field(state.dark_mode());
+fn EnvMapEditor(env: WritableMapHandle<String, String>) -> Element {
+    let map = use_map(env);
+    let mut new_key = use_signal(String::new);
+    let mut new_val = use_signal(String::new);
 
-    let address = use_rpstate_pipeline(|| {
-        (state.host(), state.port())
-            .pipe()
-            .map(|(h, p)| format!("{h}:{p}"))
-            .dedupe()
+    let on_add = use_callback(move |_| {
+        let key = new_key.peek().clone();
+        let val = new_val.peek().clone();
+        if key.is_empty() {
+            return;
+        }
+        map.set_or_create(key, val);
+        new_key.set(String::new());
+        new_val.set(String::new());
     });
 
-    // ── Coroutine: message-driven external updates ────────────────────────
-    // Simulates an external push source (e.g., WebSocket).
-    let state_clone = state.clone();
-    let port_tx = use_coroutine(move |mut rx: UnboundedReceiver<u16>| {
-        let state = state_clone.clone();
-        async move {
-            while let Some(new_port) = rx.next().await {
-                let _ = state.port().set(new_port);
-            }
-        }
+    let on_remove = use_callback(move |key: String| {
+        map.remove(key);
     });
 
     rsx! {
-        div {
-            class: if *dark_mode.read() { "app dark" } else { "app light" },
-
-            h1 { "rpstate + Dioxus" }
-
-            div { class: "field",
-                label { "Host" }
+        div { class: "section",
+            h3 { "Environment Variables" }
+            for (k, v) in map.entries.read().clone() {
+                div { class: "env-row",
+                    code { "{k}" }
+                    span { " = " }
+                    code { "{v}" }
+                    button { onclick: move |_| on_remove(k.clone()), "✕" }
+                }
+            }
+            div { class: "env-add",
                 input {
-                    value: "{host}",
-                    oninput: move |e| set_host(e.value()),
+                    placeholder: "KEY",
+                    value: "{new_key}",
+                    oninput: move |e| new_key.set(e.value()),
                 }
-            }
-
-            div { class: "field",
-                label { "Port" }
                 input {
-                    r#type: "number",
-                    min: "1024",
-                    max: "65535",
-                    value: "{port}",
-                    oninput: move |e| {
-                        if let Ok(p) = e.value().parse::<u16>() {
-                            set_port(p);
-                        }
-                    },
+                    placeholder: "value",
+                    value: "{new_val}",
+                    oninput: move |e| new_val.set(e.value()),
                 }
-            }
-
-            div { class: "field",
-                label {
-                    input {
-                        r#type: "checkbox",
-                        checked: *dark_mode.read(),
-                        onchange: move |e| set_dark_mode(e.checked()),
-                    }
-                    " dark mode"
-                }
-            }
-
-            p { "derived: {address}" }
-
-            button {
-                onclick: move |_| port_tx.send(7777),
-                "Simulate external push → port 7777"
+                button { onclick: on_add, "Add" }
             }
         }
     }
 }
 
 #[component]
-fn App() -> Element {
-    let state = use_context_provider(|| {
-        let store = StoreBuilder::new("./dioxus-settings.redb")
-            .build()
-            .expect("failed to open store");
-        SettingsState::new(&store).expect("failed to init state")
+fn ThemeEditor(settings: Handle<AppSettings>) -> Element {
+    let (mode, set_mode) = use_field(settings.theme.mode);
+    let (bg, set_bg) = use_field(settings.theme.background);
+    let (fg, set_fg) = use_field(settings.theme.foreground);
+
+    rsx! {
+        div { class: "section",
+            h3 { "Theme (nested)" }
+            div { class: "field",
+                label { "Mode" }
+                select {
+                    value: "{mode}",
+                    onchange: move |e| set_mode(e.value()),
+                    option { value: "light", "light" }
+                    option { value: "dark", "dark" }
+                }
+            }
+            div { class: "field",
+                label { "Background" }
+                input {
+                    r#type: "color",
+                    value: "{bg}",
+                    oninput: move |e| set_bg(e.value()),
+                }
+            }
+            div { class: "field",
+                label { "Foreground" }
+                input {
+                    r#type: "color",
+                    value: "{fg}",
+                    oninput: move |e| set_fg(e.value()),
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn ProxyEditor(settings: Handle<AppSettings>) -> Element {
+    let (prof, set_prof) = use_field(settings.proxy);
+
+    let status = move || {
+        let p = prof.read();
+        format!(
+            "{}:{} — {}",
+            p.address,
+            p.port,
+            if p.enabled { "active" } else { "inactive" }
+        )
+    };
+
+    rsx! {
+        div { class: "section",
+            h3 { "Proxy (plain type)" }
+            div { class: "field",
+                label { "Name" }
+                input {
+                    value: "{prof.read().name}",
+                    oninput: move |e| {
+                        let mut p = prof.peek().clone();
+                        p.name = e.value();
+                        set_prof(p);
+                    },
+                }
+            }
+            div { class: "field",
+                label { "Address" }
+                input {
+                    value: "{prof.read().address}",
+                    oninput: move |e| {
+                        let mut p = prof.peek().clone();
+                        p.address = e.value();
+                        set_prof(p);
+                    },
+                }
+            }
+            div { class: "field",
+                label { "Port" }
+                input {
+                    r#type: "number",
+                    value: "{prof.read().port}",
+                    oninput: move |e| {
+                        if let Ok(port) = e.value().parse::<u16>() {
+                            let mut p = prof.peek().clone();
+                            p.port = port;
+                            set_prof(p);
+                        }
+                    },
+                }
+            }
+            div { class: "field",
+                label {
+                    input {
+                        r#type: "checkbox",
+                        checked: prof.read().enabled,
+                        onchange: move |e| {
+                            let mut p = prof.peek().clone();
+                            p.enabled = e.checked();
+                            set_prof(p);
+                        },
+                    }
+                    " Enabled"
+                }
+            }
+            p {
+                style: if prof.read().enabled { "color: green" } else { "color: red" },
+                { status() }
+            }
+        }
+    }
+}
+
+#[component]
+fn Settings() -> Element {
+    let state = use_rpstate::<AppSettings>();
+    let (username, set_username) = use_field(state.username);
+    let (counter, set_counter) = use_field(state.counter);
+
+    let address = use_pipeline(move || {
+        (state.username, state.counter)
+            .pipe()
+            .map(|(u, c)| format!("{u}:{c}"))
+            .dedupe()
     });
 
-    rsx! { Settings { state } }
+    rsx! {
+        div {
+            h1 { "rpstate + Dioxus" }
+
+            div { class: "section",
+                h3 { "Basic fields" }
+                div { class: "field",
+                    label { "Username" }
+                    input {
+                        value: "{username}",
+                        oninput: move |e| set_username(e.value()),
+                    }
+                }
+                div { class: "field",
+                    label { "Counter" }
+                    input {
+                        r#type: "number",
+                        value: "{counter}",
+                        oninput: move |e| {
+                            if let Ok(n) = e.value().parse::<i32>() {
+                                set_counter(n);
+                            }
+                        },
+                    }
+                }
+                p { "Pipeline → " strong { "{address}" } }
+            }
+
+            ThemeEditor { settings: state }
+            ProxyEditor { settings: state }
+            EnvMapEditor { env: state.env }
+        }
+    }
+}
+
+#[component]
+fn App() -> Element {
+    let store = use_hook(|| {
+        StoreBuilder::new("./dioxus-settings")
+            .build()
+            .expect("failed to open store")
+    });
+
+    rsx! {
+        RpStateProvider {
+            store,
+            Settings {}
+        }
+    }
 }
 
 fn main() {
-    dioxus::launch(App);
+    launch(App);
 }

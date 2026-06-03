@@ -1,0 +1,18 @@
+[package]
+name = "rpstate-core"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+arc-swap.workspace = true
+serde.workspace = true
+tracing.workspace = true

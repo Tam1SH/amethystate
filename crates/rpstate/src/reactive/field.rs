@@ -1,11 +1,10 @@
 use crate::error::Error;
-use crate::reactive::{Change, InterceptDisposer, InterceptGuard};
 use crate::store::{Store, SubscriptionId};
-use crate::{AccessMode, ReadOnlyMode, Result, Signal, SignalSubscription, WritableMode};
+use crate::{AccessMode, ReadOnlyMode, Result, WritableMode};
+use rpstate_core::{Change, FieldCore, InterceptDisposer, Signal, SignalSubscription};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub struct StoreSubscription<S: Store> {
     pub store: Arc<S>,
@@ -19,33 +18,22 @@ impl<S: Store> Drop for StoreSubscription<S> {
 }
 
 pub struct Field<TValue, S: Store, M: AccessMode = ReadOnlyMode> {
-    pub signal: Signal<TValue>,
+    pub(crate) core: FieldCore<TValue>,
     pub path: Arc<str>,
     pub store_sub: Option<Arc<StoreSubscription<S>>>,
     pub(crate) _mode: std::marker::PhantomData<M>,
-
-    pub(crate) interceptors: Arc<
-        Mutex<
-            Vec<(
-                u64,
-                Arc<dyn Fn(Change<TValue>) -> Option<Change<TValue>> + Send + Sync + 'static>,
-            )>,
-        >,
-    >,
-    pub(crate) next_interceptor_id: Arc<AtomicUsize>,
-    pub(crate) intercept_depth: Arc<AtomicUsize>,
 }
+
+pub type ReadOnlyField<TValue, S> = Field<TValue, S, ReadOnlyMode>;
+pub type WritableField<TValue, S> = Field<TValue, S, WritableMode>;
 
 impl<TValue, S: Store, M: AccessMode> Clone for Field<TValue, S, M> {
     fn clone(&self) -> Self {
         Self {
-            signal: self.signal.clone(),
+            core: self.core.clone(),
             path: Arc::clone(&self.path),
             store_sub: self.store_sub.clone(),
             _mode: std::marker::PhantomData,
-            interceptors: self.interceptors.clone(),
-            next_interceptor_id: self.next_interceptor_id.clone(),
-            intercept_depth: self.intercept_depth.clone(),
         }
     }
 }
@@ -57,11 +45,11 @@ where
     M: AccessMode,
 {
     pub fn get(&self) -> TValue {
-        self.signal.get()
+        self.core.get()
     }
 
     pub fn get_arc(&self) -> Arc<TValue> {
-        self.signal.get_arc()
+        self.core.get_arc()
     }
 
     pub fn path(&self) -> Arc<str> {
@@ -69,16 +57,14 @@ where
     }
 
     pub fn as_signal(&self) -> Signal<TValue> {
-        self.signal.clone()
+        self.core.signal.clone()
     }
 
     pub fn subscribe<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(TValue) + Send + Sync + 'static,
     {
-        self.signal.subscribe(move |val: &TValue| {
-            callback(val.clone());
-        })
+        self.core.subscribe(callback)
     }
 }
 
@@ -88,26 +74,15 @@ where
     S: Store,
 {
     pub fn set(&self, value: TValue) -> Result<()> {
-        let mut change = Change {
-            old_value: self.get(),
-            new_value: value,
-        };
-
-        if let Some(_guard) = InterceptGuard::enter(&self.intercept_depth, self.path.clone()) {
-            let interceptors = { self.interceptors.lock().unwrap().clone() };
-            for (_, interceptor) in interceptors {
-                if let Some(new_change) = interceptor(change.clone()) {
-                    change = new_change;
-                } else {
-                    return Err(Error::Intercepted);
-                }
-            }
-        }
+        let change = self
+            .core
+            .run_interceptors(self.path.clone(), value)
+            .map_err(|_| Error::Intercepted)?;
 
         if let Some(sub) = &self.store_sub {
             sub.store.set_owned(self.path.clone(), &change.new_value)?;
         } else {
-            self.signal.set(change.new_value);
+            self.core.signal.set(change.new_value);
         }
         Ok(())
     }
@@ -116,44 +91,44 @@ where
     where
         F: Fn(Change<TValue>) -> Option<Change<TValue>> + Send + Sync + 'static,
     {
-        let id = self.next_interceptor_id.fetch_add(1, Ordering::Relaxed);
-        self.interceptors
-            .lock()
-            .unwrap()
-            .push((id as u64, Arc::new(callback)));
-
-        let interceptors = self.interceptors.clone();
-        InterceptDisposer {
-            id: id as u64,
-            path: self.path.clone(),
-            cleanup: Arc::new(move |id| {
-                if let Ok(mut lock) = interceptors.lock() {
-                    lock.retain(|(i, _)| *i != id);
-                }
-            }),
-        }
+        self.core.intercept(self.path.clone(), callback)
     }
 
     pub fn new_volatile(path: Arc<str>, default: TValue) -> Self {
         Self {
-            signal: Signal::new(default),
+            core: FieldCore::new(default),
             path,
             store_sub: None,
             _mode: std::marker::PhantomData,
-            interceptors: Arc::new(Mutex::new(Vec::new())),
-            next_interceptor_id: Arc::new(AtomicUsize::new(0)),
-            intercept_depth: Arc::new(AtomicUsize::new(0)),
         }
     }
 }
 
 impl<TValue, S: Store, M: AccessMode> PartialEq for Field<TValue, S, M> {
     fn eq(&self, other: &Self) -> bool {
-        self.path == other.path && Arc::ptr_eq(&self.signal.value, &other.signal.value)
+        self.path == other.path && Arc::ptr_eq(&self.core.signal.value, &other.core.signal.value)
     }
 }
 
 impl<TValue, S: Store, M: AccessMode> Eq for Field<TValue, S, M> {}
+
+impl<TValue, S, M> rpstate_core::pipeline::Reactive<TValue> for Field<TValue, S, M>
+where
+    TValue: DeserializeOwned + Serialize + Clone + Send + Sync + 'static,
+    S: Store,
+    M: AccessMode,
+{
+    fn get(&self) -> TValue {
+        Field::get(self)
+    }
+
+    fn subscribe<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(TValue) + Send + Sync + 'static,
+    {
+        Field::subscribe(self, callback)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -162,7 +137,7 @@ mod tests {
     use crate::store::{StateScope, Store};
     use crate::{DefaultStore, SubscriptionKind};
     use std::sync::Mutex;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::Ordering;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tracing_test::traced_test;
 
@@ -202,15 +177,15 @@ mod tests {
             *cap.lock().unwrap() = v;
         });
 
-        field.signal.set(22);
+        field.core.signal.set(22);
         assert_eq!(*callback_val.lock().unwrap(), 22);
     }
 
     #[test]
     fn store_subscription_drop_unsubscribes() {
         let store = unique_store("drop-unsub");
-        let calls = Arc::new(AtomicUsize::new(0));
-        let signal = Signal::new("test_val".to_string());
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let core = FieldCore::new("test_val".to_string());
 
         let cap = calls.clone();
 
@@ -223,16 +198,13 @@ mod tests {
             );
 
             let field: Field<String, DefaultStore, WritableMode> = Field {
-                signal,
+                core,
                 path: Arc::from("test.field"),
                 store_sub: Some(Arc::new(StoreSubscription {
                     store: store.clone(),
                     id: sub_id,
                 })),
                 _mode: Default::default(),
-                interceptors: Arc::new(Mutex::new(Vec::new())),
-                intercept_depth: Arc::new(AtomicUsize::new(0)),
-                next_interceptor_id: Arc::new(AtomicUsize::new(0)),
             };
 
             field.set("hello".to_string()).unwrap();
@@ -252,23 +224,20 @@ mod tests {
     #[test]
     fn field_as_signal_returns_same_arc() {
         let store = unique_store("as-signal");
-        let signal = Signal::new(100i32);
+        let core = FieldCore::new(100i32);
         let sub_id = store.subscribe(crate::store::SubscriptionKind::Any, Arc::new(|_| {}));
         let field: Field<i32, DefaultStore> = Field {
-            signal: signal.clone(),
+            core: core.clone(),
             path: Arc::from("some.path"),
             store_sub: Some(Arc::new(StoreSubscription {
                 store: store.clone(),
                 id: sub_id,
             })),
             _mode: Default::default(),
-            interceptors: Arc::new(Mutex::new(Vec::new())),
-            intercept_depth: Arc::new(AtomicUsize::new(0)),
-            next_interceptor_id: Arc::new(AtomicUsize::new(0)),
         };
 
         let extracted = field.as_signal();
-        assert!(Arc::ptr_eq(&signal.value, &extracted.value));
+        assert!(Arc::ptr_eq(&core.signal.value, &extracted.value));
     }
 
     #[test]
@@ -340,7 +309,7 @@ mod tests {
     fn test_field_depth_guard() {
         let field = Field::<i32, DefaultStore, WritableMode>::new_volatile(Arc::from("test"), 1);
 
-        field.intercept_depth.store(100, Ordering::SeqCst);
+        field.core.intercept_depth.store(100, Ordering::SeqCst);
 
         let _disp = field.intercept(|mut c| {
             c.new_value = 999;
