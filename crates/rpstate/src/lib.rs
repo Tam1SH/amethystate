@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::str::FromStr;
-use std::sync::Arc;
 
 pub use error::Result;
 pub use inventory;
@@ -25,35 +24,16 @@ pub use serde_json;
 
 pub use store::{
     RpStateSlice, StateScope, Store, StoreEvent, StoreOp, SubscriptionKind, builder::StoreBuilder,
-    config::StoreConfig, reactive_map_with_path, scoped_path,
+    config::StoreConfig, default::DefaultStore, reactive_map_with_path, scoped_path,
 };
 
 pub use migration::{MigrationContext, MigrationError, MigrationReport, Migrator};
 pub use rpstate_macros::{RpType, rpstate};
-
-#[cfg(feature = "codegen")]
+#[cfg(feature = "tauri")]
 pub mod tauri_codegen;
 
-#[cfg(feature = "json")]
-pub use store::backend::json::JsonStore;
-
-#[cfg(feature = "redb")]
-pub use store::backend::redb::RedbStore;
-
-#[cfg(feature = "redb")]
-pub type DefaultStore = RedbStore;
-
-#[cfg(all(feature = "json", not(feature = "redb")))]
-pub type DefaultStore = JsonStore;
-
-#[cfg(not(any(feature = "json", feature = "redb")))]
-compile_error!(
-    "rpstate requires at least one backend feature to be enabled. \
-     Please enable either 'redb' (recommended) or 'json' in your Cargo.toml."
-);
-
 pub fn field<TScope, TValue>(
-    store: &Arc<DefaultStore>,
+    store: &DefaultStore,
     key: &str,
     default: TValue,
 ) -> Result<Field<TValue, DefaultStore, WritableMode>>
@@ -65,7 +45,7 @@ where
 }
 
 pub fn reactive_map<TScope, K, V>(
-    store: &Arc<DefaultStore>,
+    store: &DefaultStore,
     key: &str,
     default: HashMap<K, V>,
 ) -> Result<ReactiveMap<K, V, DefaultStore, WritableMode>>

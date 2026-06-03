@@ -1,23 +1,19 @@
 pub mod backend;
 pub mod builder;
 pub mod config;
+pub mod default;
 pub mod util;
 
-#[cfg(feature = "json")]
-pub use backend::json::JsonStore;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::str::FromStr;
 
-#[cfg(feature = "redb")]
-pub use backend::redb::RedbStore;
-
 use crate::migration::set::MigrationSet;
 use crate::reactive::{MapChange, ReactiveMap};
 use crate::{
-    AccessMode, DefaultStore, Field, MigrationReport, Result, Signal, StoreSubscription,
-    WritableMode,
+    AccessMode, DefaultStore, Field, MigrationReport, Result, Signal, StoreConfig,
+    StoreSubscription, WritableMode,
 };
 use bytes::Bytes;
 use rpstate_core::{FieldCore, ReactiveMapCore};
@@ -50,13 +46,15 @@ pub enum SubscriptionKind {
     Prefix(Arc<str>),
 }
 
-pub trait Store: Send + Sync + 'static {
+pub trait Store: Clone + Sized + Send + Sync + 'static {
+    fn open(config: StoreConfig, set: MigrationSet) -> Result<(Self, MigrationReport)>;
+
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>>;
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()>;
     fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
         self.set(&path, value)
     }
-
+    fn save_now(&self) -> Result<()>;
     fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Bytes)>>;
     fn delete(&self, path: &str) -> Result<()>;
     fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId;
@@ -76,7 +74,7 @@ pub trait StateScope {
 }
 
 pub trait RpStateSlice: Sized {
-    fn load_slice(store: &Arc<DefaultStore>) -> Result<Self>;
+    fn load_slice(store: &DefaultStore) -> Result<Self>;
 }
 
 pub fn scoped_path<T: StateScope>(key: &str) -> String {
@@ -91,7 +89,7 @@ pub fn scoped_path<T: StateScope>(key: &str) -> String {
 }
 
 pub fn field<TScope, TValue, S>(
-    store: &Arc<S>,
+    store: &S,
     key: &str,
     default: TValue,
 ) -> Result<Field<TValue, S, WritableMode>>
@@ -105,7 +103,7 @@ where
 }
 
 pub fn field_with_path<TValue, S, M>(
-    store: &Arc<S>,
+    store: &S,
     path: Arc<str>,
     default: TValue,
 ) -> Result<Field<TValue, S, M>>
@@ -124,7 +122,7 @@ where
     let signal = Signal::new(current);
 
     let sig_clone = signal.clone();
-    let store_clone = Arc::clone(store);
+    let store_clone = store.clone();
     let path_log = Arc::clone(&path);
 
     let id = store.subscribe(
@@ -143,7 +141,7 @@ where
         core: FieldCore::new_with_signal(signal),
         path,
         store_sub: Some(Arc::new(StoreSubscription {
-            store: Arc::clone(store),
+            store: store.clone(),
             id,
         })),
         _mode: std::marker::PhantomData,
@@ -151,7 +149,7 @@ where
 }
 
 pub fn reactive_map<TScope, K, V, S>(
-    store: &Arc<S>,
+    store: &S,
     key: &str,
     default: HashMap<K, V>,
 ) -> Result<ReactiveMap<K, V, S, WritableMode>>
@@ -166,7 +164,7 @@ where
 }
 
 pub fn reactive_map_with_path<TScope, K, V, S, M>(
-    store: &Arc<S>,
+    store: &S,
     path: Arc<str>,
     defaults: HashMap<K, V>,
 ) -> Result<ReactiveMap<K, V, S, M>>
@@ -205,7 +203,7 @@ where
 
     let core_clone = core.clone();
     let prefix_for_strip = format!("{}.", path);
-    let store_clone = Arc::clone(store);
+    let store_clone = store.clone();
     let path_for_sub = path.clone();
 
     let id = store.subscribe(
@@ -258,9 +256,9 @@ where
     Ok(ReactiveMap {
         core,
         path,
-        store: Arc::clone(store),
+        store: store.clone(),
         store_sub: Arc::new(StoreSubscription {
-            store: Arc::clone(store),
+            store: store.clone(),
             id,
         }),
         _mode: std::marker::PhantomData,

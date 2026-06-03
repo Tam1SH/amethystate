@@ -46,16 +46,17 @@ thread_local! {
         std::cell::RefCell::new(Vec::with_capacity(BUF_SIZE));
 }
 
+#[derive(Clone)]
 pub struct RedbStore {
     db: Arc<Database>,
     pending: Arc<Mutex<HashMap<Arc<str>, Option<Bytes>>>>,
-    debouncer: Debouncer,
+    debouncer: Arc<Debouncer>,
     subscriptions: Arc<RwLock<Vec<SubscriptionEntry>>>,
-    next_sub_id: AtomicU64,
+    next_sub_id: Arc<AtomicU64>,
 
     write_lock: Arc<Mutex<()>>,
-    watcher_tx: std::sync::mpsc::Sender<()>,
-    watcher_handle: Option<JoinHandle<()>>,
+    watcher_tx: Arc<std::sync::mpsc::Sender<()>>,
+    watcher_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl RedbStore {
@@ -138,12 +139,12 @@ impl RedbStore {
         let store = Self {
             db: db.clone(),
             pending,
-            debouncer,
+            debouncer: Arc::new(debouncer),
             subscriptions: subscriptions.clone(),
-            next_sub_id: AtomicU64::new(1),
+            next_sub_id: Arc::new(AtomicU64::new(1)),
             write_lock,
-            watcher_tx: w_tx,
-            watcher_handle: Some(watcher_handle),
+            watcher_tx: Arc::new(w_tx),
+            watcher_handle: Arc::new(Mutex::new(Some(watcher_handle))),
         };
 
         let report = store.run_migrations(migration_set)?;
@@ -155,17 +156,14 @@ impl RedbStore {
         info!("Closing RedbStore explicitly...");
 
         let _ = self.watcher_tx.send(());
-        if let Some(handle) = self.watcher_handle.take() {
+        // TODO: unwrap
+        if let Some(handle) = self.watcher_handle.lock().unwrap().take() {
             let _ = handle.join();
         }
 
         self.save_now()?;
 
         Ok(())
-    }
-
-    pub fn save_now(&self) -> Result<()> {
-        self.flush_prefix("")
     }
 
     pub fn flush_prefix(&self, prefix: &str) -> Result<()> {
@@ -524,6 +522,10 @@ impl SchemaAwareStore for RedbStore {
 }
 
 impl Store for RedbStore {
+    fn open(config: StoreConfig, set: MigrationSet) -> Result<(Self, MigrationReport)> {
+        Self::open(config, set)
+    }
+
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
         {
             let lock = self.pending.lock().map_err(|_| RedbStoreError::Poisoned)?;
@@ -551,7 +553,6 @@ impl Store for RedbStore {
             None => Ok(None),
         }
     }
-
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
         self.set_owned(Arc::from(path), value)
     }
@@ -588,6 +589,10 @@ impl Store for RedbStore {
 
         self.debouncer.schedule();
         Ok(())
+    }
+
+    fn save_now(&self) -> Result<()> {
+        self.flush_prefix("")
     }
 
     fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Bytes)>> {

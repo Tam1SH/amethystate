@@ -149,7 +149,7 @@ pub(crate) fn data_impl(
                 #fname: {
                     let path = Self::__rpstate_path(prefix, #key);
                     let raw = <#crate_name::DefaultStore as #crate_name::Store>::scan_prefix(
-                        &**store,
+                        &store,
                         &format!("{}.", path),
                     )?;
                     let mut map = ::std::collections::HashMap::<#k, #v>::new();
@@ -158,7 +158,7 @@ pub(crate) fn data_impl(
                             && let Ok(kv) = <#k as ::std::str::FromStr>::from_str(k_str)
                         {
                             let vv = <#crate_name::DefaultStore as #crate_name::Store>::decode::<#v>(
-                                &**store,
+                                &store,
                                 &bytes,
                             )?;
                             map.insert(kv, vv);
@@ -175,7 +175,7 @@ pub(crate) fn data_impl(
                 .unwrap_or_else(|| quote! { <#ty as ::std::default::Default>::default() });
             quote! {
                 #fname: <#crate_name::DefaultStore as #crate_name::Store>::get::<#ty>(
-                    &**store,
+                    &store,
                     &Self::__rpstate_path(prefix, #key),
                 )?.unwrap_or_else(|| #fallback)
             }
@@ -196,14 +196,14 @@ pub(crate) fn data_impl(
                     let path = Self::__rpstate_path(prefix, #key);
                     for (k, v) in &self.#fname {
                         let full_path = format!("{}.{}", path, k);
-                        <#crate_name::DefaultStore as #crate_name::Store>::set(&**store, &full_path, v)?;
+                        <#crate_name::DefaultStore as #crate_name::Store>::set(&store, &full_path, v)?;
                     }
                 }
             }
         } else {
             quote! {
                 <#crate_name::DefaultStore as #crate_name::Store>::set(
-                    &**store,
+                    &store,
                     &Self::__rpstate_path(prefix, #key),
                     &self.#fname,
                 )?;
@@ -222,7 +222,7 @@ pub(crate) fn data_impl(
             quote! {
                 #[derive(Clone)] #(#attrs)* #vis struct #name {
                     inner: #data_struct_name,
-                    store: ::std::sync::Arc<#crate_name::DefaultStore>,
+                    store: #crate_name::DefaultStore,
                     prefix: ::std::sync::Arc<str>,
                 }
 
@@ -265,13 +265,13 @@ pub(crate) fn data_impl(
 
                     pub fn save(&self) -> #crate_name::Result<()> {
                         self.save_lazy()?;
-                        <#crate_name::DefaultStore as #crate_name::Store>::flush_prefix(&*self.store, &self.prefix)
+                        <#crate_name::DefaultStore as #crate_name::Store>::flush_prefix(&self.store, &self.prefix)
                     }
 
-                    pub fn load(store: &::std::sync::Arc<#crate_name::DefaultStore>) -> #crate_name::Result<Self> {
+                    pub fn load(store: &#crate_name::DefaultStore) -> #crate_name::Result<Self> {
                         Ok(Self {
                             inner: #data_struct_name::__rpstate_load_from(store, #prefix_expr)?,
-                            store: ::std::sync::Arc::clone(store),
+                            store: store.clone(),
                             prefix: ::std::sync::Arc::from(#prefix_expr),
                         })
                     }
@@ -284,7 +284,7 @@ pub(crate) fn data_impl(
                 #[allow(non_camel_case_types)]
                 pub struct #persisted_struct_name {
                     inner: #data_struct_name,
-                    store: ::std::sync::Arc<#crate_name::DefaultStore>,
+                    store: #crate_name::DefaultStore,
                     prefix: ::std::sync::Arc<str>,
                 }
 
@@ -329,15 +329,15 @@ pub(crate) fn data_impl(
 
                     pub fn save(&self) -> #crate_name::Result<()> {
                         self.save_lazy()?;
-                        <#crate_name::DefaultStore as #crate_name::Store>::flush_prefix(&*self.store, &self.prefix)
+                        <#crate_name::DefaultStore as #crate_name::Store>::flush_prefix(&self.store, &self.prefix)
                     }
                 }
 
                 impl #name {
-                    pub fn load(store: &::std::sync::Arc<#crate_name::DefaultStore>) -> #crate_name::Result<#persisted_struct_name> {
+                    pub fn load(store: &#crate_name::DefaultStore) -> #crate_name::Result<#persisted_struct_name> {
                         Ok(#persisted_struct_name {
                             inner: #data_struct_name::__rpstate_load_from(store, #prefix_expr)?,
-                            store: ::std::sync::Arc::clone(store),
+                            store: store.clone(),
                             prefix: ::std::sync::Arc::from(#prefix_expr),
                         })
                     }
@@ -359,7 +359,7 @@ pub(crate) fn data_impl(
         impl #data_struct_name {
             #[doc(hidden)]
             pub fn __rpstate_load_from(
-                store: &::std::sync::Arc<#crate_name::DefaultStore>,
+                store: &#crate_name::DefaultStore,
                 prefix: &str,
             ) -> #crate_name::Result<Self> {
                 Ok(Self {
@@ -370,7 +370,7 @@ pub(crate) fn data_impl(
             #[doc(hidden)]
             pub fn __rpstate_save_to(
                 &self,
-                store: &::std::sync::Arc<#crate_name::DefaultStore>,
+                store: &#crate_name::DefaultStore,
                 prefix: &str,
             ) -> #crate_name::Result<()> {
                 #(#store_save_fields)*

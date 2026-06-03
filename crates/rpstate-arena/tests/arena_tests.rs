@@ -18,7 +18,7 @@ pub struct TestState {
     pub sessions: ReactiveMap<String, String>,
 }
 
-fn unique_store(suffix: &str) -> Arc<DefaultStore> {
+fn unique_store(suffix: &str) -> DefaultStore {
     use rpstate::store::config::StoreConfig;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -27,11 +27,10 @@ fn unique_store(suffix: &str) -> Arc<DefaultStore> {
         .unwrap()
         .as_nanos();
     let path = std::env::temp_dir().join(format!("rpstate-arena-test-{suffix}-{nanos}.json"));
-    Arc::new(
-        DefaultStore::open(StoreConfig::new(path), Default::default())
-            .unwrap()
-            .0,
-    )
+
+    DefaultStore::open(StoreConfig::new(path), Default::default())
+        .unwrap()
+        .0
 }
 
 #[test]

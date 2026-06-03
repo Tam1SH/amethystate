@@ -42,7 +42,7 @@ fn test_decentralized_codegen_migration() {
     }
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
+        let store = StoreBuilder::new(&path).build().unwrap();
         let config = v1::Config::new(&store).unwrap();
         config.host().set("10.0.0.1".to_string()).unwrap();
     }

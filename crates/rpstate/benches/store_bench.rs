@@ -1,12 +1,10 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
-#[cfg(feature = "redb")]
-use rpstate::RedbStore;
-use rpstate::{Store, StoreBuilder};
+
+use rpstate::{DefaultStore, Store, StoreBuilder};
 use serde::Serialize;
 use std::hint::black_box;
-use std::sync::Arc;
 
 #[derive(Serialize)]
 struct BenchData {
@@ -16,7 +14,7 @@ struct BenchData {
 }
 
 #[cfg(feature = "redb")]
-fn setup_store() -> Arc<RedbStore> {
+fn setup_store() -> DefaultStore {
     let path = std::env::temp_dir().join(format!("bench_{}.redb", rand::random::<u32>()));
     if path.exists() {
         std::fs::remove_file(&path).ok();

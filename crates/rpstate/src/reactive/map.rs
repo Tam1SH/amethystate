@@ -15,7 +15,7 @@ use std::sync::Arc;
 pub struct ReactiveMap<K, V, S: Store = DefaultStore, M: AccessMode = ReadOnlyMode> {
     pub core: ReactiveMapCore<K, V>,
     pub path: Arc<str>,
-    pub store: Arc<S>,
+    pub store: S,
     pub(crate) store_sub: Arc<StoreSubscription<S>>,
     pub(crate) _mode: PhantomData<M>,
 }
@@ -262,7 +262,7 @@ mod tests {
     use std::time::Duration;
     use tracing_test::traced_test;
 
-    fn setup_store(name: &str) -> Arc<DefaultStore> {
+    fn setup_store(name: &str) -> DefaultStore {
         let suffix = rand::random::<u32>();
         let path = std::env::temp_dir().join(format!("rpstate-map-unit-{}-{}.db", name, suffix));
         if path.exists() {

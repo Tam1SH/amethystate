@@ -7,6 +7,11 @@ pub mod map_core;
 pub mod pipeline;
 pub mod signal;
 
+#[cfg(feature = "async")]
+pub mod async_impl;
+#[cfg(feature = "async")]
+pub use async_impl::*;
+
 pub use access::*;
 pub use change::{Change, MapChange};
 pub use field_core::FieldCore;

@@ -63,7 +63,7 @@ pub(crate) fn generate_code(
     let slice_impl = if is_root {
         quote! {
             impl #crate_name::RpStateSlice for #name {
-                fn load_slice(store: &::std::sync::Arc<#crate_name::DefaultStore>) -> #crate_name::Result<Self> {
+                fn load_slice(store: &#crate_name::DefaultStore) -> #crate_name::Result<Self> {
                     Self::new(store)
                 }
             }
@@ -156,7 +156,7 @@ fn generate_schema_export(
         }
     });
 
-    if cfg!(feature = "codegen") {
+    if cfg!(feature = "tauri") {
         quote! {
             #[cfg(not(target_arch = "wasm32"))]
             #crate_name::inventory::submit! {

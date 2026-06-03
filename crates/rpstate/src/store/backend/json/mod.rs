@@ -21,12 +21,13 @@ use std::sync::{Arc, RwLock};
 use std::{collections::BTreeSet, thread};
 use tracing::{debug, info, warn};
 
+#[derive(Clone)]
 pub struct JsonStore {
     path: PathBuf,
     map: Arc<RwLock<Map<String, Value>>>,
     subscriptions: Arc<RwLock<Vec<SubscriptionEntry>>>,
-    next_id: AtomicU64,
-    debouncer: Debouncer,
+    next_id: Arc<AtomicU64>,
+    debouncer: Arc<Debouncer>,
 }
 
 impl Debug for JsonStore {
@@ -38,6 +39,10 @@ impl Debug for JsonStore {
 }
 
 impl Store for JsonStore {
+    fn open(config: StoreConfig, _: MigrationSet) -> Result<(Self, MigrationReport)> {
+        Self::open(config, Default::default())
+    }
+
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
         let guard = self.map.read().map_err(|_| JsonStoreError::Poisoned)?;
 
@@ -47,6 +52,12 @@ impl Store for JsonStore {
             )),
             None => Ok(None),
         }
+    }
+
+    fn save_now(&self) -> Result<()> {
+        info!(path = %self.path.display(), "saving store synchronously");
+        persist_atomic(&self.path, &self.snapshot())?;
+        Ok(())
     }
 
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
@@ -324,12 +335,6 @@ impl JsonStore {
 
     pub fn snapshot(&self) -> Map<String, Value> {
         self.map.read().unwrap().clone()
-    }
-
-    pub fn save_now(&self) -> Result<()> {
-        info!(path = %self.path.display(), "saving store synchronously");
-        persist_atomic(&self.path, &self.snapshot())?;
-        Ok(())
     }
 
     pub fn on_any<F: Fn(&StoreEvent) + Send + Sync + 'static>(&self, cb: F) -> SubscriptionId {

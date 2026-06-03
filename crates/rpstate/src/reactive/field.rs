@@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
 use std::sync::Arc;
 
 pub struct StoreSubscription<S: Store> {
-    pub store: Arc<S>,
+    pub store: S,
     pub id: SubscriptionId,
 }
 
@@ -141,17 +141,16 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
     use tracing_test::traced_test;
 
-    fn unique_store(suffix: &str) -> Arc<DefaultStore> {
+    fn unique_store(suffix: &str) -> DefaultStore {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
+
         let path = std::env::temp_dir().join(format!("rpstate-reactive-{suffix}-{nanos}.json"));
-        Arc::new(
-            DefaultStore::open(StoreConfig::new(path), Default::default())
-                .unwrap()
-                .0,
-        )
+        DefaultStore::open(StoreConfig::new(path), Default::default())
+            .unwrap()
+            .0
     }
 
     struct UiScope;

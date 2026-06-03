@@ -1,10 +1,9 @@
 use crate::DefaultStore;
 use crate::migration::fields::RpStateFields;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 pub trait RpStateNode: Sized {
-    fn new_node(store: &Arc<DefaultStore>, path: &str) -> crate::Result<Self>;
+    fn new_node(store: &DefaultStore, path: &str) -> crate::Result<Self>;
 }
 
 pub trait RpState {

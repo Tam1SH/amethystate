@@ -76,7 +76,7 @@ pub(crate) fn node_impl(crate_name: &TokenStream2, name: &Ident, is_root: bool) 
     if is_root {
         quote! {
             impl #crate_name::RpStateNode for #name {
-                fn new_node(store: &::std::sync::Arc<#crate_name::DefaultStore>, _path: &str) -> #crate_name::Result<Self> {
+                fn new_node(store: &#crate_name::DefaultStore, _path: &str) -> #crate_name::Result<Self> {
                     Self::new(store)
                 }
             }
@@ -84,7 +84,7 @@ pub(crate) fn node_impl(crate_name: &TokenStream2, name: &Ident, is_root: bool) 
     } else {
         quote! {
             impl #crate_name::RpStateNode for #name {
-                fn new_node(store: &::std::sync::Arc<#crate_name::DefaultStore>, path: &str) -> #crate_name::Result<Self> {
+                fn new_node(store: &#crate_name::DefaultStore, path: &str) -> #crate_name::Result<Self> {
                     Self::new(store, path)
                 }
             }
@@ -109,7 +109,7 @@ pub(crate) fn constructor(
 ) -> TokenStream2 {
     if is_root {
         quote! {
-            pub fn new(store: &::std::sync::Arc<#crate_name::DefaultStore>) -> #crate_name::Result<Self> {
+            pub fn new(store: &#crate_name::DefaultStore) -> #crate_name::Result<Self> {
                 use #crate_name::Store;
                 let result = Self { #(#init_fields,)* };
                 store.mark_initialized(<Self as #crate_name::StateScope>::PREFIX)?;
@@ -118,7 +118,7 @@ pub(crate) fn constructor(
         }
     } else {
         quote! {
-            pub fn new(store: &::std::sync::Arc<#crate_name::DefaultStore>, namespace: &str) -> #crate_name::Result<Self> {
+            pub fn new(store: &#crate_name::DefaultStore, namespace: &str) -> #crate_name::Result<Self> {
                 use #crate_name::Store;
                 let result = Self { #(#init_fields,)* };
                 store.mark_initialized(namespace)?;

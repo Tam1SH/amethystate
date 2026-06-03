@@ -12,7 +12,7 @@ rust-version.workspace = true
 [features]
 default = ["redb"]
 json = []
-codegen = ["rpstate-macros/codegen"]
+tauri = ["rpstate-macros/tauri"]
 redb = ["dep:redb", "dep:rmp-serde"]
 
 [dependencies]

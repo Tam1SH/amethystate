@@ -19,7 +19,7 @@ serde_json = { workspace = true }
 log = "0.4.30"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rpstate = { workspace = true, features = ["codegen"] }
+rpstate = { workspace = true, features = ["tauri"] }
 inventory = { workspace = true }
 tauri = { version = "2", default-features = false }
 heck.workspace = true

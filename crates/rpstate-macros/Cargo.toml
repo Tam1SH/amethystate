@@ -21,4 +21,4 @@ rpstate-macros-core.workspace = true
 proc-macro-crate.workspace = true
 
 [features]
-codegen = []
+tauri = []
