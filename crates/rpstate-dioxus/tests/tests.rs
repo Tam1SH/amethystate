@@ -1,13 +1,16 @@
 use dioxus::core::NoOpMutations;
 use dioxus::prelude::*;
 use rpstate::store::field_with_path;
-use rpstate::{DefaultStore, IntoPipeline, MapChange, rpstate};
-use rpstate_arena::{Arena, PipelineBuilder, PipelineHandle, WritableHandle, WritableMapHandle};
-use rpstate_dioxus::DioxusIntoPipeline;
+use rpstate::{DefaultStore, MapChange, rpstate};
+use rpstate_arena::{
+    DefaultArena, IntoArenaPipeline, PIPELINE_ARENA, PipelineHandle, WritableHandle,
+    WritableMapHandle,
+};
 use rpstate_dioxus::{
     MapSignal, RpStateProvider, use_field, use_map, use_map_subscribe_any, use_map_subscribe_key,
     use_pipeline, use_rpstate,
 };
+use rpstate_macros_arena::rpstate_framework_arena;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -62,8 +65,8 @@ impl rpstate::StateScope for DummyScope {
 
 #[derive(Clone, Props)]
 struct FieldTestProps {
-    arena: Arena,
-    handle: WritableHandle<i32, DefaultStore>,
+    arena: DefaultArena,
+    handle: WritableHandle<i32>,
     probe: Probe<i32>,
     setter_probe: Probe<Callback<i32>>,
 }
@@ -90,7 +93,7 @@ fn FieldTestComponent(props: FieldTestProps) -> Element {
 #[tokio::test]
 async fn test_use_field_requirements() {
     let store = unique_store("field");
-    let arena = Arena::new();
+    let arena = DefaultArena::new();
 
     let field =
         rpstate::store::field_with_path(&store, std::sync::Arc::from("field_1"), 10).unwrap();
@@ -137,8 +140,8 @@ async fn test_use_field_requirements() {
 
 #[derive(Clone, Props)]
 struct MapTestProps {
-    arena: Arena,
-    handle: WritableMapHandle<String, String, DefaultStore>,
+    arena: DefaultArena,
+    handle: WritableMapHandle<String, String>,
     probe: Probe<HashMap<String, String>>,
     methods_probe: Probe<MapSignal<String, String>>,
 }
@@ -161,7 +164,7 @@ fn MapTestComponent(props: MapTestProps) -> Element {
 #[tokio::test]
 async fn test_use_map_requirements() {
     let store = unique_store("map");
-    let arena = Arena::new();
+    let arena = DefaultArena::new();
 
     let map = rpstate::store::reactive_map_with_path::<DummyScope, String, String, _, _>(
         &store,
@@ -227,8 +230,8 @@ async fn test_use_map_requirements() {
 
 #[derive(Clone, Props)]
 struct PipelineProps {
-    arena: Arena,
-    dep_handle: WritableHandle<i32, DefaultStore>,
+    arena: DefaultArena,
+    dep_handle: WritableHandle<i32>,
     probe: Probe<i32>,
     handle_probe: Probe<PipelineHandle<i32>>,
 }
@@ -241,7 +244,7 @@ impl PartialEq for PipelineProps {
 
 #[derive(Clone)]
 struct PipelineCleanup {
-    arena: Arena,
+    arena: DefaultArena,
     handle: PipelineHandle<i32>,
 }
 
@@ -257,10 +260,11 @@ fn PipelineTestComponent(props: PipelineProps) -> Element {
 
     props.probe.push(*val.read());
 
-    let arena = use_context::<Arena>();
+    let arena = use_context::<DefaultArena>();
     let cleanup = use_hook(|| {
-        let builder = PipelineBuilder::new(&arena);
-        let pipeline = builder.field(dep).pipe().map(|v| v * 2);
+        PIPELINE_ARENA.with(|a| *a.borrow_mut() = Some(arena.clone()));
+        let pipeline = dep.pipe().map(|v| v * 2);
+        PIPELINE_ARENA.with(|a| *a.borrow_mut() = None);
         let handle = arena.register_pipeline(pipeline);
         Arc::new(PipelineCleanup {
             arena: arena.clone(),
@@ -276,7 +280,7 @@ fn PipelineTestComponent(props: PipelineProps) -> Element {
 #[tokio::test]
 async fn test_use_pipeline_requirements() {
     let store = unique_store("pipeline");
-    let arena = Arena::new();
+    let arena = DefaultArena::new();
 
     let field =
         rpstate::store::field_with_path(&store, std::sync::Arc::from("field_2"), 5).unwrap();
@@ -321,12 +325,12 @@ async fn test_use_pipeline_requirements() {
     assert!(result.is_err());
 }
 
-#[rpstate_macros_dioxus::rpstate_dioxus]
-#[rpstate(prefix = "test")]
-pub struct MyTestState {
-    #[state(default = 0)]
-    pub id: usize,
-}
+// #[rpstate_framework_arena]
+// #[rpstate(prefix = "test")]
+// pub struct MyTestState {
+//     #[state(default = 0)]
+//     pub id: usize,
+// }
 
 #[derive(Clone, Props)]
 struct RpStateProps {
@@ -415,8 +419,8 @@ async fn test_use_rpstate_requirements() {
 
 #[derive(Clone, Props)]
 struct MapSubProps {
-    arena: Arena,
-    handle: WritableMapHandle<String, String, DefaultStore>,
+    arena: DefaultArena,
+    handle: WritableMapHandle<String, String>,
     any_changes: Arc<Mutex<Vec<MapChange<String, String>>>>,
     key_changes: Arc<Mutex<Vec<MapChange<String, String>>>>,
 }
@@ -445,7 +449,7 @@ fn MapSubComponent(props: MapSubProps) -> Element {
 #[tokio::test]
 async fn test_map_sub_requirements() {
     let store = unique_store("sub");
-    let arena = Arena::new();
+    let arena = DefaultArena::new();
 
     let map = rpstate::store::reactive_map_with_path::<DummyScope, String, String, _, _>(
         &store,
@@ -496,9 +500,9 @@ async fn test_map_sub_requirements() {
 
 #[derive(Clone, Props)]
 struct AllPrimitivesProps {
-    arena: Arena,
-    field_handle: WritableHandle<i32, DefaultStore>,
-    map_handle: WritableMapHandle<String, String, DefaultStore>,
+    arena: DefaultArena,
+    field_handle: WritableHandle<i32>,
+    map_handle: WritableMapHandle<String, String>,
 
     field_probe: Probe<i32>,
     map_probe: Probe<HashMap<String, String>>,
@@ -537,10 +541,14 @@ fn AllPrimitivesComponent(props: AllPrimitivesProps) -> Element {
         map_sub_key_probe.push(change.clone());
     });
 
-    let arena = use_context::<Arena>();
+    let arena = use_context::<DefaultArena>();
     let cleanup = use_hook(|| {
-        let builder = PipelineBuilder::new(&arena);
-        let pipeline = builder.field(field_handle_copy).pipe().map(|v| v * 3);
+        let field = arena.get_field(field_handle_copy);
+
+        PIPELINE_ARENA.with(|a| *a.borrow_mut() = Some(arena.clone()));
+        let pipeline = field_handle_copy.pipe().map(|v| v * 3);
+        PIPELINE_ARENA.with(|a| *a.borrow_mut() = None);
+
         let handle = arena.register_pipeline(pipeline);
         Arc::new(PipelineCleanup {
             arena: arena.clone(),
@@ -554,9 +562,9 @@ fn AllPrimitivesComponent(props: AllPrimitivesProps) -> Element {
 
 #[derive(Clone, Props)]
 struct AllPrimitivesToggleProps {
-    arena: Arena,
-    field_handle: WritableHandle<i32, DefaultStore>,
-    map_handle: WritableMapHandle<String, String, DefaultStore>,
+    arena: DefaultArena,
+    field_handle: WritableHandle<i32>,
+    map_handle: WritableMapHandle<String, String>,
 
     field_probe: Probe<i32>,
     map_probe: Probe<HashMap<String, String>>,
@@ -603,7 +611,7 @@ fn AllPrimitivesToggleComponent(props: AllPrimitivesToggleProps) -> Element {
 #[tokio::test]
 async fn test_all_primitives_simultaneous_lifecycle() {
     let store = unique_store("all_primitives");
-    let arena = Arena::new();
+    let arena = DefaultArena::new();
 
     let field =
         rpstate::store::field_with_path(&store, std::sync::Arc::from("field_all"), 10).unwrap();
@@ -727,9 +735,9 @@ async fn test_all_primitives_simultaneous_lifecycle() {
 
 #[derive(Clone, Props)]
 struct PipelineLifecycleProps {
-    arena: Arena,
-    field_a: WritableHandle<i32, DefaultStore>,
-    field_b: WritableHandle<i32, DefaultStore>,
+    arena: DefaultArena,
+    field_a: WritableHandle<i32>,
+    field_b: WritableHandle<i32>,
     probe: Probe<String>,
     signal_probe: Probe<Signal<bool>>,
 }
@@ -742,9 +750,9 @@ impl PartialEq for PipelineLifecycleProps {
 
 #[component]
 fn PipelineLifecycleInner(
-    arena: Arena,
-    field_a: WritableHandle<i32, DefaultStore>,
-    field_b: WritableHandle<i32, DefaultStore>,
+    arena: DefaultArena,
+    field_a: WritableHandle<i32>,
+    field_b: WritableHandle<i32>,
     probe: Probe<String>,
 ) -> Element {
     let val = use_pipeline(move || (field_a, field_b).pipe().map(|(a, b)| format!("{a}:{b}")));
@@ -775,7 +783,7 @@ fn PipelineLifecycleRoot(props: PipelineLifecycleProps) -> Element {
 #[tokio::test]
 async fn test_pipeline_lifecycle_and_tuple_pipe() {
     let store = unique_store("pipeline_lifecycle");
-    let arena = Arena::new();
+    let arena = DefaultArena::new();
 
     let fa = arena.register_field(field_with_path(&store, Arc::from("fa"), 1).unwrap());
     let fb = arena.register_field(field_with_path(&store, Arc::from("fb"), 2).unwrap());
@@ -832,4 +840,11 @@ async fn test_pipeline_lifecycle_and_tuple_pipe() {
     vdom.wait_for_work().await;
     vdom.render_immediate(&mut NoOpMutations);
     assert_eq!(probe.last().as_deref(), Some("99:42"));
+}
+
+#[rpstate_framework_arena]
+#[rpstate(prefix = "test")]
+pub struct MyTestState {
+    #[state(default = 0)]
+    pub id: usize,
 }

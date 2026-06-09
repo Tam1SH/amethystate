@@ -1,0 +1,138 @@
+use crate::Result;
+use crate::codec::CodecError;
+use crate::store::backend::text::document::{
+    Navigable, TextDocument, generic_delete, generic_get, generic_scan, generic_set,
+};
+use crate::store::backend::text::error::TextStoreError;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+#[derive(Clone, Debug)]
+pub struct RonDocument(pub ::ron::value::Value);
+
+impl Navigable for ::ron::value::Value {
+    fn make_empty_map() -> Self {
+        ::ron::value::Value::Map(::ron::value::Map::new())
+    }
+    fn get_child(&self, key: &str) -> Option<&Self> {
+        if let ::ron::value::Value::Map(map) = self {
+            map.get(&::ron::value::Value::String(key.to_string()))
+        } else {
+            None
+        }
+    }
+    fn get_child_mut(&mut self, key: &str) -> Option<&mut Self> {
+        if let ::ron::value::Value::Map(map) = self {
+            map.get_mut(&::ron::value::Value::String(key.to_string()))
+        } else {
+            None
+        }
+    }
+    fn ensure_map(&mut self) {
+        if !matches!(self, ::ron::value::Value::Map(_)) {
+            *self = Self::make_empty_map();
+        }
+    }
+    fn insert_child(&mut self, key: &str, val: Self) {
+        self.ensure_map();
+        if let ::ron::value::Value::Map(map) = self {
+            map.insert(::ron::value::Value::String(key.to_string()), val);
+        }
+    }
+    fn remove_child(&mut self, key: &str) -> Option<Self> {
+        if let ::ron::value::Value::Map(map) = self {
+            map.remove(&::ron::value::Value::String(key.to_string()))
+        } else {
+            None
+        }
+    }
+    fn scan_children(&self) -> Vec<(String, Self)> {
+        let mut results = Vec::new();
+        if let ::ron::value::Value::Map(map) = self {
+            for (k, v) in map.iter() {
+                if let ::ron::value::Value::String(s) = k {
+                    results.push((s.clone(), v.clone()));
+                }
+            }
+        }
+        results
+    }
+}
+
+impl TextDocument for RonDocument {
+    type Node = ::ron::value::Value;
+
+    fn get(&self, parts: &[&str]) -> Option<&Self::Node> {
+        generic_get(&self.0, parts)
+    }
+
+    fn set(&mut self, parts: &[&str], node: Self::Node) -> Result<()> {
+        let is_root = parts.is_empty() || parts == ["."];
+        if is_root {
+            if !matches!(node, ::ron::value::Value::Map(_)) {
+                return Err(crate::error::Error::TextStore(
+                    TextStoreError::RootMustBeObject,
+                ));
+            }
+            self.0 = node;
+            return Ok(());
+        }
+        generic_set(&mut self.0, parts, node)
+    }
+
+    fn delete(&mut self, parts: &[&str]) -> Result<Option<Self::Node>> {
+        generic_delete(&mut self.0, parts)
+    }
+
+    fn scan(&self, parts: &[&str]) -> Vec<(String, Self::Node)> {
+        generic_scan(&self.0, parts)
+    }
+
+    fn parse(src: &str) -> Result<Self> {
+        let val: ::ron::value::Value =
+            ::ron::from_str(src).map_err(|e| TextStoreError::Codec(CodecError::Ron(e.into())))?;
+
+        if !matches!(val, ::ron::value::Value::Map(_)) {
+            return Err(crate::error::Error::from(TextStoreError::RootMustBeObject));
+        }
+        Ok(RonDocument(val))
+    }
+
+    fn serialize(&self) -> Result<String> {
+        ::ron::ser::to_string_pretty(&self.0, ::ron::ser::PrettyConfig::default())
+            .map_err(|e| TextStoreError::Codec(CodecError::Ron(e)))
+            .map_err(Into::into)
+    }
+
+    fn empty() -> Self {
+        RonDocument(::ron::value::Value::Map(::ron::value::Map::new()))
+    }
+
+    fn deserialize_node<T: DeserializeOwned>(node: &Self::Node) -> Result<T> {
+        node.clone()
+            .into_rust::<T>()
+            .map_err(|e| TextStoreError::Codec(CodecError::Ron(e)))
+            .map_err(Into::into)
+    }
+
+    fn serialize_node<T: Serialize>(value: &T) -> Result<Self::Node> {
+        let s =
+            ::ron::ser::to_string(value).map_err(|e| TextStoreError::Codec(CodecError::Ron(e)))?;
+        let node: ::ron::value::Value =
+            ::ron::from_str(&s).map_err(|e| TextStoreError::Codec(CodecError::Ron(e.into())))?;
+        Ok(node)
+    }
+
+    fn node_to_bytes(node: &Self::Node) -> Result<Vec<u8>> {
+        let s =
+            ::ron::ser::to_string(node).map_err(|e| TextStoreError::Codec(CodecError::Ron(e)))?;
+        Ok(s.into_bytes())
+    }
+
+    fn bytes_to_node(bytes: &[u8]) -> Result<Self::Node> {
+        let s = std::str::from_utf8(bytes).map_err(|e| CodecError::Custom(e.to_string()))?;
+        let node: ::ron::value::Value =
+            ::ron::from_str(s).map_err(|e| TextStoreError::Codec(CodecError::Ron(e.into())))?;
+        Ok(node)
+    }
+}

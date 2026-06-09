@@ -1,12 +1,7 @@
+use crate::MigrationContext;
 use crate::migration::fields::FieldDescriptor;
 use crate::store::StateScope;
-use crate::{MigrationContext, Migrator};
 use std::collections::BTreeSet;
-
-pub trait HasMigrations: StateScope {
-    const MIGRATION_DEPS: &'static [&'static str];
-    fn migrations() -> Migrator;
-}
 
 #[derive(Clone)]
 pub struct MigrationStepEntry {
@@ -19,7 +14,6 @@ pub struct MigrationStepEntry {
     pub run: fn(&mut MigrationContext) -> crate::Result<()>,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 inventory::collect!(MigrationStepEntry);
 
 pub trait MigrationDependency {

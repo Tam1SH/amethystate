@@ -23,6 +23,12 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-macros-core/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-macros-dioxus/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-dioxus/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-leptos/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-leptos/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-tauri/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-macros-arena/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-codegen/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-codegen/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/examples/tauri-leptos/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>

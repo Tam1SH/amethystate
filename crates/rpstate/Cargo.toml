@@ -11,15 +11,20 @@ rust-version.workspace = true
 
 [features]
 default = ["redb"]
-json = []
-tauri = ["rpstate-macros/tauri"]
+json = ["dep:serde_json", "text"]
+toml = ["dep:toml_edit", "text"]
+ron = ["dep:ron", "text"]
+async = ["rpstate-core/async"]
+tauri = ["rpstate-macros/tauri", "dep:serde_json", "rpstate-tauri", "async"]
 redb = ["dep:redb", "dep:rmp-serde"]
+text = ["dep:tempfile"]
+confy-compat-0-6 = ["dep:directories"]
+confy-compat = []
 
 [dependencies]
-rpstate-core = { path = "../rpstate-core" }
-arc-swap = { workspace = true }
+rpstate-core = { workspace = true }
+rpstate-tauri = { workspace = true, optional = true }
 bytes = { workspace = true }
-inventory = { workspace = true }
 petgraph = { workspace = true }
 rpstate-macros = { workspace = true }
 serde = { workspace = true }
@@ -27,11 +32,18 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 redb = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
-serde_json = { workspace = true }
-directories = { workspace = true }
+serde_json = { workspace = true, optional = true }
+directories = { workspace = true, optional = true }
+inventory = { workspace = true }
+parking_lot.workspace = true
+toml_edit = { version = "0.25.12", features = ["serde"], optional = true }
+tempfile = { workspace = true, optional = true }
+ron = { version = "0.12.1", optional = true }
+etcetera = "0.11.0"
 
 [dev-dependencies]
 criterion = { workspace = true }
+tempfile = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
@@ -39,6 +51,8 @@ macrotest = { workspace = true }
 serde = { workspace = true }
 trybuild = { workspace = true }
 tracing-test = { version = "0.2.6", features = ["no-env-filter"] }
+real-confy = { package = "confy", version = "2.0.0" }
+
 
 [[bench]]
 name = "store_bench"

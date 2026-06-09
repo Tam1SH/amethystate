@@ -1,8 +1,9 @@
 use dioxus::prelude::*;
 use futures_util::StreamExt;
 
+use rpstate::rpstate;
 use rpstate_dioxus::{
-    rpstate, rpstate_dioxus, use_field, use_map, use_map_entry, use_pipeline,
+    rpstate_dioxus, use_field, use_map, use_map_entry, use_pipeline,
     use_rpstate, DioxusIntoPipeline, Handle, MapChange, MapHandle, ReactiveMap, ReadOnlyMapHandle,
     RpStateProvider, RpType, StoreBuilder, WritableMapHandle
 };

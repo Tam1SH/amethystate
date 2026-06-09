@@ -1,7 +1,6 @@
 use rpstate::store::builder::StoreBuilder;
 use rpstate::{Store, migrate};
 use rpstate_macros::rpstate;
-use std::sync::Arc;
 
 mod v1 {
     use super::*;
@@ -33,7 +32,6 @@ migrate! {
     }
 }
 
-#[cfg(feature = "redb")]
 #[test]
 fn test_decentralized_codegen_migration() {
     let path = std::env::temp_dir().join("rpstate_integration_test.redb");
@@ -43,7 +41,7 @@ fn test_decentralized_codegen_migration() {
 
     {
         let store = StoreBuilder::new(&path).build().unwrap();
-        let config = v1::Config::new(&store).unwrap();
+        let config = v1::Config::new_with(&store).unwrap();
         config.host().set("10.0.0.1".to_string()).unwrap();
     }
 
@@ -52,7 +50,7 @@ fn test_decentralized_codegen_migration() {
         .build()
         .unwrap();
 
-    let config = Config::new(&store).expect("Failed to create Config");
+    let config = Config::new_with(&store).expect("Failed to create Config");
 
     assert_eq!(config.address().get(), "10.0.0.1");
 

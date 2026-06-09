@@ -1,58 +1,12 @@
+use crate::bindings::{AppSettings, Theme};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use tauri_plugin_rpstate::client::Pipeline;
-use tauri_plugin_rpstate::client::{Field, IntoPipeline, MapChange, ReactiveMap};
-
-use crate::bindings::{AppSettings, ThemeFields};
+use rpstate_arena::FieldHandle;
+use rpstate_leptos::{use_field, use_init_rpstate, use_pipeline, Handle, IntoPipeline, MapChange, MapSignal};
 use shared::ProxyProfile;
 
-fn use_rpstate_field<T>(field: Field<T>) -> (ReadSignal<T>, impl Fn(T) + Clone + 'static)
-where
-    T: serde::Serialize + serde::de::DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
-{
-    let (read, write) = signal(field.value());
-let path_sub = field.path.to_string();
-    let sub = field.subscribe(move |val| {
-        log::debug!("[subscribe] fired: {path_sub}");
-        write.set(val);
-    });
-    on_cleanup(move || drop(sub));
-
-    let field_setter = field.clone();
-    let setter = move |val: T| {
-        let f = field_setter.clone();
-        log::debug!("[setter] called: {}", f.path);
-        spawn_local(async move {
-            match f.set(val).await {
-                Ok(_) => log::debug!("[setter] ok: {}", f.path),
-                Err(e) => log::error!("[setter] err: {}: {e}", f.path),
-            }
-        });
-    };
-
-    (read, setter)
-}
-
-fn use_rpstate_pipeline<T>(make: impl FnOnce() -> Pipeline<T>) -> ReadSignal<T>
-where
-    T: Clone + Send + Sync + PartialEq + 'static,
-{
-    let pipeline = make();
-    let (read, write) = signal(pipeline.get());
-
-    let sub = pipeline.subscribe(move |val| {
-        write.set(val);
-    });
-    on_cleanup(move || {
-        drop(sub);
-        drop(pipeline);
-    });
-
-    read
-}
-
 #[component]
-fn EnvMapEditor(env: ReactiveMap<String, String>) -> impl IntoView {
+fn EnvMapEditor(env: MapSignal<String, String>) -> impl IntoView {
     let (entries, set_entries) = signal(Vec::<(String, String)>::new());
     let (new_key, set_new_key) = signal(String::new());
     let (new_val, set_new_val) = signal(String::new());
@@ -144,10 +98,10 @@ fn EnvMapEditor(env: ReactiveMap<String, String>) -> impl IntoView {
 }
 
 #[component]
-fn ThemeEditor(theme: ThemeFields) -> impl IntoView {
-    let (mode, set_mode) = use_rpstate_field(theme.mode);
-    let (bg, set_bg) = use_rpstate_field(theme.background);
-    let (fg, set_fg) = use_rpstate_field(theme.foreground);
+fn ThemeEditor(theme: Handle<Theme>) -> impl IntoView {
+    let (mode, set_mode) = use_field(theme.mode);
+    let (bg, set_bg) = use_field(theme.background);
+    let (fg, set_fg) = use_field(theme.foreground);
 
     view! {
         <div class="section">
@@ -187,13 +141,13 @@ fn ThemeEditor(theme: ThemeFields) -> impl IntoView {
 }
 
 #[component]
-fn ProxyEditor(proxy: Field<ProxyProfile>) -> impl IntoView {
+fn ProxyEditor(proxy: FieldHandle<ProxyProfile>) -> impl IntoView {
     let _intercept = proxy.intercept(|change| {
         if change.new_value.port == 0 { None } else { Some(change) }
     });
     on_cleanup(move || drop(_intercept));
 
-    let (prof, set_prof) = use_rpstate_field(proxy);
+    let (prof, set_prof) = use_field(proxy);
 
     let set_name = set_prof.clone();
     let set_addr = set_prof.clone();
@@ -268,18 +222,14 @@ fn ProxyEditor(proxy: Field<ProxyProfile>) -> impl IntoView {
 }
 
 #[component]
-pub fn Settings(state: AppSettings) -> impl IntoView {
-    let (username, set_username) = use_rpstate_field(state.username.clone());
-    let (counter, set_counter) = use_rpstate_field(state.counter.clone());
+pub fn Settings(state: Handle<AppSettings>) -> impl IntoView {
+    let (username, set_username) = use_field(state.username);
+    let (counter, set_counter) = use_field(state.counter);
 
-    let address = use_rpstate_pipeline({
-        let u = state.username.clone();
-        let c = state.counter.clone();
-        move || {
-            (u, c).pipe()
-                .map(|(u, c)| format!("{u}:{c}"))
-                .dedupe()
-        }
+    let address = use_pipeline(|| {
+        (state.username, state.counter).pipe()
+            .map(|(u, c)| format!("{u}:{c}"))
+            .dedupe()
     });
 
     view! {
@@ -319,16 +269,9 @@ pub fn Settings(state: AppSettings) -> impl IntoView {
 
 #[component]
 pub fn App() -> impl IntoView {
-    let (state, set_state) = signal(None::<AppSettings>);
 
-    Effect::new(move |_| {
-        spawn_local(async move {
-            match AppSettings::load().await {
-                Ok(loaded) => set_state.set(Some(loaded)),
-                Err(e) => log::error!("Failed to load: {e}"),
-            }
-        });
-    });
+    let state = use_init_rpstate::<AppSettings>();
+
 
     view! {
         {move || match state.get() {

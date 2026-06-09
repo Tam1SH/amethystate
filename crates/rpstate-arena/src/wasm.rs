@@ -1,0 +1,242 @@
+use crate::primitives::*;
+use parking_lot::RwLock;
+use rpstate::{AccessMode, MapChange, Pipeline, SignalSubscription, WritableMode};
+
+use rpstate::client::{AsyncSubscriptionBackend, Field, ReactiveMap};
+use rpstate::reactive::FieldValue;
+use rpstate::{ReactiveMapKey, ReactiveMapValue};
+use serde::Deserialize;
+use slotmap::{DefaultKey, SlotMap};
+use std::any::Any;
+use std::marker::PhantomData;
+use std::sync::Arc;
+
+type ErasedItem = Box<dyn Any + Send + Sync>;
+
+#[derive(Clone)]
+pub struct Arena<B: AsyncSubscriptionBackend> {
+    storage: Arc<RwLock<SlotMap<DefaultKey, ErasedItem>>>,
+    _backend: PhantomData<B>,
+}
+
+impl<B: AsyncSubscriptionBackend> Default for Arena<B> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<B: AsyncSubscriptionBackend> Arena<B> {
+    pub fn new() -> Self {
+        Self {
+            storage: Arc::new(RwLock::new(SlotMap::new())),
+            _backend: PhantomData,
+        }
+    }
+
+    pub fn with_item<Item, R, F>(&self, key: DefaultKey, type_name: &str, f: F) -> R
+    where
+        Item: Any,
+        F: FnOnce(&Item) -> R,
+    {
+        let storage = self.storage.read();
+        let item = storage.get(key).unwrap_or_else(|| {
+            panic!("rpstate-arena: Attempted to access a dropped {}", type_name)
+        });
+        let target = item
+            .downcast_ref::<Item>()
+            .unwrap_or_else(|| panic!("rpstate-arena: Type mismatch for {}", type_name));
+        f(target)
+    }
+
+    pub fn register_field<T>(&self, field: Field<T, B>) -> FieldHandle<T, WritableMode>
+    where
+        T: FieldValue,
+    {
+        let key = self.storage.write().insert(Box::new(field));
+        FieldHandle {
+            key,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn get_field<T, M>(&self, handle: FieldHandle<T, M>) -> T
+    where
+        T: FieldValue,
+    {
+        self.with_item::<Field<T, B>, _, _>(handle.key, "Field", |field| field.value())
+    }
+
+    pub async fn set_field<T>(&self, handle: WritableHandle<T>, value: T) -> Result<(), B::Error>
+    where
+        T: FieldValue,
+    {
+        let field = self.with_item::<Field<T, B>, _, _>(handle.key, "Field", |f| f.clone());
+        field.set(value).await
+    }
+
+    pub fn subscribe_field<T, M, F>(
+        &self,
+        handle: FieldHandle<T, M>,
+        callback: F,
+    ) -> SignalSubscription
+    where
+        T: FieldValue,
+        F: Fn(T) + Send + Sync + 'static,
+    {
+        self.with_item::<Field<T, B>, _, _>(handle.key, "Field", |field| field.subscribe(callback))
+    }
+
+    pub fn register_pipeline<T>(&self, pipeline: Pipeline<T>) -> PipelineHandle<T>
+    where
+        T: Send + Sync + 'static,
+    {
+        let key = self.storage.write().insert(Box::new(pipeline));
+        PipelineHandle {
+            key,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn get_pipeline<T>(&self, handle: PipelineHandle<T>) -> T
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        self.with_item::<Pipeline<T>, _, _>(handle.key, "Pipeline", |pipe| pipe.get())
+    }
+
+    pub fn subscribe_pipeline<T, F>(
+        &self,
+        handle: PipelineHandle<T>,
+        callback: F,
+    ) -> SignalSubscription
+    where
+        T: Clone + Send + Sync + 'static,
+        F: Fn(T) + Send + Sync + 'static,
+    {
+        self.with_item::<Pipeline<T>, _, _>(handle.key, "Pipeline", |pipe| pipe.subscribe(callback))
+    }
+
+    pub fn register_map<K, V, M>(&self, map: ReactiveMap<K, V, B>) -> MapHandle<K, V, M>
+    where
+        K: ReactiveMapKey,
+        V: ReactiveMapValue,
+        M: AccessMode,
+    {
+        let key = self.storage.write().insert(Box::new(map));
+        MapHandle {
+            key,
+            _marker: PhantomData,
+        }
+    }
+
+    pub async fn get_map_entry<K, V>(
+        &self,
+        handle: MapHandle<K, V>,
+        key: &K,
+    ) -> Result<Option<V>, B::Error>
+    where
+        K: ReactiveMapKey + for<'de> Deserialize<'de>,
+        V: ReactiveMapValue,
+    {
+        let map =
+            self.with_item::<ReactiveMap<K, V, B>, _, _>(handle.key, "ReactiveMap", |m| m.clone());
+        map.get(key).await
+    }
+
+    pub async fn set_map_entry<K, V>(
+        &self,
+        handle: WritableMapHandle<K, V>,
+        key: K,
+        value: V,
+    ) -> Result<(), B::Error>
+    where
+        K: ReactiveMapKey + for<'de> Deserialize<'de>,
+        V: ReactiveMapValue,
+    {
+        let map =
+            self.with_item::<ReactiveMap<K, V, B>, _, _>(handle.key, "ReactiveMap", |m| m.clone());
+        map.set(key, &value).await
+    }
+
+    pub fn subscribe_map_any<K, V, F, M>(
+        &self,
+        handle: MapHandle<K, V, M>,
+        callback: F,
+    ) -> SignalSubscription
+    where
+        K: ReactiveMapKey + for<'de> Deserialize<'de>,
+        V: ReactiveMapValue,
+        M: AccessMode,
+        F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
+    {
+        self.with_item::<ReactiveMap<K, V, B>, _, _>(handle.key, "ReactiveMap", |map| {
+            map.subscribe_any(callback)
+        })
+    }
+
+    pub fn subscribe_map_key<K, V, F>(
+        &self,
+        handle: MapHandle<K, V>,
+        key: K,
+        callback: F,
+    ) -> SignalSubscription
+    where
+        K: ReactiveMapKey + for<'de> Deserialize<'de>,
+        V: ReactiveMapValue,
+        F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
+    {
+        self.with_item::<ReactiveMap<K, V, B>, _, _>(handle.key, "ReactiveMap", |map| {
+            map.subscribe_key(key, callback)
+        })
+    }
+
+    pub fn remove_pipeline<T>(&self, handle: PipelineHandle<T>) {
+        self.storage.write().remove(handle.key);
+    }
+
+    pub async fn get_map_entries<K, V, M>(
+        &self,
+        handle: MapHandle<K, V, M>,
+    ) -> Result<Vec<(K, V)>, B::Error>
+    where
+        K: ReactiveMapKey + for<'de> Deserialize<'de>,
+        V: ReactiveMapValue,
+        M: AccessMode,
+    {
+        let map =
+            self.with_item::<ReactiveMap<K, V, B>, _, _>(handle.key, "ReactiveMap", |m| m.clone());
+        map.entries().await.map(|hm| hm.into_iter().collect())
+    }
+
+    pub async fn remove_map_entry<K, V>(
+        &self,
+        handle: WritableMapHandle<K, V>,
+        key: K,
+    ) -> Result<Option<V>, B::Error>
+    where
+        K: ReactiveMapKey + for<'de> Deserialize<'de>,
+        V: ReactiveMapValue,
+    {
+        let map =
+            self.with_item::<ReactiveMap<K, V, B>, _, _>(handle.key, "ReactiveMap", |m| m.clone());
+        map.remove(key).await
+    }
+
+    pub async fn clear_map<K, V>(&self, handle: WritableMapHandle<K, V>) -> Result<(), B::Error>
+    where
+        K: ReactiveMapKey + for<'de> Deserialize<'de>,
+        V: ReactiveMapValue,
+    {
+        let map =
+            self.with_item::<ReactiveMap<K, V, B>, _, _>(handle.key, "ReactiveMap", |m| m.clone());
+        map.clear().await
+    }
+}
+
+impl<B: AsyncSubscriptionBackend> PartialEq for Arena<B> {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.storage, &other.storage)
+    }
+}
+
+impl<B: AsyncSubscriptionBackend> Eq for Arena<B> {}

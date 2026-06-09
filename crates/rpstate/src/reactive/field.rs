@@ -1,9 +1,7 @@
-use crate::error::Error;
+use crate::store::sync_backend::StoreBackend;
 use crate::store::{Store, SubscriptionId};
 use crate::{AccessMode, ReadOnlyMode, Result, WritableMode};
 use rpstate_core::{Change, FieldCore, InterceptDisposer, Signal, SignalSubscription};
-use serde::Serialize;
-use serde::de::DeserializeOwned;
 use std::sync::Arc;
 
 pub struct StoreSubscription<S: Store> {
@@ -16,11 +14,12 @@ impl<S: Store> Drop for StoreSubscription<S> {
         self.store.unsubscribe(self.id);
     }
 }
+pub use rpstate_core::primitives::field_core::FieldValue;
 
 pub struct Field<TValue, S: Store, M: AccessMode = ReadOnlyMode> {
     pub(crate) core: FieldCore<TValue>,
     pub path: Arc<str>,
-    pub store_sub: Option<Arc<StoreSubscription<S>>>,
+    pub(crate) store_sub: Option<Arc<StoreSubscription<S>>>,
     pub(crate) _mode: std::marker::PhantomData<M>,
 }
 
@@ -40,7 +39,7 @@ impl<TValue, S: Store, M: AccessMode> Clone for Field<TValue, S, M> {
 
 impl<TValue, S, M> Field<TValue, S, M>
 where
-    TValue: DeserializeOwned + Serialize + Send + Sync + Clone + 'static,
+    TValue: FieldValue,
     S: Store,
     M: AccessMode,
 {
@@ -70,18 +69,18 @@ where
 
 impl<TValue, S> Field<TValue, S, WritableMode>
 where
-    TValue: DeserializeOwned + Serialize + Send + Sync + Clone + 'static,
+    TValue: FieldValue,
     S: Store,
 {
     pub fn set(&self, value: TValue) -> Result<()> {
-        let change = self
-            .core
-            .run_interceptors(self.path.clone(), value)
-            .map_err(|_| Error::Intercepted)?;
-
         if let Some(sub) = &self.store_sub {
-            sub.store.set_owned(self.path.clone(), &change.new_value)?;
+            let backend = StoreBackend::new(sub.store.clone());
+            rpstate_core::field_set(&backend, &self.core, self.path.clone(), value, false)?;
         } else {
+            let change = self
+                .core
+                .run_interceptors(self.path.clone(), value)
+                .map_err(|_| crate::error::Error::Intercepted)?;
             self.core.signal.set(change.new_value);
         }
         Ok(())
@@ -114,7 +113,7 @@ impl<TValue, S: Store, M: AccessMode> Eq for Field<TValue, S, M> {}
 
 impl<TValue, S, M> rpstate_core::pipeline::Reactive<TValue> for Field<TValue, S, M>
 where
-    TValue: DeserializeOwned + Serialize + Clone + Send + Sync + 'static,
+    TValue: FieldValue,
     S: Store,
     M: AccessMode,
 {

@@ -1,7 +1,7 @@
 use crate::migration::fields::FieldDescriptor;
 use crate::migration::registry::MigrationDependency;
 use crate::migration::set::MigrationSet;
-use crate::{MigrationContext, Migrator, StateScope};
+use crate::{MigrationContext, MigrationPlan, StateScope};
 use std::collections::{BTreeSet, HashMap};
 
 #[derive(Default)]
@@ -9,9 +9,10 @@ pub struct MigrationBuilder {
     prefixes: HashMap<String, PrefixPlan>,
 }
 
+/// Migration plan for a single database prefix.
 #[derive(Default)]
 pub(crate) struct PrefixPlan {
-    migrator: Migrator,
+    migrator: MigrationPlan,
     dependencies: BTreeSet<String>,
     pub(crate) fields: &'static [FieldDescriptor],
     pub(crate) schema_hash: u64,

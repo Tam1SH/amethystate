@@ -16,20 +16,11 @@ categories = ["gui", "config"]
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-log = "0.4.30"
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rpstate-codegen = { workspace = true }
 rpstate = { workspace = true, features = ["tauri"] }
 inventory = { workspace = true }
 tauri = { version = "2", default-features = false }
 heck.workspace = true
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-rpstate-core = { path = "../rpstate-core" }
-wasm-bindgen-futures = "0.4.72"
-tauri-sys = { git = "https://github.com/JonasKruckenberg/tauri-sys", features = ["all"] }
-futures = "0.3.32"
-serde-wasm-bindgen = "0.6.5"
 
 [dev-dependencies]
 tauri = { version = "2", default-features = false, features = ["test"] }

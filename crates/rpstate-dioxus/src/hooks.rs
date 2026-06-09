@@ -1,54 +1,116 @@
-use crate::{MapSignal, RpStateDioxus};
-use crate::{PIPELINE_ARENA, RpStateDioxusNested};
+use crate::{DioxusBackend, MapSignal};
 use dioxus::core::{Callback, spawn, use_hook};
-use dioxus::hooks::{try_use_context, use_callback, use_context, use_context_provider, use_signal};
-use dioxus::prelude::{ReadSignal, WritableExt};
-use rpstate::{AccessMode, DefaultStore, MapChange, Pipeline, Store};
+use dioxus::hooks::{try_use_context, use_callback, use_context};
+use dioxus::prelude::*;
+use rpstate::{AccessMode, DefaultStore, MapChange, Pipeline, ReactiveMapKey, ReactiveMapValue};
 use rpstate_arena::{
-    Arena, FieldHandle, MapHandle, PipelineHandle, WritableHandle, WritableMapHandle,
+    DefaultArena, FieldHandle, MapHandle, PipelineHandle, RpStateFrameworkNested, WritableHandle,
+    WritableMapHandle,
 };
+use rpstate_arena::{PIPELINE_ARENA, RpStateFramework};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-pub type Handle<S> = <S as RpStateDioxusNested>::Handle;
+pub type Handle<S> = <S as RpStateFrameworkNested>::Handle;
 
 pub fn use_rpstate<S>() -> S::Handle
 where
-    S: RpStateDioxus + 'static,
+    S: RpStateFramework<DioxusBackend> + 'static,
 {
     if let Some(handle) = try_use_context::<S::Handle>() {
         return handle;
     }
 
-    let store = use_context::<Arc<DefaultStore>>();
-    let arena = use_context::<Arena>();
+    #[cfg(target_arch = "wasm32")]
+    {
+        panic!(
+            "rpstate-dioxus: State slice '{}' was not initialized! \
+             Make sure to call `use_init_rpstate` at the root/parent component before accessing it.",
+            std::any::type_name::<S>()
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let store = use_context::<DefaultStore>();
+        let arena = use_context::<DefaultArena>();
+
+        let handle = use_hook(|| {
+            let state = S::load_slice(&store).unwrap_or_else(|err| {
+                panic!("rpstate-dioxus: Failed to load state slice: {err}");
+            });
+            state.register(&arena)
+        });
+
+        use_context_provider(|| handle);
+        handle
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn use_init_rpstate<S>() -> Option<S::Handle>
+where
+    S: RpStateFramework<DioxusBackend> + 'static,
+{
+    if let Some(handle) = try_use_context::<S::Handle>() {
+        return Some(handle);
+    }
+
+    let store = use_context::<DefaultStore>();
+    let arena = use_context::<DefaultArena>();
 
     let handle = use_hook(|| {
-        let state = S::load_slice(&store).expect(
-            "rpstate-dioxus: Failed to load state slice. \
-             Ensure that the store path is writable, \
-             and the database is not locked by another process.",
-        );
-        state.register_dioxus(&arena)
+        let state = S::load_slice(&store).unwrap_or_else(|err| {
+            panic!("rpstate-dioxus: Failed to load state slice: {err}");
+        });
+        state.register(&arena)
     });
 
     use_context_provider(|| handle);
+    Some(handle)
+}
 
+#[cfg(target_arch = "wasm32")]
+pub fn use_init_rpstate<S>() -> Option<S::Handle>
+where
+    S: RpStateFramework<DioxusBackend> + 'static,
+    <S as rpstate_core::RpStateSliceAsync<
+        <DioxusBackend as rpstate_arena::ReactiveBackend>::Storage,
+    >>::Error: std::fmt::Debug,
+{
+    if let Some(handle) = try_use_context::<S::Handle>() {
+        return Some(handle);
+    }
+
+    let store = use_context::<DefaultStore>();
+    let arena = use_context::<DefaultArena>();
+
+    let resource = use_resource(move || {
+        let store = store.clone();
+        let arena = arena.clone();
+        async move {
+            let state = S::load_async(&store).await.unwrap_or_else(|err| {
+                panic!("rpstate-dioxus: Failed to load state slice asynchronously: {err:?}");
+            });
+            state.register(&arena)
+        }
+    });
+
+    let handle = resource();
+    if let Some(h) = handle {
+        provide_context(h);
+    }
     handle
 }
 
-pub fn use_field<T, S>(handle: WritableHandle<T, S>) -> (ReadSignal<T>, Callback<T>)
+pub fn use_field<T>(handle: WritableHandle<T>) -> (ReadSignal<T>, Callback<T>)
 where
     T: DeserializeOwned + Serialize + Clone + Send + Sync + PartialEq + 'static,
-    S: Store,
 {
-    let arena = use_context::<Arena>();
+    let arena = use_context::<DefaultArena>();
     let mut signal = use_signal(|| arena.get_field(handle));
 
     let tx = use_hook(|| {
@@ -79,13 +141,12 @@ where
     (signal.into(), setter)
 }
 
-pub fn use_read_only_field<T, S, M>(handle: FieldHandle<T, S, M>) -> ReadSignal<T>
+pub fn use_read_only_field<T, M>(handle: FieldHandle<T, M>) -> ReadSignal<T>
 where
     T: DeserializeOwned + Serialize + Clone + Send + Sync + PartialEq + 'static,
-    S: Store,
     M: AccessMode,
 {
-    let arena = use_context::<Arena>();
+    let arena = use_context::<DefaultArena>();
     let mut signal = use_signal(|| arena.get_field(handle));
 
     let tx = use_hook(|| {
@@ -115,7 +176,7 @@ where
     T: Clone + Send + Sync + PartialEq + 'static,
     F: FnOnce() -> Pipeline<T> + 'static,
 {
-    let arena = use_context::<Arena>();
+    let arena = use_context::<DefaultArena>();
 
     let handle = use_hook(|| {
         PIPELINE_ARENA.with(|a| *a.borrow_mut() = Some(arena.clone()));
@@ -128,7 +189,7 @@ where
     let arena_clone = arena.clone();
     use_hook(move || {
         struct Guard<T: 'static> {
-            arena: Arena,
+            arena: DefaultArena,
             handle: PipelineHandle<T>,
         }
         impl<T: 'static> Drop for Guard<T> {
@@ -164,13 +225,12 @@ where
     signal.into()
 }
 
-pub fn use_map<K, V, S>(handle: WritableMapHandle<K, V, S>) -> MapSignal<K, V>
+pub fn use_map<K, V>(handle: WritableMapHandle<K, V>) -> MapSignal<K, V>
 where
-    K: Debug + FromStr + Display + Clone + Hash + Eq + Send + Sync + PartialEq + 'static,
-    V: Debug + Serialize + DeserializeOwned + Default + Clone + Send + Sync + PartialEq + 'static,
-    S: Store,
+    K: ReactiveMapKey,
+    V: ReactiveMapValue,
 {
-    let arena = use_context::<Arena>();
+    let arena = use_context::<DefaultArena>();
     let mut signal = use_signal(|| {
         arena
             .get_map_entries(handle)
@@ -223,23 +283,16 @@ where
         let _ = arena_clear.clear_map(handle);
     });
 
-    MapSignal {
-        entries: signal.into(),
-        _set,
-        _set_or_create,
-        _remove,
-        _clear,
-    }
+    MapSignal::new(signal.into(), _set, _set_or_create, _remove, _clear)
 }
 
-pub fn use_map_entry<K, V, S, M>(handle: MapHandle<K, V, S, M>, key: K) -> ReadSignal<Option<V>>
+pub fn use_map_entry<K, V, M>(handle: MapHandle<K, V, M>, key: K) -> ReadSignal<Option<V>>
 where
-    K: Debug + FromStr + Display + Clone + Hash + Eq + Send + Sync + PartialEq + 'static,
-    V: Debug + Serialize + DeserializeOwned + Default + Clone + Send + Sync + PartialEq + 'static,
-    S: Store,
+    K: ReactiveMapKey,
+    V: ReactiveMapValue,
     M: AccessMode,
 {
-    let arena = use_context::<Arena>();
+    let arena = use_context::<DefaultArena>();
     let mut signal = use_signal(|| arena.get_map_entry(handle, &key).ok().flatten());
 
     let tx = use_hook(|| {
@@ -273,30 +326,28 @@ where
     signal.into()
 }
 
-pub fn use_map_subscribe_any<K, V, S, M, F>(handle: MapHandle<K, V, S, M>, callback: F)
+pub fn use_map_subscribe_any<K, V, M, F>(handle: MapHandle<K, V, M>, callback: F)
 where
-    K: Debug + FromStr + Display + Clone + Hash + Eq + Send + Sync + 'static,
-    V: Debug + Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
-    S: Store,
+    K: ReactiveMapKey,
+    V: ReactiveMapValue,
     M: AccessMode,
     F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
 {
-    let arena = use_context::<Arena>();
+    let arena = use_context::<DefaultArena>();
     use_hook(move || {
         let sub = arena.subscribe_map_any(handle, callback);
         Arc::new(sub)
     });
 }
 
-pub fn use_map_subscribe_key<K, V, S, M, F>(handle: MapHandle<K, V, S, M>, key: K, callback: F)
+pub fn use_map_subscribe_key<K, V, M, F>(handle: MapHandle<K, V, M>, key: K, callback: F)
 where
-    K: Debug + FromStr + Display + Clone + Hash + Eq + Send + Sync + 'static,
-    V: Debug + Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
-    S: Store,
+    K: ReactiveMapKey,
+    V: ReactiveMapValue,
     M: AccessMode,
     F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
 {
-    let arena = use_context::<Arena>();
+    let arena = use_context::<DefaultArena>();
     use_hook(move || {
         let sub = arena.subscribe_map_key(handle, key, callback);
         Arc::new(sub)

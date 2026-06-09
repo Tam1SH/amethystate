@@ -1,4 +1,4 @@
-use super::Migrator;
+use super::MigrationPlan;
 use crate::migration::fields::FieldDescriptor;
 use crate::{MigrationError, Result};
 use petgraph::algo::toposort;
@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
 pub struct MigrationSet {
-    migrators: HashMap<String, Migrator>,
+    migrators: HashMap<String, MigrationPlan>,
     targets: HashMap<String, (u32, u64, &'static [FieldDescriptor])>,
     graph: DiGraph<String, ()>,
     nodes: HashMap<String, NodeIndex>,
@@ -18,7 +18,7 @@ impl MigrationSet {
     pub fn add(
         mut self,
         prefix: impl Into<String>,
-        migrator: Migrator,
+        migrator: MigrationPlan,
         hash: u64,
         fields: &'static [FieldDescriptor],
         deps: &[&str],
@@ -114,7 +114,7 @@ impl MigrationSet {
             .map_err(|cycle| MigrationError::Cycle(sub_graph[cycle.node_id()].clone()).into())
     }
 
-    pub(crate) fn get_migrator(&self, prefix: &str) -> Option<&Migrator> {
+    pub(crate) fn get_migrator(&self, prefix: &str) -> Option<&MigrationPlan> {
         self.migrators.get(prefix)
     }
 }
@@ -127,8 +127,8 @@ mod tests {
 
     const EMPTY_FIELDS: &[FieldDescriptor] = &[];
 
-    fn dummy_migrator() -> Migrator {
-        Migrator::new()
+    fn dummy_migrator() -> MigrationPlan {
+        MigrationPlan::new()
     }
 
     #[test]
@@ -204,7 +204,7 @@ mod tests {
             type_name: "u64",
         }];
 
-        let migrator = Migrator::new().step(1, "init", |_| Ok(()));
+        let migrator = MigrationPlan::new().step(1, "init", |_| Ok(()));
         let set = MigrationSet::default().add("app", migrator, 999, TEST_FIELDS, &[]);
 
         let (v, h, f) = set.get_target("app");

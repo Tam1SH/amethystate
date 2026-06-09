@@ -1,7 +1,6 @@
 use rpstate::store::builder::StoreBuilder;
 use rpstate::{Store, migrate, migrate_field};
 use rpstate_macros::rpstate;
-use std::sync::Arc;
 
 mod v1 {
     use super::*;
@@ -82,10 +81,10 @@ fn test_nested_and_ephemeral_integration() {
     }
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
+        let store = StoreBuilder::new(&path).build().unwrap();
 
-        let sys = v1::SystemConfig::new(&store).unwrap();
-        let ui = v1::Dashboard::new(&store).unwrap();
+        let sys = v1::SystemConfig::new_with(&store).unwrap();
+        let ui = v1::Dashboard::new_with(&store).unwrap();
 
         sys.net().port().set(9999).unwrap();
         ui.is_loading().set(true).unwrap();
@@ -103,8 +102,8 @@ fn test_nested_and_ephemeral_integration() {
             .build()
             .unwrap();
 
-        let sys = SystemConfig::new(&store).expect("Failed to load v2 system");
-        let ui = Dashboard::new(&store).expect("Failed to load dashboard");
+        let sys = SystemConfig::new_with(&store).expect("Failed to load v2 system");
+        let ui = Dashboard::new_with(&store).expect("Failed to load dashboard");
 
         assert_eq!(sys.net().listen_port().get(), 9999);
 

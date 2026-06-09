@@ -22,7 +22,7 @@ and compile-time verified relations.*
 - derived reactive pipelines for small synchronous transformations;
 - feature-local state that can be composed, shared, versioned, and checked for schema drift.
 
-Use `State::new(&store)` for reactive fields and `State::load(&store)` when you only want persistence (and migrations).
+Use `State::new(&store)` for reactive fields and `State::load(&store)` when you only want persistence.
 
 ## Status
 
@@ -274,11 +274,11 @@ value, validation result, log event, or side effect without nesting subscription
 use rpstate::IntoPipeline;
 
 let display_port = state.port().pipe()
-    .map(|p| format!(":{p}"))
-    .dedupe();
+.map(|p| format!(":{p}"))
+.dedupe();
 
 let _sub = display_port.subscribe(|port| {
-    println!("display port changed: {port}");
+println!("display port changed: {port}");
 });
 ```
 
@@ -286,7 +286,7 @@ Pipelines are readable. A GUI can call `.get()` during its own render cycle with
 
 ```rust
 let display_port = state.port().pipe()
-    .map(|p| format!(":{p}"));
+.map(|p| format!(":{p}"));
 
 assert_eq!(display_port.get(), ":8080");
 ```
@@ -296,17 +296,17 @@ input and recomputes from that full tuple.
 
 ```rust
 let address = (state.host(), state.port()).pipe()
-    .map(|(host, port)| format!("{host}:{port}"));
+.map(|(host, port)| format!("{host}:{port}"));
 ```
 
 Pipelines compose because `Pipeline<T>` is itself reactive:
 
 ```rust
 let display_port = state.port().pipe()
-    .map(|p| format!(":{p}"));
+.map(|p| format!(":{p}"));
 
 let address = (state.host(), display_port).pipe()
-    .map(|(host, port)| format!("{host}{port}"));
+.map(|(host, port)| format!("{host}{port}"));
 ```
 
 Subscriptions are RAII handles. Store them directly or put them in a `ReactiveScope`:
@@ -317,7 +317,7 @@ use rpstate::ReactiveScope;
 let mut scope = ReactiveScope::new();
 
 scope.watch(address.subscribe(|addr| {
-    println!("address changed: {addr}");
+println!("address changed: {addr}");
 }));
 
 scope.clear(); // drops all watched subscriptions

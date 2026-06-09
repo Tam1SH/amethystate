@@ -17,11 +17,14 @@ rust-version = "1.89.0"
 
 [workspace.dependencies]
 # internal
-rpstate = { path = "crates/rpstate", version = "0.6.0" }
-rpstate-macros = { path = "crates/rpstate-macros", version = "0.6.0" }
+rpstate = { path = "crates/rpstate" }
+rpstate-core = { path = "crates/rpstate-core" }
+rpstate-macros = { path = "crates/rpstate-macros" }
 rpstate-arena = { path = "crates/rpstate-arena" }
+rpstate-tauri = { path = "crates/rpstate-tauri" }
+rpstate-codegen = { path = "crates/rpstate-codegen" }
 rpstate-macros-core = { path = "crates/rpstate-macros-core" }
-rpstate-macros-dioxus = { path = "crates/rpstate-macros-dioxus" }
+rpstate-macros-arena = { path = "crates/rpstate-macros-arena" }
 
 # external
 anyhow = "1.0"
@@ -40,6 +43,9 @@ tracing = "0.1.44"
 heck = "0.5.0"
 directories = "6.0.0"
 tokio = "1.0"
+futures = "0.3.32"
+parking_lot = "0.12.5"
+tempfile = { version = "3.27.0" }
 
 # proc-macro
 darling = "0.23.0"

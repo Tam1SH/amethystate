@@ -55,6 +55,7 @@ checksum = "1384d3fe1eecb464229fcf6eebb72306591c56bf27b373561489458a7c73027d"
 dependencies = [
  "futures",
  "thiserror 2.0.18",
+ "tokio",
  "wasm-bindgen-futures",
 ]
 
@@ -491,6 +492,19 @@ dependencies = [
  "serde_core",
  "toml 1.1.2+spec-1.1.0",
  "winnow 1.0.2",
+]
+
+[[package]]
+name = "confy"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8807c397789cbe02bbdb1a27ea5f345584132808697b2a3f957c829829ee4814"
+dependencies = [
+ "etcetera 0.10.0",
+ "lazy_static",
+ "serde",
+ "thiserror 2.0.18",
+ "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]
@@ -1446,6 +1460,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "etcetera"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26c7b13d0780cb82722fd59f6f57f925e143427e4a75313a6c77243bf5326ae6"
+dependencies = [
+ "cfg-if",
+ "home",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "etcetera"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de48cc4d1c1d97a20fd819def54b890cadde72ed3ad0c614822a0a433361be96"
+dependencies = [
+ "cfg-if",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "euclid"
 version = "0.22.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2001,6 +2036,15 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "home"
+version = "0.5.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
+dependencies = [
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "html-escape"
@@ -3377,7 +3421,7 @@ version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
 dependencies = [
- "toml_edit 0.25.11+spec-1.1.0",
+ "toml_edit 0.25.12+spec-1.1.0",
 ]
 
 [[package]]
@@ -3803,26 +3847,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "ron"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4147b952f3f819eca0e99527022f7d6a8d05f111aeb0a62960c74eb283bec8fc"
+dependencies = [
+ "bitflags 2.11.1",
+ "once_cell",
+ "serde",
+ "serde_derive",
+ "typeid",
+ "unicode-ident",
+]
+
+[[package]]
 name = "rpstate"
 version = "0.6.0"
 dependencies = [
- "arc-swap",
  "bytes",
+ "confy",
  "criterion",
  "directories",
+ "etcetera 0.11.0",
  "inventory",
  "macrotest",
+ "parking_lot",
  "petgraph",
  "proptest",
  "rand 0.10.1",
  "rayon",
  "redb",
  "rmp-serde",
+ "ron",
  "rpstate-core",
  "rpstate-macros",
+ "rpstate-tauri",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
+ "toml_edit 0.25.12+spec-1.1.0",
  "tracing",
  "tracing-test",
  "trybuild",
@@ -3834,8 +3898,20 @@ version = "0.6.0"
 dependencies = [
  "parking_lot",
  "rpstate",
+ "rpstate-macros-arena",
+ "rpstate-tauri",
  "serde",
  "slotmap",
+]
+
+[[package]]
+name = "rpstate-codegen"
+version = "0.6.0"
+dependencies = [
+ "heck 0.5.0",
+ "inventory",
+ "rpstate",
+ "rpstate-core",
 ]
 
 [[package]]
@@ -3845,6 +3921,7 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "futures",
+ "inventory",
  "serde",
  "serde_json",
  "tracing",
@@ -3857,7 +3934,9 @@ dependencies = [
  "dioxus",
  "rpstate",
  "rpstate-arena",
- "rpstate-macros-dioxus",
+ "rpstate-core",
+ "rpstate-macros-arena",
+ "rpstate-tauri",
  "serde",
  "tokio",
 ]
@@ -3866,14 +3945,29 @@ dependencies = [
 name = "rpstate-leptos"
 version = "0.8.0"
 dependencies = [
+ "any_spawner",
  "leptos",
  "rpstate",
  "rpstate-arena",
+ "rpstate-tauri",
  "serde",
+ "tokio",
 ]
 
 [[package]]
 name = "rpstate-macros"
+version = "0.6.0"
+dependencies = [
+ "darling 0.23.0",
+ "proc-macro-crate 3.5.0",
+ "proc-macro2",
+ "quote",
+ "rpstate-macros-core",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "rpstate-macros-arena"
 version = "0.6.0"
 dependencies = [
  "darling 0.23.0",
@@ -3895,15 +3989,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "rpstate-macros-dioxus"
-version = "0.7.0"
+name = "rpstate-tauri"
+version = "0.6.0"
 dependencies = [
- "darling 0.23.0",
- "proc-macro-crate 3.5.0",
- "proc-macro2",
- "quote",
- "rpstate-macros-core",
- "syn 2.0.117",
+ "futures",
+ "rpstate-core",
+ "serde",
+ "serde_json",
+ "tauri-sys",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -4774,20 +4868,15 @@ dependencies = [
 name = "tauri-plugin-rpstate"
 version = "0.6.0"
 dependencies = [
- "futures",
  "heck 0.5.0",
  "inventory",
- "log",
  "rpstate",
- "rpstate-core",
+ "rpstate-codegen",
  "serde",
- "serde-wasm-bindgen",
  "serde_json",
  "tauri",
  "tauri-plugin",
- "tauri-sys",
  "tokio",
- "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -5173,13 +5262,16 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.25.11+spec-1.1.0"
+version = "0.25.12+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b59c4d22ed448339746c59b905d24568fcbb3ab65a500494f7b8c3e97739f2b"
+checksum = "d2153edc6955a6c354fad8f5efd38b6a8769bdccf9fe50f8e1329f81b0baa5d7"
 dependencies = [
  "indexmap 2.14.0",
+ "serde_core",
+ "serde_spanned 1.1.1",
  "toml_datetime 1.1.1+spec-1.1.0",
  "toml_parser",
+ "toml_writer",
  "winnow 1.0.2",
 ]
 

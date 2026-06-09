@@ -4,23 +4,26 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
+    //TODO: replace to store errs
     #[error(transparent)]
     Codec(#[from] CodecError),
 
-    #[cfg(feature = "json")]
+    #[cfg(feature = "text")]
     #[error(transparent)]
-    Json(#[from] crate::store::backend::json::error::JsonStoreError),
+    TextStore(#[from] crate::store::backend::text::error::TextStoreError),
 
     #[cfg(feature = "redb")]
     #[error(transparent)]
-    Redb(#[from] crate::store::backend::redb::error::RedbStoreError),
+    RedbStore(#[from] crate::store::backend::redb::error::RedbStoreError),
 
     #[error(transparent)]
     Migration(#[from] MigrationError),
 
+    //TODO: remove
     #[error("Change intercepted")]
     Intercepted,
 
+    //TODO: remove
     #[error("Key not found in ReactiveMap: {0}")]
     KeyNotFound(String),
 }

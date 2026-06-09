@@ -1,7 +1,6 @@
 use rpstate::store::builder::StoreBuilder;
 use rpstate::{Store, migrate};
 use rpstate_macros::rpstate;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod v1 {
@@ -54,14 +53,13 @@ fn unique_path(suffix: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("rpstate-{suffix}-{nanos}.redb"))
 }
 
-#[cfg(feature = "redb")]
 #[test]
 fn migration_builder_mixes_codegen_and_manual_steps() {
     let path = unique_path("migration-builder");
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
-        let profile = v1::Profile::new(&store).unwrap();
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let profile = v1::Profile::new_with(&store).unwrap();
         profile.full_name().set("Grace Hopper".to_string()).unwrap();
         profile.legacy_flag().set(true).unwrap();
     }
@@ -85,7 +83,7 @@ fn migration_builder_mixes_codegen_and_manual_steps() {
         .build()
         .unwrap();
 
-    let profile = Profile::new(&store).unwrap();
+    let profile = Profile::new_with(&store).unwrap();
     assert_eq!(profile.display_name().get(), "Grace Hopper");
     assert_eq!(profile.initials().get(), "GH");
 

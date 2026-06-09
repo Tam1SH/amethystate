@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
 use rpstate_macros_core::StoreFieldEntry;
-use syn::{Ident, Visibility};
+use syn::Ident;
 
 pub(crate) fn schema_methods<'a>(
     crate_name: &'a TokenStream2,
@@ -33,13 +33,13 @@ pub(crate) fn struct_fields<'a>(
         let ty = &e.ty;
 
         if e.nested || e.lookup_node.is_some() {
-            quote! { #fvis #fname: ::std::sync::Arc<#ty> }
+            quote! { #fvis #fname: ::std::sync::Arc<#ty<S>> }
         } else if let Some((k, v)) = e.get_map_types() {
             let mode = field_mode(crate_name, e);
-            quote! { #fvis #fname: #crate_name::ReactiveMap<#k, #v, #crate_name::DefaultStore, #mode> }
+            quote! { #fvis #fname: #crate_name::ReactiveMap<#k, #v, S, #mode> }
         } else {
             let mode = field_mode(crate_name, e);
-            quote! { #fvis #fname: #crate_name::Field<#ty, #crate_name::DefaultStore, #mode> }
+            quote! { #fvis #fname: #crate_name::Field<#ty, S, #mode> }
         }
     })
 }
@@ -53,18 +53,18 @@ pub(crate) fn methods<'a>(
         let ty = &e.ty;
 
         if e.nested || e.lookup_node.is_some() {
-            quote! { pub fn #fname(&self) -> ::std::sync::Arc<#ty> { self.#fname.clone() } }
+            quote! { pub fn #fname(&self) -> ::std::sync::Arc<#ty<S>> { self.#fname.clone() } }
         } else if let Some((k, v)) = e.get_map_types() {
             let mode = field_mode(crate_name, e);
             quote! {
-                pub fn #fname(&self) -> #crate_name::ReactiveMap<#k, #v, #crate_name::DefaultStore, #mode> {
+                pub fn #fname(&self) -> #crate_name::ReactiveMap<#k, #v, S, #mode> {
                     self.#fname.clone()
                 }
             }
         } else {
             let mode = field_mode(crate_name, e);
             quote! {
-                pub fn #fname(&self) -> #crate_name::Field<#ty, #crate_name::DefaultStore, #mode> {
+                pub fn #fname(&self) -> #crate_name::Field<#ty, S, #mode> {
                     self.#fname.clone()
                 }
             }
@@ -75,16 +75,16 @@ pub(crate) fn methods<'a>(
 pub(crate) fn node_impl(crate_name: &TokenStream2, name: &Ident, is_root: bool) -> TokenStream2 {
     if is_root {
         quote! {
-            impl #crate_name::RpStateNode for #name {
-                fn new_node(store: &#crate_name::DefaultStore, _path: &str) -> #crate_name::Result<Self> {
-                    Self::new(store)
+            impl<S: #crate_name::Store> #crate_name::RpStateNode<S> for #name<S> {
+                fn new_node(store: &S, _path: &str) -> #crate_name::Result<Self> {
+                    Self::new_with(store)
                 }
             }
         }
     } else {
         quote! {
-            impl #crate_name::RpStateNode for #name {
-                fn new_node(store: &#crate_name::DefaultStore, path: &str) -> #crate_name::Result<Self> {
+            impl<S: #crate_name::Store> #crate_name::RpStateNode<S> for #name<S> {
+                fn new_node(store: &S, path: &str) -> #crate_name::Result<Self> {
                     Self::new(store, path)
                 }
             }
@@ -98,7 +98,7 @@ pub(crate) fn scope(
     prefix: Option<String>,
 ) -> Option<TokenStream2> {
     prefix.map(
-        |p| quote! { impl #crate_name::StateScope for #name { const PREFIX: &'static str = #p; } },
+        |p| quote! { impl<S: #crate_name::Store> #crate_name::StateScope for #name<S> { const PREFIX: &'static str = #p; } },
     )
 }
 
@@ -109,7 +109,7 @@ pub(crate) fn constructor(
 ) -> TokenStream2 {
     if is_root {
         quote! {
-            pub fn new(store: &#crate_name::DefaultStore) -> #crate_name::Result<Self> {
+            pub fn new_with(store: &S) -> #crate_name::Result<Self> {
                 use #crate_name::Store;
                 let result = Self { #(#init_fields,)* };
                 store.mark_initialized(<Self as #crate_name::StateScope>::PREFIX)?;
@@ -118,7 +118,7 @@ pub(crate) fn constructor(
         }
     } else {
         quote! {
-            pub fn new(store: &#crate_name::DefaultStore, namespace: &str) -> #crate_name::Result<Self> {
+            pub fn new(store: &S, namespace: &str) -> #crate_name::Result<Self> {
                 use #crate_name::Store;
                 let result = Self { #(#init_fields,)* };
                 store.mark_initialized(namespace)?;
@@ -155,6 +155,3 @@ pub(crate) fn field_mode(crate_name: &TokenStream2, e: &StoreFieldEntry) -> Toke
         quote!(#crate_name::WritableMode)
     }
 }
-
-#[allow(dead_code)]
-pub(crate) fn _keep_visibility_type(_: &Visibility) {}

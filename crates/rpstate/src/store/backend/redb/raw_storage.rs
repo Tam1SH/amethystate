@@ -1,7 +1,10 @@
 use super::error::RedbStoreError;
-use super::tables::TABLE_DATA;
-use crate::migration::RawStorage;
-use crate::store::Result;
+use super::tables::{
+    TABLE_DATA, TABLE_META, TABLE_MIGRATION_LOG, TABLE_SCHEMA_SNAPSHOT, TableReader, TableWriter,
+};
+use crate::migration::AppliedStep;
+use crate::store::meta::{PrefixMeta, SchemaSnapshot};
+use crate::store::{RawStorage, Result};
 use redb::ReadableTable;
 
 pub(super) struct RedbRawStorage<'a> {
@@ -59,5 +62,30 @@ impl RawStorage for RedbRawStorage<'_> {
             }
         }
         Ok(result)
+    }
+    fn get_meta(&self, prefix: &str) -> Result<Option<PrefixMeta>> {
+        Ok(self.txn.load_typed(TABLE_META, prefix)?)
+    }
+
+    fn set_meta(&mut self, prefix: &str, meta: &PrefixMeta) -> Result<()> {
+        Ok(self.txn.save_typed(TABLE_META, prefix, meta)?)
+    }
+
+    fn get_schema_snapshot(&self, prefix: &str) -> Result<Option<SchemaSnapshot>> {
+        Ok(self.txn.load_typed(TABLE_SCHEMA_SNAPSHOT, prefix)?)
+    }
+
+    fn set_schema_snapshot(&mut self, prefix: &str, snapshot: &SchemaSnapshot) -> Result<()> {
+        Ok(self
+            .txn
+            .save_typed(TABLE_SCHEMA_SNAPSHOT, prefix, snapshot)?)
+    }
+
+    fn get_migration_log(&self, prefix: &str) -> Result<Option<Vec<AppliedStep>>> {
+        Ok(self.txn.load_typed(TABLE_MIGRATION_LOG, prefix)?)
+    }
+
+    fn set_migration_log(&mut self, prefix: &str, log: &[AppliedStep]) -> Result<()> {
+        Ok(self.txn.save_typed(TABLE_MIGRATION_LOG, prefix, &log)?)
     }
 }

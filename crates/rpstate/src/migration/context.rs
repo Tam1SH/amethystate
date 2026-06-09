@@ -1,8 +1,8 @@
 use crate::Result;
 use crate::codec::CodecError;
-use crate::migration::RawStorage;
 use crate::migration::fields::RpStateFields;
 use crate::migration::migrate_from::MigrateFrom;
+use crate::store::RawStorage;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
@@ -174,32 +174,58 @@ impl<'a> MigrationContext<'a> {
 }
 
 fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>> {
-    #[cfg(feature = "redb")]
+    #[cfg(backend = "redb")]
     {
         rmp_serde::to_vec(value).map_err(|e| CodecError::from(e).into())
     }
 
-    #[cfg(not(feature = "redb"))]
+    #[cfg(backend = "json")]
     {
         serde_json::to_vec(value).map_err(|e| CodecError::from(e).into())
+    }
+
+    #[cfg(backend = "toml")]
+    {
+        toml_edit::ser::to_string(value)
+            .map(|s| s.into_bytes())
+            .map_err(|e| CodecError::Toml(e.to_string()).into())
+    }
+
+    #[cfg(backend = "ron")]
+    {
+        ron::to_string(value)
+            .map(|s| s.into_bytes())
+            .map_err(|e| CodecError::from(e).into())
     }
 }
 
 fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
-    #[cfg(feature = "redb")]
+    #[cfg(backend = "redb")]
     {
         rmp_serde::from_slice(bytes).map_err(|e| CodecError::from(e).into())
     }
 
-    #[cfg(not(feature = "redb"))]
+    #[cfg(backend = "json")]
     {
         serde_json::from_slice(bytes).map_err(|e| CodecError::from(e).into())
+    }
+
+    #[cfg(backend = "toml")]
+    {
+        toml_edit::de::from_slice(bytes).map_err(|e| CodecError::Toml(e.to_string()).into())
+    }
+
+    #[cfg(backend = "ron")]
+    {
+        ron::de::from_bytes(bytes).map_err(|e| CodecError::from(e).into())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::migration::AppliedStep;
+    use crate::store::meta::{PrefixMeta, SchemaSnapshot};
     use std::collections::HashMap;
 
     struct MemoryStorage {
@@ -220,6 +246,30 @@ mod tests {
         }
 
         fn scan_prefix(&self, _: &str) -> Result<Vec<(String, Vec<u8>)>> {
+            unreachable!()
+        }
+
+        fn get_meta(&self, _prefix: &str) -> Result<Option<PrefixMeta>> {
+            unreachable!()
+        }
+
+        fn set_meta(&mut self, _prefix: &str, _meta: &PrefixMeta) -> Result<()> {
+            unreachable!()
+        }
+
+        fn get_schema_snapshot(&self, _prefix: &str) -> Result<Option<SchemaSnapshot>> {
+            unreachable!()
+        }
+
+        fn set_schema_snapshot(&mut self, _prefix: &str, _snapshot: &SchemaSnapshot) -> Result<()> {
+            unreachable!()
+        }
+
+        fn get_migration_log(&self, _prefix: &str) -> Result<Option<Vec<AppliedStep>>> {
+            unreachable!()
+        }
+
+        fn set_migration_log(&mut self, _prefix: &str, _log: &[AppliedStep]) -> Result<()> {
             unreachable!()
         }
     }

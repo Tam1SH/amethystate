@@ -1,0 +1,118 @@
+use crate::Result;
+use crate::codec::CodecError;
+use crate::store::backend::text::document::{
+    Navigable, TextDocument, generic_delete, generic_get, generic_scan, generic_set,
+};
+use crate::store::backend::text::error::TextStoreError;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+#[derive(Clone, Debug)]
+pub struct JsonDocument(pub serde_json::Value);
+
+impl Navigable for serde_json::Value {
+    fn make_empty_map() -> Self {
+        serde_json::Value::Object(serde_json::Map::new())
+    }
+    fn get_child(&self, key: &str) -> Option<&Self> {
+        self.get(key)
+    }
+    fn get_child_mut(&mut self, key: &str) -> Option<&mut Self> {
+        self.get_mut(key)
+    }
+    fn ensure_map(&mut self) {
+        if !self.is_object() {
+            *self = Self::make_empty_map();
+        }
+    }
+    fn insert_child(&mut self, key: &str, val: Self) {
+        self.ensure_map();
+        self.as_object_mut().unwrap().insert(key.to_string(), val);
+    }
+    fn remove_child(&mut self, key: &str) -> Option<Self> {
+        self.as_object_mut().and_then(|m| m.remove(key))
+    }
+    fn scan_children(&self) -> Vec<(String, Self)> {
+        let mut results = Vec::new();
+        if let Some(obj) = self.as_object() {
+            for (k, v) in obj {
+                results.push((k.clone(), v.clone()));
+            }
+        }
+        results
+    }
+}
+
+impl TextDocument for JsonDocument {
+    type Node = serde_json::Value;
+
+    fn get(&self, parts: &[&str]) -> Option<&Self::Node> {
+        generic_get(&self.0, parts)
+    }
+
+    fn set(&mut self, parts: &[&str], node: Self::Node) -> Result<()> {
+        let is_root = parts.is_empty() || parts == ["."];
+        if is_root {
+            if !node.is_object() {
+                return Err(crate::error::Error::TextStore(
+                    TextStoreError::RootMustBeObject,
+                ));
+            }
+            self.0 = node;
+            return Ok(());
+        }
+        generic_set(&mut self.0, parts, node)
+    }
+
+    fn delete(&mut self, parts: &[&str]) -> Result<Option<Self::Node>> {
+        generic_delete(&mut self.0, parts)
+    }
+
+    fn scan(&self, parts: &[&str]) -> Vec<(String, Self::Node)> {
+        generic_scan(&self.0, parts)
+    }
+
+    fn parse(src: &str) -> Result<Self> {
+        let val: serde_json::Value =
+            serde_json::from_str(src).map_err(|e| TextStoreError::Codec(CodecError::Json(e)))?;
+
+        if !val.is_object() {
+            return Err(crate::error::Error::from(TextStoreError::RootMustBeObject));
+        }
+        Ok(JsonDocument(val))
+    }
+
+    fn serialize(&self) -> Result<String> {
+        serde_json::to_string_pretty(&self.0)
+            .map_err(|e| TextStoreError::Codec(CodecError::Json(e)))
+            .map_err(Into::into)
+    }
+
+    fn empty() -> Self {
+        JsonDocument(serde_json::Value::Object(serde_json::Map::new()))
+    }
+
+    fn deserialize_node<T: DeserializeOwned>(node: &Self::Node) -> Result<T> {
+        serde_json::from_value(node.clone())
+            .map_err(|e| TextStoreError::Codec(CodecError::Json(e)))
+            .map_err(Into::into)
+    }
+
+    fn serialize_node<T: Serialize>(value: &T) -> Result<Self::Node> {
+        serde_json::to_value(value)
+            .map_err(|e| TextStoreError::Codec(CodecError::Json(e)))
+            .map_err(Into::into)
+    }
+
+    fn node_to_bytes(node: &Self::Node) -> Result<Vec<u8>> {
+        serde_json::to_vec(node)
+            .map_err(|e| TextStoreError::Codec(CodecError::Json(e)))
+            .map_err(Into::into)
+    }
+
+    fn bytes_to_node(bytes: &[u8]) -> Result<Self::Node> {
+        serde_json::from_slice(bytes)
+            .map_err(|e| TextStoreError::Codec(CodecError::Json(e)))
+            .map_err(Into::into)
+    }
+}

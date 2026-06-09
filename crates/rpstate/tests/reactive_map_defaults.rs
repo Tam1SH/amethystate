@@ -1,6 +1,5 @@
 use rpstate::store::builder::StoreBuilder;
 use rpstate::{ReactiveMap, rpstate};
-use std::sync::Arc;
 
 mod v1 {
     use super::*;
@@ -37,8 +36,8 @@ fn test_map_defaults_applied_only_on_first_init() {
     let path = unique_path("first_init");
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
-        let config = v1::AppConfig::new(&store).unwrap();
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let config = v1::AppConfig::new_with(&store).unwrap();
 
         let env = config.env();
         assert_eq!(
@@ -52,8 +51,8 @@ fn test_map_defaults_applied_only_on_first_init() {
     }
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
-        let config = v1::AppConfig::new(&store).unwrap();
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let config = v1::AppConfig::new_with(&store).unwrap();
 
         let env = config.env();
         assert_eq!(
@@ -72,14 +71,14 @@ fn test_deleted_map_key_does_not_resurrect() {
     let path = unique_path("no_resurrect");
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
-        let config = v1::AppConfig::new(&store).unwrap();
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let config = v1::AppConfig::new_with(&store).unwrap();
         config.env().remove("NO_PROXY".to_string()).unwrap();
     }
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
-        let config = v1::AppConfig::new(&store).unwrap();
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let config = v1::AppConfig::new_with(&store).unwrap();
         assert_eq!(config.env().get(&"NO_PROXY".to_string()).unwrap(), None);
     }
 }
@@ -89,14 +88,14 @@ fn test_new_defaults_applied_on_version_upgrade() {
     let path = unique_path("version_upgrade");
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
-        let config = v1::AppConfig::new(&store).unwrap();
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let config = v1::AppConfig::new_with(&store).unwrap();
         config.env().remove("NO_PROXY".to_string()).unwrap();
     }
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
-        let config = AppConfig::new(&store).unwrap();
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let config = AppConfig::new_with(&store).unwrap();
         let env = config.env();
 
         assert_eq!(env.get(&"NO_PROXY".to_string()).unwrap(), None);
@@ -115,8 +114,8 @@ fn test_user_set_value_not_overwritten_by_defaults() {
     let path = unique_path("no_overwrite");
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
-        let config = v1::AppConfig::new(&store).unwrap();
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let config = v1::AppConfig::new_with(&store).unwrap();
         config
             .env()
             .set_or_create("HTTP_PROXY".to_string(), &"http://custom:9999".to_string())
@@ -124,8 +123,8 @@ fn test_user_set_value_not_overwritten_by_defaults() {
     }
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
-        let config = v1::AppConfig::new(&store).unwrap();
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let config = v1::AppConfig::new_with(&store).unwrap();
         assert_eq!(
             config.env().get(&"HTTP_PROXY".to_string()).unwrap(),
             Some("http://custom:9999".to_string())

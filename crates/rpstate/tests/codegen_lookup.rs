@@ -1,6 +1,5 @@
 use rpstate::store::builder::StoreBuilder;
 use rpstate_macros::rpstate;
-use std::sync::Arc;
 
 #[rpstate]
 pub struct InnerNode {
@@ -30,10 +29,10 @@ fn test_deep_lookup_compilation_and_runtime() {
         std::fs::remove_file(&path).ok();
     }
 
-    let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
+    let store = StoreBuilder::new(&path).build().unwrap();
 
-    let root = RootNode::new(&store).unwrap();
-    let ui = Dashboard::new(&store).unwrap();
+    let root = RootNode::new_with(&store).unwrap();
+    let ui = Dashboard::new_with(&store).unwrap();
 
     root.inner().leaf().set(100).unwrap();
 

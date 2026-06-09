@@ -8,6 +8,8 @@ pub use map::*;
 pub use pipeline::*;
 pub use rpstate_core::access::*;
 pub use rpstate_core::change::*;
-pub use rpstate_core::intercept::*;
-pub use rpstate_core::map_core::{InterceptorAny, InterceptorKey, SubscriberAny, SubscriberKey};
-pub use rpstate_core::signal::*;
+pub use rpstate_core::primitives::intercept::*;
+pub use rpstate_core::primitives::map_core::{
+    InterceptorAny, InterceptorKey, SubscriberAny, SubscriberKey,
+};
+pub use rpstate_core::primitives::signal::*;

@@ -32,8 +32,8 @@ fn init_field(crate_name: &TokenStream2, e: &StoreFieldEntry, is_root: bool) -> 
                     let _ = || assert_node_type(#chain);
                     let _ = #chain;
                 };
-                let path = format!("{}.{}", <#parent as #crate_name::StateScope>::PREFIX, #target_str);
-                ::std::sync::Arc::new(<#ty as #crate_name::RpStateNode>::new_node(store, &path)?)
+                let path = format!("{}.{}", <#parent<S> as #crate_name::StateScope>::PREFIX, #target_str);
+                ::std::sync::Arc::new(<#ty<S> as #crate_name::RpStateNode<S>>::new_node(store, &path)?)
             }
         }
     } else if let Some(target) = &e.lookup {
@@ -74,13 +74,13 @@ fn init_field(crate_name: &TokenStream2, e: &StoreFieldEntry, is_root: bool) -> 
     } else if e.nested {
         if is_root {
             quote! {
-                #fname: ::std::sync::Arc::new(#ty::new(
+                #fname: ::std::sync::Arc::new(#ty::<S>::new(
                     store,
                     &format!("{}.{}", <Self as #crate_name::StateScope>::PREFIX, #key)
                 )?)
             }
         } else {
-            quote! { #fname: ::std::sync::Arc::new(#ty::new(store, &format!("{}.{}", namespace, #key))?) }
+            quote! { #fname: ::std::sync::Arc::new(#ty::<S>::new(store, &format!("{}.{}", namespace, #key))?) }
         }
     } else if let Some((k, v)) = e.get_map_types() {
         let def = e
@@ -91,7 +91,7 @@ fn init_field(crate_name: &TokenStream2, e: &StoreFieldEntry, is_root: bool) -> 
 
         if is_root {
             quote! {
-                #fname: #crate_name::reactive_map::<Self, #k, #v>(store, #key, #def)?
+                #fname: #crate_name::store::reactive_map::<Self, #k, #v, S>(store, #key, #def)?
             }
         } else {
             quote! {
@@ -123,7 +123,7 @@ fn init_field(crate_name: &TokenStream2, e: &StoreFieldEntry, is_root: bool) -> 
             };
             quote! { #fname: #crate_name::Field::new_volatile(::std::sync::Arc::from(#path_expr), #def) }
         } else if is_root {
-            quote! { #fname: #crate_name::field::<Self, #ty>(store, #key, #def)? }
+            quote! { #fname: #crate_name::store::field::<Self, #ty, S>(store, #key, #def)? }
         } else {
             quote! { #fname: #crate_name::store::field_with_path(store, ::std::sync::Arc::from(#path_expr), #def)? }
         }

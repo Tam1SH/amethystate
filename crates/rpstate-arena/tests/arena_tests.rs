@@ -1,3 +1,4 @@
+#![cfg(not(target_arch = "wasm32"))]
 use rpstate::{
     DefaultStore, Field, IntoPipeline, MapChange, ReactiveMap, Result as RpResult, Store,
     WritableMode, rpstate,
@@ -36,7 +37,7 @@ fn unique_store(suffix: &str) -> DefaultStore {
 #[test]
 fn test_arena_field_and_pipeline() -> RpResult<()> {
     let store = unique_store("field_pipeline");
-    let state = TestState::new(&store)?;
+    let state = TestState::new_with(&store)?;
     let arena = Arena::new();
 
     let username_handle = arena.register_field(state.username());
@@ -72,7 +73,7 @@ fn test_arena_field_and_pipeline() -> RpResult<()> {
 #[test]
 fn test_subscribe_pipeline() -> RpResult<()> {
     let store = unique_store("subscribe_pipeline");
-    let state = TestState::new(&store)?;
+    let state = TestState::new_with(&store)?;
     let arena = Arena::new();
 
     let address_pipe = (state.username(), state.port())
@@ -98,7 +99,7 @@ fn test_subscribe_pipeline() -> RpResult<()> {
 #[test]
 fn test_arena_reactive_map() -> RpResult<()> {
     let store = unique_store("reactive_map");
-    let state = TestState::new(&store)?;
+    let state = TestState::new_with(&store)?;
     let arena = Arena::new();
 
     let map_handle = arena.register_map(state.sessions());
@@ -126,7 +127,7 @@ fn test_arena_reactive_map() -> RpResult<()> {
 #[test]
 fn test_subscribe_map_key() -> RpResult<()> {
     let store = unique_store("subscribe_map_key");
-    let state = TestState::new(&store)?;
+    let state = TestState::new_with(&store)?;
     let arena = Arena::new();
 
     let map_handle = arena.register_map(state.sessions());
@@ -189,7 +190,7 @@ fn test_arena_cleanup_drops_fields_and_unsubscribes() {
 #[test]
 fn test_arena_remove_map_entry() -> RpResult<()> {
     let store = unique_store("remove_map_entry");
-    let state = TestState::new(&store)?;
+    let state = TestState::new_with(&store)?;
     let arena = Arena::new();
 
     let map_handle = arena.register_map(state.sessions());
@@ -213,7 +214,7 @@ fn test_arena_remove_map_entry() -> RpResult<()> {
 #[test]
 fn test_arena_clear_map() -> RpResult<()> {
     let store = unique_store("clear_map");
-    let state = TestState::new(&store)?;
+    let state = TestState::new_with(&store)?;
     let arena = Arena::new();
 
     let map_handle = arena.register_map(state.sessions());
@@ -235,7 +236,7 @@ fn test_arena_clear_map() -> RpResult<()> {
 #[test]
 fn test_arena_remove_map_entry_fires_subscription() -> RpResult<()> {
     let store = unique_store("remove_fires_sub");
-    let state = TestState::new(&store)?;
+    let state = TestState::new_with(&store)?;
     let arena = Arena::new();
 
     let map_handle = arena.register_map(state.sessions());
@@ -259,7 +260,7 @@ fn test_arena_remove_map_entry_fires_subscription() -> RpResult<()> {
 #[test]
 fn test_arena_clear_map_fires_subscription() -> RpResult<()> {
     let store = unique_store("clear_fires_sub");
-    let state = TestState::new(&store)?;
+    let state = TestState::new_with(&store)?;
     let arena = Arena::new();
 
     let map_handle = arena.register_map(state.sessions());

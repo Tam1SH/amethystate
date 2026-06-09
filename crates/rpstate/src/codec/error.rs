@@ -6,6 +6,14 @@ pub enum CodecError {
     #[error("JSON codec error: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[cfg(feature = "toml")]
+    #[error("TOML error: {0}")]
+    Toml(String),
+
+    #[cfg(feature = "ron")]
+    #[error("RON codec error: {0}")]
+    Ron(#[from] ron::error::Error),
+
     #[cfg(feature = "redb")]
     #[error("MessagePack encode error: {0}")]
     MessagePackEncode(#[from] rmp_serde::encode::Error),

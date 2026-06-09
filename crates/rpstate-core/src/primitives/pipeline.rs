@@ -1,0 +1,295 @@
+use crate::primitives::signal::{Signal, SignalSubscription};
+use std::sync::{Arc, Mutex};
+
+pub trait Reactive<T>: Clone + Send + Sync + 'static
+where
+    T: Clone + Send + Sync + 'static,
+{
+    fn get(&self) -> T;
+    fn subscribe<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(T) + Send + Sync + 'static;
+
+    fn keepalive(&self) -> Option<Arc<dyn Send + Sync>> {
+        None
+    }
+}
+
+pub trait IntoPipeline<T>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    fn pipe(self) -> Pipeline<T>;
+}
+
+struct PipelineInner<T> {
+    signal: Arc<Signal<T>>,
+    _source_subs: Vec<SignalSubscription>,
+    _keepalive: Vec<Arc<dyn Send + Sync>>,
+}
+
+pub struct Pipeline<T> {
+    inner: Arc<PipelineInner<T>>,
+}
+
+impl<T> Clone for Pipeline<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
+impl<T> Pipeline<T>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    pub fn from_signal(
+        signal: Arc<Signal<T>>,
+        source_subs: Vec<SignalSubscription>,
+        keepalive: Vec<Arc<dyn Send + Sync>>,
+    ) -> Self {
+        Self {
+            inner: Arc::new(PipelineInner {
+                signal,
+                _source_subs: source_subs,
+                _keepalive: keepalive,
+            }),
+        }
+    }
+
+    pub fn get(&self) -> T {
+        self.inner.signal.get()
+    }
+
+    pub fn subscribe<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(T) + Send + Sync + 'static,
+    {
+        self.inner
+            .signal
+            .subscribe(move |val| callback(val.clone()))
+    }
+
+    pub fn map<U, F>(self, f: F) -> Pipeline<U>
+    where
+        U: Clone + Send + Sync + 'static,
+        F: Fn(T) -> U + Send + Sync + 'static,
+    {
+        let f = Arc::new(f);
+        let initial = f(self.get());
+        let signal = Arc::new(Signal::new(initial));
+        let target = Arc::clone(&signal);
+        let mapper = Arc::clone(&f);
+
+        let sub = self.subscribe(move |value| {
+            target.set(mapper(value));
+        });
+
+        Pipeline {
+            inner: Arc::new(PipelineInner {
+                signal,
+                _source_subs: vec![sub],
+                _keepalive: vec![self.inner],
+            }),
+        }
+    }
+
+    pub fn filter_map<U, F>(self, f: F) -> Pipeline<U>
+    where
+        U: Default + Clone + Send + Sync + 'static,
+        F: Fn(T) -> Option<U> + Send + Sync + 'static,
+    {
+        let f = Arc::new(f);
+        let initial = f(self.get()).unwrap_or_default();
+        let signal = Arc::new(Signal::new(initial));
+        let target = Arc::clone(&signal);
+        let mapper = Arc::clone(&f);
+
+        let sub = self.subscribe(move |value| {
+            if let Some(mapped) = mapper(value) {
+                target.set(mapped);
+            }
+        });
+
+        Pipeline {
+            inner: Arc::new(PipelineInner {
+                signal,
+                _source_subs: vec![sub],
+                _keepalive: vec![self.inner],
+            }),
+        }
+    }
+
+    pub fn inspect<F>(self, f: F) -> Pipeline<T>
+    where
+        F: Fn(&T) + Send + Sync + 'static,
+    {
+        let f = Arc::new(f);
+        let initial = self.get();
+        f(&initial);
+
+        let signal = Arc::new(Signal::new(initial));
+        let target = Arc::clone(&signal);
+        let inspector = Arc::clone(&f);
+
+        let sub = self.subscribe(move |value| {
+            inspector(&value);
+            target.set(value);
+        });
+
+        Pipeline {
+            inner: Arc::new(PipelineInner {
+                signal,
+                _source_subs: vec![sub],
+                _keepalive: vec![self.inner],
+            }),
+        }
+    }
+
+    pub fn dedupe(self) -> Pipeline<T>
+    where
+        T: PartialEq,
+    {
+        let initial = self.get();
+        let last = Arc::new(Mutex::new(initial.clone()));
+        let signal = Arc::new(Signal::new(initial));
+        let target = Arc::clone(&signal);
+        let last_seen = Arc::clone(&last);
+
+        let sub = self.subscribe(move |value| {
+            let mut last = last_seen.lock().unwrap();
+            if *last != value {
+                *last = value.clone();
+                target.set(value);
+            }
+        });
+
+        Pipeline {
+            inner: Arc::new(PipelineInner {
+                signal,
+                _source_subs: vec![sub],
+                _keepalive: vec![self.inner],
+            }),
+        }
+    }
+}
+
+impl<T> Reactive<T> for Pipeline<T>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    fn get(&self) -> T {
+        Pipeline::get(self)
+    }
+
+    fn subscribe<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(T) + Send + Sync + 'static,
+    {
+        Pipeline::subscribe(self, callback)
+    }
+
+    fn keepalive(&self) -> Option<Arc<dyn Send + Sync>> {
+        Some(self.inner.clone())
+    }
+}
+
+#[derive(Default)]
+pub struct ReactiveScope {
+    subs: Vec<SignalSubscription>,
+}
+
+impl ReactiveScope {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn watch(&mut self, sub: SignalSubscription) {
+        self.subs.push(sub);
+    }
+
+    pub fn clear(&mut self) {
+        self.subs.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.subs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.subs.is_empty()
+    }
+}
+
+impl<R, T> IntoPipeline<T> for R
+where
+    R: Reactive<T>,
+    T: Clone + Send + Sync + 'static,
+{
+    fn pipe(self) -> Pipeline<T> {
+        let initial = self.get();
+        let signal = Arc::new(Signal::new(initial));
+        let target = Arc::clone(&signal);
+        let sub = self.subscribe(move |value| {
+            target.set(value);
+        });
+
+        Pipeline {
+            inner: Arc::new(PipelineInner {
+                signal,
+                _source_subs: vec![sub],
+                _keepalive: self.keepalive().into_iter().collect(),
+            }),
+        }
+    }
+}
+
+macro_rules! impl_tuple_pipeline {
+    ($(($source_ty:ident, $source:ident, $value_ty:ident, $value:ident)),+ $(,)?) => {
+        impl<$($source_ty, $value_ty),+> IntoPipeline<($($value_ty,)+)> for ($($source_ty,)+)
+        where
+            $(
+                $source_ty: Reactive<$value_ty>,
+                $value_ty: Clone + Send + Sync + 'static,
+            )+
+        {
+            #[allow(non_snake_case)]
+            fn pipe(self) -> Pipeline<($($value_ty,)+)> {
+                let ($($source,)+) = self;
+                let initial = ($($source.get(),)+);
+                let signal = Arc::new(Signal::new(initial));
+                let mut source_subs = Vec::new();
+                let mut keepalive = Vec::new();
+
+                let refresh: Arc<dyn Fn() -> ($($value_ty,)+) + Send + Sync> = {
+                    $(let $value = $source.clone();)+
+                    Arc::new(move || ($($value.get(),)+))
+                };
+
+                $(
+                    if let Some(inner) = $source.keepalive() {
+                        keepalive.push(inner);
+                    }
+
+                    let target = Arc::clone(&signal);
+                    let refresh_cb = Arc::clone(&refresh);
+                    source_subs.push($source.subscribe(move |_| {
+                        target.set(refresh_cb());
+                    }));
+                )+
+
+                Pipeline::from_signal(signal, source_subs, keepalive)
+            }
+        }
+    };
+}
+
+impl_tuple_pipeline!((RA, ra, A, a), (RB, rb, B, b));
+impl_tuple_pipeline!((RA, ra, A, a), (RB, rb, B, b), (RC, rc, C, c));
+impl_tuple_pipeline!(
+    (RA, ra, A, a),
+    (RB, rb, B, b),
+    (RC, rc, C, c),
+    (RD, rd, D, d)
+);

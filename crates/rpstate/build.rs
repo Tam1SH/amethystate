@@ -1,25 +1,41 @@
 fn main() {
-    let backends = ["redb", "json"];
+    println!("cargo::rustc-check-cfg=cfg(backend, values(\"redb\", \"json\", \"toml\", \"ron\"))");
 
-    let active_backends: Vec<_> = backends
-        .iter()
-        .filter(|&f| {
-            let env_var = format!("CARGO_FEATURE_{}", f.to_uppercase().replace('-', "_"));
-            std::env::var(env_var).is_ok()
-        })
-        .collect();
+    let redb = std::env::var_os("CARGO_FEATURE_REDB").is_some();
+    let json = std::env::var_os("CARGO_FEATURE_JSON").is_some();
+    let toml = std::env::var_os("CARGO_FEATURE_TOML").is_some();
+    let ron = std::env::var_os("CARGO_FEATURE_RON").is_some();
 
-    if active_backends.is_empty() {
-        panic!(
-            "\n\n[Build Error] You must enable exactly one backend feature from: {:?}\n\n",
-            backends
-        );
+    let mut active = Vec::new();
+    if redb {
+        active.push("redb");
+    }
+    if json {
+        active.push("json");
+    }
+    if toml {
+        active.push("toml");
+    }
+    if ron {
+        active.push("ron");
     }
 
-    if active_backends.len() > 1 {
-        panic!(
-            "\n\n[Build Error] Multiple backend features selected: {:?}. Only one is allowed.\n\n",
-            active_backends
+    let selected = if json {
+        "json"
+    } else if toml {
+        "toml"
+    } else if ron {
+        "ron"
+    } else {
+        "redb"
+    };
+
+    println!("cargo:rustc-cfg=backend=\"{}\"", selected);
+
+    if active.len() > 1 {
+        println!(
+            "cargo:warning=Multiple storage backends enabled: {:?}. Defaulting to '{}'.",
+            active, selected
         );
     }
 }

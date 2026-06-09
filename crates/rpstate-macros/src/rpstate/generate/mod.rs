@@ -1,6 +1,7 @@
 mod accessors;
 mod data;
 mod init;
+mod wasm;
 
 use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
@@ -38,6 +39,10 @@ pub(crate) fn generate_code(
         }
     };
 
+    if macro_args.target.as_deref() == Some("tauri-wasm") {
+        return wasm::generate_wasm_code(crate_name, vis, name, attrs, prefix, entries, macro_args);
+    }
+
     let is_root = prefix.is_some();
     let schema_methods = accessors::schema_methods(&crate_name, entries);
     let fields_impl = data::data_impl(
@@ -61,10 +66,27 @@ pub(crate) fn generate_code(
     let schema_export = generate_schema_export(&crate_name, name, &prefix, entries);
 
     let slice_impl = if is_root {
+        let load_fn = match rp_mode {
+            RpMode::Persistent => quote! { Self::load_with(store) },
+            _ => quote! { Self::new_with(store) },
+        };
         quote! {
-            impl #crate_name::RpStateSlice for #name {
-                fn load_slice(store: &#crate_name::DefaultStore) -> #crate_name::Result<Self> {
-                    Self::new(store)
+            impl<S: #crate_name::Store> #crate_name::RpStateSlice<S> for #name<S> {
+                fn load_slice(store: &S) -> #crate_name::Result<Self> {
+                    #load_fn
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    let global_new_impl = if is_root {
+        quote! {
+            impl #name<#crate_name::DefaultStore> {
+                pub fn new() -> #crate_name::Result<Self> {
+                    let store = #crate_name::global_store();
+                    Self::new_with(&store)
                 }
             }
         }
@@ -75,9 +97,15 @@ pub(crate) fn generate_code(
     match rp_mode {
         RpMode::Reactive | RpMode::Both => {
             quote! {
-                #[derive(Clone)] #(#attrs)* #vis struct #name { #(#struct_fields,)* }
+                #[derive(Clone)]
+                #(#attrs)* #vis struct #name<S: #crate_name::Store = #crate_name::DefaultStore> {
+                    #(#struct_fields,)*
+                }
                 #scope
-                impl #name { #constructor #(#schema_methods)* #(#methods)* }
+                impl<S: #crate_name::Store> #name<S> {
+                    #constructor #(#schema_methods)* #(#methods)*
+                }
+                #global_new_impl
                 #node_impl
                 #fields_impl
                 #schema_export
@@ -116,25 +144,25 @@ fn generate_schema_export(
         let rust_type_str = quote!(#ty).to_string();
 
         let kind_tokens = if e.volatile {
-            quote! { #crate_name::tauri_codegen::FieldKind::Volatile }
+            quote! { #crate_name::tauri::FieldKind::Volatile }
         } else if e.nested {
             let sname = get_type_ident_str(&e.ty);
-            quote! { #crate_name::tauri_codegen::FieldKind::Nested { struct_name: #sname } }
+            quote! { #crate_name::tauri::FieldKind::Nested { struct_name: #sname } }
         } else if let Some(target) = &e.lookup {
             let target_str = target.to_string();
             let mutable = e.export_mut;
-            quote! { #crate_name::tauri_codegen::FieldKind::Lookup { target_key: #target_str, mutable: #mutable } }
+            quote! { #crate_name::tauri::FieldKind::Lookup { target_key: #target_str, mutable: #mutable } }
         } else if let Some(target) = &e.lookup_node {
             let target_str = target.to_string();
             let sname = get_type_ident_str(&e.ty);
-            quote! { #crate_name::tauri_codegen::FieldKind::LookupNode { target_prefix: #target_str, struct_name: #sname } }
+            quote! { #crate_name::tauri::FieldKind::LookupNode { target_prefix: #target_str, struct_name: #sname } }
         } else if let Some((k, v)) = e.get_map_types() {
             let k_ts = map_type_to_ts(k).1;
             let v_ts = map_type_to_ts(v).1;
             let k_rust = quote!(#k).to_string();
             let v_rust = quote!(#v).to_string();
             quote! {
-                #crate_name::tauri_codegen::FieldKind::ReactiveMap {
+                #crate_name::tauri::FieldKind::ReactiveMap {
                     key_type: #k_ts,
                     value_type: #v_ts,
                     key_rust_type: #k_rust,
@@ -142,11 +170,11 @@ fn generate_schema_export(
                 }
             }
         } else {
-            quote! { #crate_name::tauri_codegen::FieldKind::Plain }
+            quote! { #crate_name::tauri::FieldKind::Plain }
         };
 
         quote! {
-            #crate_name::tauri_codegen::FieldExportMeta {
+            #crate_name::tauri::FieldExportMeta {
                 name: #fname_str,
                 ts_type: #ts_type,
                 full_ts_type: #full_ts_type,
@@ -160,7 +188,7 @@ fn generate_schema_export(
         quote! {
             #[cfg(not(target_arch = "wasm32"))]
             #crate_name::inventory::submit! {
-                #crate_name::tauri_codegen::SchemaExportEntry {
+                #crate_name::tauri::SchemaExportEntry {
                     prefix: #prefix_tokens,
                     struct_name: #struct_name_str,
                     fields: &[

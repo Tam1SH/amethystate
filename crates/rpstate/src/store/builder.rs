@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
 use crate::migration::builder::MigrationBuilder;
@@ -12,11 +11,14 @@ use crate::{DefaultStore, MigrationReport, Result};
 pub struct NoMigrations;
 pub struct WithMigrations;
 
-#[cfg(feature = "redb")]
+#[cfg(backend = "redb")]
 const FILE_EXTENSION: &str = "redb";
 
-#[cfg(all(feature = "json", not(feature = "redb")))]
+#[cfg(backend = "json")]
 const FILE_EXTENSION: &str = "json";
+
+#[cfg(backend = "toml")]
+const FILE_EXTENSION: &str = "toml";
 
 pub struct StoreBuilder<M = NoMigrations> {
     config: StoreConfig,
@@ -40,19 +42,55 @@ impl StoreBuilder<NoMigrations> {
     }
 
     pub fn for_app(app_name: impl AsRef<str>) -> std::io::Result<Self> {
+        #[cfg(feature = "confy-compat-0-6")]
+        {
+            Self::for_app_v06(app_name)
+        }
+        #[cfg(not(feature = "confy-compat-0-6"))]
+        {
+            Self::for_app_v2(app_name)
+        }
+    }
+
+    pub fn for_app_v2(app_name: impl AsRef<str>) -> std::io::Result<Self> {
         let app_name = app_name.as_ref();
 
-        let proj_dirs = directories::ProjectDirs::from("", "", app_name).ok_or_else(|| {
+        use etcetera::{AppStrategy, AppStrategyArgs, choose_app_strategy};
+        let project = choose_app_strategy(AppStrategyArgs {
+            top_level_domain: "rs".to_string(),
+            author: "".to_string(),
+            app_name: app_name.to_string(),
+        })
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e.to_string()))?;
+
+        let mut path = project.config_dir();
+        path.push("default-config");
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        Ok(Self::new(path))
+    }
+
+    #[cfg(feature = "confy-compat-0-6")]
+    pub fn for_app_v06(app_name: impl AsRef<str>) -> std::io::Result<Self> {
+        let app_name = app_name.as_ref();
+
+        use directories::ProjectDirs;
+        let project = ProjectDirs::from("rs", "", app_name).ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "Failed to resolve system application directories",
             )
         })?;
 
-        let data_dir = proj_dirs.data_dir();
-        std::fs::create_dir_all(data_dir)?;
+        let mut path = project.config_dir().to_path_buf();
+        path.push("default-config");
 
-        let path = data_dir.join(app_name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
 
         Ok(Self::new(path))
     }
@@ -96,35 +134,53 @@ impl<M> StoreBuilder<M> {
 
 impl StoreBuilder<NoMigrations> {
     pub fn build(self) -> Result<DefaultStore> {
-        #[cfg(feature = "redb")]
+        #[cfg(backend = "redb")]
         {
             let (store, _) =
-                crate::store::backend::redb::RedbStore::open(self.config, MigrationSet::default())?;
-            Ok(store)
+                crate::store::backend::redb::RedbStore::open(self.config, Default::default())?;
+            return Ok(store);
         }
 
-        #[cfg(all(feature = "json", not(feature = "redb")))]
+        #[cfg(backend = "json")]
         {
-            Ok(crate::store::backend::json::JsonStore::open(self.config, Default::default())?.0)
+            let (store, _) =
+                crate::store::backend::text::JsonStore::open(self.config, Default::default())?;
+            return Ok(store);
+        }
+
+        #[cfg(backend = "toml")]
+        {
+            let (store, _) =
+                crate::store::backend::text::TomlStore::open(self.config, Default::default())?;
+            return Ok(store);
         }
     }
 }
 
 impl StoreBuilder<WithMigrations> {
     pub fn build(self) -> Result<(DefaultStore, MigrationReport)> {
-        #[cfg(feature = "redb")]
+        #[cfg(backend = "redb")]
         {
             let (store, report) =
                 crate::store::backend::redb::RedbStore::open(self.config, self.migration_set)?;
             report.log_to_tracing();
-            Ok((store, report))
+            return Ok((store, report));
         }
 
-        #[cfg(all(feature = "json", not(feature = "redb")))]
+        #[cfg(backend = "json")]
         {
             let (store, report) =
-                crate::store::backend::json::JsonStore::open(self.config, Default::default())?;
-            Ok((store, report))
+                crate::store::backend::text::JsonStore::open(self.config, self.migration_set)?;
+            report.log_to_tracing();
+            return Ok((store, report));
+        }
+
+        #[cfg(backend = "toml")]
+        {
+            let (store, report) =
+                crate::store::backend::text::TomlStore::open(self.config, self.migration_set)?;
+            report.log_to_tracing();
+            return Ok((store, report));
         }
     }
 }

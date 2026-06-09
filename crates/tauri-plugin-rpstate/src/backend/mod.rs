@@ -1,4 +1,3 @@
-pub mod codegen;
 pub mod commands;
 
 use tauri::{

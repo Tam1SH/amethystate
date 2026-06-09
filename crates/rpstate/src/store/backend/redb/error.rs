@@ -1,7 +1,7 @@
 use crate::codec::CodecError;
 use thiserror::Error;
 
-pub(super) type RedbResult<T> = std::result::Result<T, RedbStoreError>;
+pub(super) type RedbResult<T> = Result<T, RedbStoreError>;
 
 #[derive(Error, Debug)]
 pub enum RedbStoreError {
@@ -19,9 +19,6 @@ pub enum RedbStoreError {
 
     #[error("redb transaction error: {0}")]
     Transaction(#[from] redb::TransactionError),
-
-    #[error("redb store lock poisoned")]
-    Poisoned,
 
     #[error(transparent)]
     Codec(#[from] CodecError),

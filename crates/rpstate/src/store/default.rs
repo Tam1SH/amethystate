@@ -1,22 +1,19 @@
-use bytes::Bytes;
-use serde::{Serialize, de::DeserializeOwned};
-use std::sync::Arc;
+use crate::store::backend;
 
-use crate::{Result, Store, StoreConfig, SubscriptionKind};
+#[cfg(backend = "json")]
+pub use backend::text::JsonStore;
 
-#[cfg(feature = "redb")]
-use crate::store::{MigrationReport, MigrationSet, SchemaAwareStore};
-use crate::store::{StoreCallback, SubscriptionId, backend};
-
-#[cfg(feature = "json")]
-pub use backend::json::JsonStore;
-
-#[cfg(feature = "redb")]
+#[cfg(backend = "redb")]
 pub use backend::redb::RedbStore;
 
-#[cfg(feature = "redb")]
+#[cfg(backend = "toml")]
+pub use backend::text::TomlStore;
+
+#[cfg(backend = "redb")]
 pub type DefaultStore = RedbStore;
-#[cfg(feature = "json")]
-type DefaultStore = JsonStore;
-#[cfg(all(feature = "json", not(feature = "redb")))]
-type DefaultStoreInner = JsonStore;
+
+#[cfg(backend = "json")]
+pub type DefaultStore = JsonStore;
+
+#[cfg(backend = "toml")]
+pub type DefaultStore = TomlStore;

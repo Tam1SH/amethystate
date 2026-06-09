@@ -1,15 +1,11 @@
-use crate::error::Error;
 use crate::store::Store;
+use crate::store::sync_backend::StoreBackend;
 use crate::{
     AccessMode, DefaultStore, Field, ReadOnlyMode, Result, StoreSubscription, WritableMode,
 };
 use rpstate_core::{InterceptDisposer, MapChange, ReactiveMapCore, SignalSubscription};
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-use std::fmt::Display;
-use std::hash::Hash;
 use std::marker::PhantomData;
-use std::str::FromStr;
+
 use std::sync::Arc;
 
 pub struct ReactiveMap<K, V, S: Store = DefaultStore, M: AccessMode = ReadOnlyMode> {
@@ -19,6 +15,8 @@ pub struct ReactiveMap<K, V, S: Store = DefaultStore, M: AccessMode = ReadOnlyMo
     pub(crate) store_sub: Arc<StoreSubscription<S>>,
     pub(crate) _mode: PhantomData<M>,
 }
+
+pub use rpstate_core::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
 
 pub type ReadOnlyReactiveMap<TValue, S> = Field<TValue, S, ReadOnlyMode>;
 pub type WritableReactiveMap<TValue, S> = Field<TValue, S, WritableMode>;
@@ -37,8 +35,8 @@ impl<K, V, S: Store, M: AccessMode> Clone for ReactiveMap<K, V, S, M> {
 
 impl<K, V, S, M> std::fmt::Debug for ReactiveMap<K, V, S, M>
 where
-    K: std::fmt::Debug + FromStr + Display + Clone + Hash + Eq + Send + Sync + 'static,
-    V: std::fmt::Debug + Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
+    K: std::fmt::Debug + ReactiveMapKey,
+    V: std::fmt::Debug + ReactiveMapValue,
     S: Store,
     M: AccessMode,
 {
@@ -65,39 +63,29 @@ where
 
 impl<K, V, S, M> ReactiveMap<K, V, S, M>
 where
-    K: FromStr + Display + Clone + Hash + Eq + Send + Sync + 'static,
-    V: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Default,
+    K: ReactiveMapKey,
+    V: ReactiveMapValue,
     S: Store,
     M: AccessMode,
 {
     pub fn get(&self, key: &K) -> Result<Option<V>> {
-        let full_path = format!("{}.{}", self.path, key);
-        self.store.get(&full_path)
+        let backend = StoreBackend::new(self.store.clone());
+        rpstate_core::map_get(&backend, &self.path, key)
     }
 
     pub fn contains_key(&self, key: &K) -> Result<bool> {
-        self.get(key).map(|v| v.is_some())
+        let backend = StoreBackend::new(self.store.clone());
+        rpstate_core::map_contains_key::<_, _, V>(&backend, &self.path, key)
     }
 
     pub fn entries(&self) -> Result<Vec<(K, V)>> {
-        let prefix = format!("{}.", self.path);
-        let kvs = self.store.scan_prefix(&prefix)?;
-        let mut results = Vec::new();
-        for (full_path, bytes) in kvs {
-            if let Some(key_str) = full_path.strip_prefix(&prefix)
-                && let Ok(k) = K::from_str(key_str)
-                && let Ok(v) = self.store.decode::<V>(&bytes)
-            {
-                results.push((k, v));
-            }
-        }
-        Ok(results)
+        let backend = StoreBackend::new(self.store.clone());
+        rpstate_core::map_entries(&backend, &self.path)
     }
 
     pub fn len(&self) -> Result<usize> {
-        let prefix = format!("{}.", self.path);
-        let kvs = self.store.scan_prefix(&prefix)?;
-        Ok(kvs.len())
+        let backend = StoreBackend::new(self.store.clone());
+        rpstate_core::map_len(&backend, &self.path)
     }
 
     pub fn is_empty(&self) -> Result<bool> {
@@ -121,105 +109,28 @@ where
 
 impl<K, V, S> ReactiveMap<K, V, S, WritableMode>
 where
-    K: FromStr + Display + Clone + Hash + Eq + Send + Sync + 'static,
-    V: Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
+    K: ReactiveMapKey,
+    V: ReactiveMapValue,
     S: Store,
 {
     pub fn set(&self, key: K, value: &V) -> Result<()> {
-        let old_value = self.get(&key)?;
-        if let Some(old) = old_value {
-            let change = MapChange::Update {
-                key: key.clone(),
-                old_value: old,
-                new_value: value.clone(),
-            };
-            self.apply_change(change)
-        } else {
-            Err(Error::KeyNotFound(key.to_string()))
-        }
+        let backend = StoreBackend::new(self.store.clone());
+        rpstate_core::map_set_existing(&backend, &self.core, self.path.clone(), key, value, false)
     }
 
     pub fn set_or_create(&self, key: K, value: &V) -> Result<()> {
-        let old_value = self.get(&key)?;
-        let change = if let Some(old) = old_value {
-            MapChange::Update {
-                key: key.clone(),
-                old_value: old,
-                new_value: value.clone(),
-            }
-        } else {
-            MapChange::Insert {
-                key: key.clone(),
-                value: value.clone(),
-            }
-        };
-        self.apply_change(change)
+        let backend = StoreBackend::new(self.store.clone());
+        rpstate_core::map_set_or_create(&backend, &self.core, self.path.clone(), key, value, false)
     }
 
     pub fn remove(&self, key: K) -> Result<Option<V>> {
-        let exists = {
-            let keys = self.core.known_keys.lock().unwrap();
-            keys.contains(&key)
-        };
-
-        if !exists {
-            return Ok(None);
-        }
-
-        let old_value = self.get(&key)?;
-        if let Some(old) = old_value {
-            let change = MapChange::Remove {
-                key: key.clone(),
-                old_value: old.clone(),
-            };
-            self.apply_change(change)?;
-            Ok(Some(old))
-        } else {
-            self.core.known_keys.lock().unwrap().remove(&key);
-            Ok(None)
-        }
+        let backend = StoreBackend::new(self.store.clone());
+        rpstate_core::map_remove(&backend, &self.core, self.path.clone(), key, false)
     }
 
     pub fn clear(&self) -> Result<()> {
-        self.apply_change(MapChange::Clear)
-    }
-
-    fn apply_change(&self, change: MapChange<K, V>) -> Result<()> {
-        let context_path: Arc<str> = match change.key() {
-            Some(key) => format!("{}.{}", self.path, key).into(),
-            None => self.path.clone(),
-        };
-
-        let processed_change = self
-            .core
-            .run_interceptors(context_path, change)
-            .map_err(|_| Error::Intercepted)?;
-
-        match &processed_change {
-            MapChange::Insert { key, value }
-            | MapChange::Update {
-                key,
-                new_value: value,
-                ..
-            } => {
-                let full_path = format!("{}.{}", self.path, key);
-                self.store.set(&full_path, value)?;
-            }
-            MapChange::Remove { key, .. } => {
-                let full_path = format!("{}.{}", self.path, key);
-                self.store.delete(&full_path)?;
-            }
-            MapChange::Clear => {
-                let prefix = format!("{}.", self.path);
-                let kvs = self.store.scan_prefix(&prefix)?;
-                for (full_path, _) in kvs {
-                    self.store.delete(&full_path)?;
-                }
-                self.core.notify(&processed_change);
-            }
-        }
-
-        Ok(())
+        let backend = StoreBackend::new(self.store.clone());
+        rpstate_core::map_clear(&backend, &self.core, self.path.clone(), true)
     }
 
     pub fn intercept<F>(&self, callback: F) -> InterceptDisposer
@@ -254,6 +165,7 @@ mod tests {
 
     use super::*;
     use crate::DefaultStore;
+    use crate::error::Error;
     use crate::store::builder::StoreBuilder;
     use rpstate_core::WritableMode;
     use std::collections::HashMap;

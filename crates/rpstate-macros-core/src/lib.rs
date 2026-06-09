@@ -11,6 +11,8 @@ pub struct MacroArgs {
     pub version: Option<u32>,
     #[darling(default)]
     pub mode: Option<String>,
+    #[darling(default)]
+    pub target: Option<String>,
 }
 
 #[derive(Debug, Clone)]

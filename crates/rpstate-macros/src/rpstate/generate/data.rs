@@ -39,7 +39,7 @@ pub(crate) fn data_impl(
         let fname = e.ident.as_ref().unwrap();
         let ty = &e.ty;
         if e.nested {
-            quote! { pub #fname: <#ty as #crate_name::RpState>::Data }
+            quote! { pub #fname: <#ty<#crate_name::DefaultStore> as #crate_name::RpState>::Data }
         } else if let Some((k, v)) = e.get_map_types() {
             quote! { pub #fname: ::std::collections::HashMap<#k, #v> }
         } else {
@@ -52,13 +52,13 @@ pub(crate) fn data_impl(
     let field_descriptors = p_fields.iter().map(|e| {
         let fname_str = e.ident.as_ref().unwrap().to_string();
         let ty = &e.ty;
-        let type_name = quote!(stringify!(#ty)).to_string().replace(" ", "");
+        let type_name = quote!(#ty).to_string().replace(" ", "");
 
         if e.nested {
             quote! {
                 #crate_name::migration::fields::FieldDescriptor {
                     name: #fname_str,
-                    type_hash: 0xDEADBEEF ^ < <#ty as #crate_name::RpState>::Data as #crate_name::migration::types::RpType>::TYPE_HASH,
+                    type_hash: 0xDEADBEEF ^ < <#ty<#crate_name::DefaultStore> as #crate_name::RpState>::Data as #crate_name::migration::types::RpType>::TYPE_HASH,
                     type_name: #type_name,
                 }
             }
@@ -136,20 +136,20 @@ pub(crate) fn data_impl(
         let fname = e.ident.as_ref().unwrap();
         let key = e.key.clone().unwrap_or_else(|| fname.to_string());
         let ty = &e.ty;
-
         if e.nested {
+            let data_ty = get_data_type(ty);
             quote! {
-                #fname: <#ty as #crate_name::RpState>::Data::__rpstate_load_from(
+                #fname: <#data_ty>::__rpstate_load_from(
                     store,
-                    &Self::__rpstate_path(prefix, #key),
+                    &#crate_name::join_path(prefix, #key),
                 )?
             }
         } else if let Some((k, v)) = e.get_map_types() {
             quote! {
                 #fname: {
-                    let path = Self::__rpstate_path(prefix, #key);
-                    let raw = <#crate_name::DefaultStore as #crate_name::Store>::scan_prefix(
-                        &store,
+                    let path = #crate_name::join_path(prefix, #key);
+                    let raw = <S as #crate_name::Store>::scan_prefix(
+                        store,
                         &format!("{}.", path),
                     )?;
                     let mut map = ::std::collections::HashMap::<#k, #v>::new();
@@ -157,8 +157,8 @@ pub(crate) fn data_impl(
                         if let Some(k_str) = stored_path.strip_prefix(&format!("{}.", path))
                             && let Ok(kv) = <#k as ::std::str::FromStr>::from_str(k_str)
                         {
-                            let vv = <#crate_name::DefaultStore as #crate_name::Store>::decode::<#v>(
-                                &store,
+                            let vv = <S as #crate_name::Store>::decode::<#v>(
+                                store,
                                 &bytes,
                             )?;
                             map.insert(kv, vv);
@@ -174,9 +174,9 @@ pub(crate) fn data_impl(
                 .map(parse_default)
                 .unwrap_or_else(|| quote! { <#ty as ::std::default::Default>::default() });
             quote! {
-                #fname: <#crate_name::DefaultStore as #crate_name::Store>::get::<#ty>(
-                    &store,
-                    &Self::__rpstate_path(prefix, #key),
+                #fname: <S as #crate_name::Store>::get::<#ty>(
+                    store,
+                    &#crate_name::join_path(prefix, #key),
                 )?.unwrap_or_else(|| #fallback)
             }
         }
@@ -188,45 +188,45 @@ pub(crate) fn data_impl(
 
         if e.nested {
             quote! {
-                self.#fname.__rpstate_save_to(store, &Self::__rpstate_path(prefix, #key))?;
+                self.#fname.__rpstate_save_to(store, &#crate_name::join_path(prefix, #key))?;
             }
         } else if e.get_map_types().is_some() {
             quote! {
                 {
-                    let path = Self::__rpstate_path(prefix, #key);
+                    let path = #crate_name::join_path(prefix, #key);
                     for (k, v) in &self.#fname {
                         let full_path = format!("{}.{}", path, k);
-                        <#crate_name::DefaultStore as #crate_name::Store>::set(&store, &full_path, v)?;
+                        <S as #crate_name::Store>::set(store, &full_path, v)?;
                     }
                 }
             }
         } else {
             quote! {
-                <#crate_name::DefaultStore as #crate_name::Store>::set(
+                <S as #crate_name::Store>::set(
                     &store,
-                    &Self::__rpstate_path(prefix, #key),
+                    &#crate_name::join_path(prefix, #key),
                     &self.#fname,
                 )?;
             }
         }
     });
 
-    let prefix_expr = prefix.unwrap_or_default();
+    let prefix_expr = prefix.clone().unwrap_or_default();
     let deps = migration_deps(crate_name, entries);
+    let is_root = prefix.is_some();
 
     let persistent_wrapper_tokens = match rp_mode {
-        RpMode::Reactive => {
-            quote! {}
-        }
+        RpMode::Reactive => quote! {},
         RpMode::Persistent => {
             quote! {
-                #[derive(Clone)] #(#attrs)* #vis struct #name {
+                #[derive(Clone)]
+                #(#attrs)* #vis struct #name<S: #crate_name::Store = #crate_name::DefaultStore> {
                     inner: #data_struct_name,
-                    store: #crate_name::DefaultStore,
+                    store: S,
                     prefix: ::std::sync::Arc<str>,
                 }
 
-                impl ::std::fmt::Debug for #name {
+                impl<S: #crate_name::Store> ::std::fmt::Debug for #name<S> {
                     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                         f.debug_struct(stringify!(#name))
                             .field("inner", &self.inner)
@@ -234,7 +234,7 @@ pub(crate) fn data_impl(
                     }
                 }
 
-                impl ::std::ops::Deref for #name {
+                impl<S: #crate_name::Store> ::std::ops::Deref for #name<S> {
                     type Target = #data_struct_name;
 
                     fn deref(&self) -> &Self::Target {
@@ -242,13 +242,13 @@ pub(crate) fn data_impl(
                     }
                 }
 
-                impl ::std::ops::DerefMut for #name {
+                impl<S: #crate_name::Store> ::std::ops::DerefMut for #name<S> {
                     fn deref_mut(&mut self) -> &mut Self::Target {
                         &mut self.inner
                     }
                 }
 
-                impl #name {
+                impl<S: #crate_name::Store> #name<S> {
                     pub fn save_lazy(&self) -> #crate_name::Result<()> {
                         self.inner.__rpstate_save_to(&self.store, &self.prefix)
                     }
@@ -265,15 +265,22 @@ pub(crate) fn data_impl(
 
                     pub fn save(&self) -> #crate_name::Result<()> {
                         self.save_lazy()?;
-                        <#crate_name::DefaultStore as #crate_name::Store>::flush_prefix(&self.store, &self.prefix)
+                        <S as #crate_name::Store>::flush_prefix(&self.store, &self.prefix)
                     }
 
-                    pub fn load(store: &#crate_name::DefaultStore) -> #crate_name::Result<Self> {
+                    pub fn load_with(store: &S) -> #crate_name::Result<Self> {
                         Ok(Self {
                             inner: #data_struct_name::__rpstate_load_from(store, #prefix_expr)?,
                             store: store.clone(),
                             prefix: ::std::sync::Arc::from(#prefix_expr),
                         })
+                    }
+                }
+
+                impl #name<#crate_name::DefaultStore> {
+                    pub fn load() -> #crate_name::Result<Self> {
+                        let store = #crate_name::global_store();
+                        Self::load_with(&store)
                     }
                 }
             }
@@ -282,13 +289,14 @@ pub(crate) fn data_impl(
             let persisted_struct_name = format_ident!("{}_Persistent", name);
             quote! {
                 #[allow(non_camel_case_types)]
-                pub struct #persisted_struct_name {
+                #[derive(Clone)]
+                pub struct #persisted_struct_name<S: #crate_name::Store = #crate_name::DefaultStore> {
                     inner: #data_struct_name,
-                    store: #crate_name::DefaultStore,
+                    store: S,
                     prefix: ::std::sync::Arc<str>,
                 }
 
-                impl ::std::fmt::Debug for #persisted_struct_name {
+                impl<S: #crate_name::Store> ::std::fmt::Debug for #persisted_struct_name<S> {
                     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                         f.debug_struct(stringify!(#persisted_struct_name))
                             .field("inner", &self.inner)
@@ -296,7 +304,7 @@ pub(crate) fn data_impl(
                     }
                 }
 
-                impl ::std::ops::Deref for #persisted_struct_name {
+                impl<S: #crate_name::Store> ::std::ops::Deref for #persisted_struct_name<S> {
                     type Target = #data_struct_name;
 
                     fn deref(&self) -> &Self::Target {
@@ -304,18 +312,16 @@ pub(crate) fn data_impl(
                     }
                 }
 
-                impl ::std::ops::DerefMut for #persisted_struct_name {
+                impl<S: #crate_name::Store> ::std::ops::DerefMut for #persisted_struct_name<S> {
                     fn deref_mut(&mut self) -> &mut Self::Target {
                         &mut self.inner
                     }
                 }
 
-                impl #persisted_struct_name {
-
+                impl<S: #crate_name::Store> #persisted_struct_name<S> {
                     pub fn save_lazy(&self) -> #crate_name::Result<()> {
                         self.inner.__rpstate_save_to(&self.store, &self.prefix)
                     }
-
 
                     pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::Result<()> {
                         f(&mut self.inner);
@@ -329,12 +335,12 @@ pub(crate) fn data_impl(
 
                     pub fn save(&self) -> #crate_name::Result<()> {
                         self.save_lazy()?;
-                        <#crate_name::DefaultStore as #crate_name::Store>::flush_prefix(&self.store, &self.prefix)
+                        <S as #crate_name::Store>::flush_prefix(&self.store, &self.prefix)
                     }
                 }
 
-                impl #name {
-                    pub fn load(store: &#crate_name::DefaultStore) -> #crate_name::Result<#persisted_struct_name> {
+                impl<S: #crate_name::Store> #name<S> {
+                    pub fn load_with(store: &S) -> #crate_name::Result<#persisted_struct_name<S>> {
                         Ok(#persisted_struct_name {
                             inner: #data_struct_name::__rpstate_load_from(store, #prefix_expr)?,
                             store: store.clone(),
@@ -342,12 +348,48 @@ pub(crate) fn data_impl(
                         })
                     }
                 }
+
+                impl #name<#crate_name::DefaultStore> {
+                    pub fn load() -> #crate_name::Result<#persisted_struct_name<#crate_name::DefaultStore>> {
+                        let store = #crate_name::global_store();
+                        Self::load_with(&store)
+                    }
+                }
             }
         }
     };
 
+    let gen_load_save_helpers = !(is_root && matches!(rp_mode, RpMode::Reactive));
+
+    let load_save_helpers = if gen_load_save_helpers {
+        quote! {
+            #[doc(hidden)]
+            pub fn __rpstate_load_from<S: #crate_name::Store>(
+                store: &S,
+                prefix: &str,
+            ) -> #crate_name::Result<Self> {
+                Ok(Self {
+                    #(#store_load_fields,)*
+                })
+            }
+
+            #[doc(hidden)]
+            pub fn __rpstate_save_to<S: #crate_name::Store>(
+                &self,
+                store: &S,
+                prefix: &str,
+            ) -> #crate_name::Result<()> {
+                #(#store_save_fields)*
+                Ok(())
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     quote! {
         #[derive(#crate_name::serde::Serialize, #crate_name::serde::Deserialize, Default, Clone, Debug)]
+        #[serde(crate = "::rpstate::serde")]
         #[doc(hidden)]
         #[allow(non_camel_case_types)]
         pub struct #data_struct_name {
@@ -357,33 +399,7 @@ pub(crate) fn data_impl(
         #persistent_wrapper_tokens
 
         impl #data_struct_name {
-            #[doc(hidden)]
-            pub fn __rpstate_load_from(
-                store: &#crate_name::DefaultStore,
-                prefix: &str,
-            ) -> #crate_name::Result<Self> {
-                Ok(Self {
-                    #(#store_load_fields,)*
-                })
-            }
-
-            #[doc(hidden)]
-            pub fn __rpstate_save_to(
-                &self,
-                store: &#crate_name::DefaultStore,
-                prefix: &str,
-            ) -> #crate_name::Result<()> {
-                #(#store_save_fields)*
-                Ok(())
-            }
-
-            fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
-                if prefix.is_empty() {
-                    key.to_string()
-                } else {
-                    format!("{}.{}", prefix.trim_end_matches('.'), key.trim_start_matches('.'))
-                }
-            }
+            #load_save_helpers
         }
 
         impl #crate_name::migration::types::RpType for #data_struct_name {
@@ -412,7 +428,7 @@ pub(crate) fn data_impl(
             }
         }
 
-        impl #crate_name::RpState for #name {
+        impl<S: #crate_name::Store> #crate_name::RpState for #name<S> {
             type Data = #data_struct_name;
         }
     }
@@ -424,4 +440,17 @@ fn migration_deps(crate_name: &TokenStream2, entries: &[StoreFieldEntry]) -> Vec
         .filter_map(|e| e.parent.as_ref())
         .map(|p| quote! { <#p as #crate_name::StateScope>::PREFIX })
         .collect::<Vec<_>>()
+}
+
+fn get_data_type(ty: &syn::Type) -> proc_macro2::TokenStream {
+    if let syn::Type::Path(type_path) = ty {
+        let mut path = type_path.path.clone();
+        if let Some(last) = path.segments.last_mut() {
+            last.arguments = syn::PathArguments::None;
+            last.ident = quote::format_ident!("{}_Data", last.ident);
+        }
+        quote::quote! { #path }
+    } else {
+        quote::quote! { #ty }
+    }
 }

@@ -2,7 +2,6 @@ use rpstate::store::builder::StoreBuilder;
 use rpstate::{ReactiveMap, Store, migrate};
 use rpstate_macros::{RpType, rpstate};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, RpType)]
 pub struct ProxyEndpoint {
@@ -46,7 +45,6 @@ migrate! {
     }
 }
 
-#[cfg(feature = "redb")]
 #[test]
 fn test_embedded_map_migration() {
     let path = std::env::temp_dir().join("rpstate_embedded_map.redb");
@@ -55,8 +53,8 @@ fn test_embedded_map_migration() {
     }
 
     {
-        let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
-        let config = v1::ProxyConfig::new(&store).unwrap();
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let config = v1::ProxyConfig::new_with(&store).unwrap();
         config.name().set("legacy-proxy".into()).unwrap();
 
         config
@@ -75,7 +73,7 @@ fn test_embedded_map_migration() {
         .build()
         .unwrap();
 
-    let config = ProxyConfig::new(&store).unwrap();
+    let config = ProxyConfig::new_with(&store).unwrap();
 
     assert_eq!(config.name().get(), "legacy-proxy");
 

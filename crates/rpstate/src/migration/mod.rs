@@ -3,9 +3,9 @@ use tracing::{info, warn};
 
 pub mod builder;
 pub mod context;
+pub mod engine;
 pub mod error;
 pub mod fields;
-pub mod meta;
 pub mod migrate_from;
 pub mod node;
 pub mod registry;
@@ -13,6 +13,7 @@ pub mod set;
 pub mod types;
 
 use crate::error::Error;
+use crate::store::meta;
 pub use context::MigrationContext;
 pub use error::MigrationError;
 
@@ -128,18 +129,11 @@ pub trait Migration: Send + Sync {
     fn run(&self, ctx: &mut MigrationContext) -> Result<()>;
 }
 
-pub trait RawStorage {
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>>;
-    fn set(&mut self, key: &str, value: &[u8]) -> Result<()>;
-    fn delete(&mut self, key: &str) -> Result<()>;
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>>;
-}
-
-pub struct Migrator {
+pub struct MigrationPlan {
     pub(crate) steps: Vec<Box<dyn Migration>>,
 }
 
-impl Migrator {
+impl MigrationPlan {
     pub fn new() -> Self {
         Self { steps: Vec::new() }
     }
@@ -178,7 +172,7 @@ impl Migrator {
     }
 }
 
-impl Default for Migrator {
+impl Default for MigrationPlan {
     fn default() -> Self {
         Self::new()
     }

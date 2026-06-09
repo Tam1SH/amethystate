@@ -1,9 +1,9 @@
-use crate::DefaultStore;
+use crate::Store;
 use crate::migration::fields::RpStateFields;
 use serde::{Deserialize, Serialize};
 
-pub trait RpStateNode: Sized {
-    fn new_node(store: &DefaultStore, path: &str) -> crate::Result<Self>;
+pub trait RpStateNode<S: Store>: Sized {
+    fn new_node(store: &S, path: &str) -> crate::Result<Self>;
 }
 
 pub trait RpState {

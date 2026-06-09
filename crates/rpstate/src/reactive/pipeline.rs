@@ -1,4 +1,4 @@
-pub use rpstate_core::pipeline::*;
+pub use rpstate_core::primitives::pipeline::*;
 
 #[cfg(test)]
 mod tests {

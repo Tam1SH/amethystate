@@ -1,6 +1,5 @@
 use rpstate::store::builder::StoreBuilder;
 use rpstate::{Store, rpstate};
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[rpstate(prefix = "network", mode = "both")]
@@ -20,17 +19,16 @@ fn unique_path(suffix: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("rpstate-{suffix}-{nanos}.redb"))
 }
 
-#[cfg(feature = "redb")]
 #[test]
 fn persistent_only_load_save_and_mutate() {
     let path = unique_path("persistent-only");
-    let store = Arc::new(StoreBuilder::new(&path).build().unwrap());
+    let store = StoreBuilder::new(&path).build().unwrap();
 
-    let state = NetworkState::new(&store).unwrap();
+    let state = NetworkState::new_with(&store).unwrap();
     state.host().set("10.0.0.1".to_string()).unwrap();
     state.port().set(3030).unwrap();
 
-    let mut data = NetworkState::load(&store).unwrap();
+    let mut data = NetworkState::load_with(&store).unwrap();
     assert_eq!(data.host, "10.0.0.1");
     assert_eq!(data.port, 3030);
 

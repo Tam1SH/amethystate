@@ -2,9 +2,9 @@ use super::error::RedbResult;
 use super::tables::{TABLE_DATA, TABLE_LOG};
 use crate::store::{StoreEvent, StoreOp, SubscriptionEntry, matches_kind};
 use bytes::Bytes;
+use parking_lot::RwLock;
 use redb::{Database, ReadableTable};
 use std::sync::Arc;
-use std::sync::RwLock;
 
 pub(super) fn process_inbox(
     db: &Database,
@@ -53,7 +53,7 @@ pub(super) fn process_inbox(
 
 pub(super) fn emit_local(subs_lock: &RwLock<Vec<SubscriptionEntry>>, event: StoreEvent) {
     let callbacks = {
-        let guard = subs_lock.read().unwrap();
+        let guard = subs_lock.read();
         guard
             .iter()
             .filter(|s| matches_kind(&s.kind, &event.path))
