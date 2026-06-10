@@ -1,15 +1,19 @@
 use crate::migration::AppliedStep;
-use crate::store::RawStorage;
 use crate::store::backend::text::document::TextDocument;
 use crate::store::backend::text::store;
 use crate::store::meta::{PrefixMeta, SchemaSnapshot};
+use crate::store::{CodecFormat, MigrationBackend};
 
-pub struct TextRawStorage<'a, D: TextDocument> {
+pub struct TextMigrationBackend<'a, D: TextDocument> {
     pub(crate) data_doc: &'a mut D,
     pub(crate) meta_doc: &'a mut D,
 }
 
-impl<D: TextDocument> RawStorage for TextRawStorage<'_, D> {
+impl<D: TextDocument> MigrationBackend for TextMigrationBackend<'_, D> {
+    fn format(&self) -> CodecFormat {
+        D::format()
+    }
+
     fn get(&self, key: &str) -> crate::Result<Option<Vec<u8>>> {
         let parts = store::split_path(key);
         if let Some(node) = self.data_doc.get(&parts) {
@@ -33,15 +37,7 @@ impl<D: TextDocument> RawStorage for TextRawStorage<'_, D> {
     }
 
     fn scan_prefix(&self, prefix: &str) -> crate::Result<Vec<(String, Vec<u8>)>> {
-        let parts = store::split_path(prefix);
-        let mut raw_nodes = Vec::new();
-        store::scan_prefix_recursive(self.data_doc, &parts, prefix, &mut raw_nodes);
-
-        let mut results = Vec::new();
-        for (k, node) in raw_nodes {
-            results.push((k, D::node_to_bytes(&node)?));
-        }
-        Ok(results)
+        store::scan_prefix_impl(self.data_doc, prefix)
     }
 
     fn get_meta(&self, prefix: &str) -> crate::Result<Option<PrefixMeta>> {

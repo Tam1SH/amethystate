@@ -1,7 +1,11 @@
+use crate::codec::CodecError;
 use thiserror::Error;
 
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[derive(Error, Debug)]
 pub enum MigrationError {
+    #[error(transparent)]
+    Codec(#[from] CodecError),
+
     #[error(
         "Migration chain gap for [{prefix}]: reached v{reached_version}, expected v{expected_version}"
     )]

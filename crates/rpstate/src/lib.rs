@@ -8,6 +8,8 @@ pub mod migration;
 pub mod reactive;
 pub mod store;
 
+pub type RpData<T> = <T as RpState>::Data;
+
 pub use inventory;
 pub use serde;
 
@@ -28,13 +30,16 @@ pub use store::{
 pub use migration::{MigrationContext, MigrationError, MigrationPlan, MigrationReport};
 
 pub use global::*;
-pub use rpstate_macros::{RpType, rpstate};
+pub use rpstate_macros::{RpType, migrate, rpstate};
 
 #[cfg(any(feature = "tauri", feature = "json"))]
 pub use serde_json;
 
 #[cfg(any(feature = "confy-compat", feature = "confy-compat-0-6"))]
 pub mod confy;
+
+#[cfg(any(feature = "test-utils", test))]
+pub mod test_utils;
 
 #[cfg(feature = "tauri")]
 pub mod tauri {

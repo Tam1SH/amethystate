@@ -1,31 +1,21 @@
 use rpstate_macros::rpstate;
-pub struct ConnectionPool {
-    pub max_connections: ::rpstate::Field<
-        u32,
-        ::rpstate::DefaultStore,
-        ::rpstate::WritableMode,
-    >,
-    pub timeout_secs: ::rpstate::Field<
-        u32,
-        ::rpstate::DefaultStore,
-        ::rpstate::WritableMode,
-    >,
+pub struct ConnectionPool<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    pub max_connections: ::rpstate::Field<u32, S, ::rpstate::WritableMode>,
+    pub timeout_secs: ::rpstate::Field<u32, S, ::rpstate::WritableMode>,
 }
 #[automatically_derived]
-impl ::core::clone::Clone for ConnectionPool {
+impl<S: ::core::clone::Clone + ::rpstate::Store> ::core::clone::Clone
+for ConnectionPool<S> {
     #[inline]
-    fn clone(&self) -> ConnectionPool {
+    fn clone(&self) -> ConnectionPool<S> {
         ConnectionPool {
             max_connections: ::core::clone::Clone::clone(&self.max_connections),
             timeout_secs: ::core::clone::Clone::clone(&self.timeout_secs),
         }
     }
 }
-impl ConnectionPool {
-    pub fn new(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        namespace: &str,
-    ) -> ::rpstate::Result<Self> {
+impl<S: ::rpstate::Store> ConnectionPool<S> {
+    pub fn new(store: &S, namespace: &str) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
             max_connections: ::rpstate::store::field_with_path(
@@ -62,25 +52,19 @@ impl ConnectionPool {
     pub fn __schema_field_timeout_secs(&self) -> ::rpstate::ReadOnly<u32> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn max_connections(
-        &self,
-    ) -> ::rpstate::Field<u32, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
+    pub fn max_connections(&self) -> ::rpstate::Field<u32, S, ::rpstate::WritableMode> {
         self.max_connections.clone()
     }
-    pub fn timeout_secs(
-        &self,
-    ) -> ::rpstate::Field<u32, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
+    pub fn timeout_secs(&self) -> ::rpstate::Field<u32, S, ::rpstate::WritableMode> {
         self.timeout_secs.clone()
     }
 }
-impl ::rpstate::RpStateNode for ConnectionPool {
-    fn new_node(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        path: &str,
-    ) -> ::rpstate::Result<Self> {
+impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for ConnectionPool<S> {
+    fn new_node(store: &S, path: &str) -> ::rpstate::Result<Self> {
         Self::new(store, path)
     }
 }
+#[serde(crate = "::rpstate::serde")]
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct ConnectionPool_Data {
@@ -95,8 +79,7 @@ pub struct ConnectionPool_Data {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl _serde::Serialize for ConnectionPool_Data {
         fn serialize<__S>(
@@ -133,8 +116,7 @@ const _: () = {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl<'de> _serde::Deserialize<'de> for ConnectionPool_Data {
         fn deserialize<__D>(
@@ -391,52 +373,38 @@ impl ::core::fmt::Debug for ConnectionPool_Data {
 }
 impl ConnectionPool_Data {
     #[doc(hidden)]
-    pub fn __rpstate_load_from(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    pub fn __rpstate_load_from<S: ::rpstate::Store>(
+        store: &S,
         prefix: &str,
     ) -> ::rpstate::Result<Self> {
         Ok(Self {
-            max_connections: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
+            max_connections: <S as ::rpstate::Store>::get::<
                 u32,
-            >(&**store, &Self::__rpstate_path(prefix, "max_connections"))?
+            >(store, &::rpstate::join_path(prefix, "max_connections"))?
                 .unwrap_or_else(|| 10),
-            timeout_secs: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
+            timeout_secs: <S as ::rpstate::Store>::get::<
                 u32,
-            >(&**store, &Self::__rpstate_path(prefix, "timeout_secs"))?
+            >(store, &::rpstate::join_path(prefix, "timeout_secs"))?
                 .unwrap_or_else(|| 30),
         })
     }
     #[doc(hidden)]
-    pub fn __rpstate_save_to(
+    pub fn __rpstate_save_to<S: ::rpstate::Store>(
         &self,
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        store: &S,
         prefix: &str,
     ) -> ::rpstate::Result<()> {
-        <::rpstate::DefaultStore as ::rpstate::Store>::set(
-            &**store,
-            &Self::__rpstate_path(prefix, "max_connections"),
+        <S as ::rpstate::Store>::set(
+            &store,
+            &::rpstate::join_path(prefix, "max_connections"),
             &self.max_connections,
         )?;
-        <::rpstate::DefaultStore as ::rpstate::Store>::set(
-            &**store,
-            &Self::__rpstate_path(prefix, "timeout_secs"),
+        <S as ::rpstate::Store>::set(
+            &store,
+            &::rpstate::join_path(prefix, "timeout_secs"),
             &self.timeout_secs,
         )?;
         Ok(())
-    }
-    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
-        if prefix.is_empty() {
-            key.to_string()
-        } else {
-            ::alloc::__export::must_use({
-                ::alloc::fmt::format(
-                    format_args!(
-                        "{0}.{1}", prefix.trim_end_matches('.'), key
-                        .trim_start_matches('.'),
-                    ),
-                )
-            })
-        }
     }
 }
 impl ::rpstate::migration::types::RpType for ConnectionPool_Data {
@@ -450,12 +418,12 @@ impl ::rpstate::migration::fields::RpStateFields for ConnectionPool_Data {
         ::rpstate::migration::fields::FieldDescriptor {
             name: "max_connections",
             type_hash: <u32 as ::rpstate::migration::types::RpType>::TYPE_HASH,
-            type_name: "stringify!(u32)",
+            type_name: "u32",
         },
         ::rpstate::migration::fields::FieldDescriptor {
             name: "timeout_secs",
             type_hash: <u32 as ::rpstate::migration::types::RpType>::TYPE_HASH,
-            type_name: "stringify!(u32)",
+            type_name: "u32",
         },
     ];
     const VERSION: u32 = 0u32;
@@ -477,32 +445,33 @@ impl ::rpstate::migration::fields::RpStateFields for ConnectionPool_Data {
         Ok(())
     }
 }
-impl ::rpstate::RpState for ConnectionPool {
+impl<S: ::rpstate::Store> ::rpstate::RpState for ConnectionPool<S> {
     type Data = ConnectionPool_Data;
 }
-pub struct DatabaseState {
-    pub pool: ::std::sync::Arc<ConnectionPool>,
+pub struct DatabaseState<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    pub pool: ::std::sync::Arc<ConnectionPool<S>>,
 }
 #[automatically_derived]
-impl ::core::clone::Clone for DatabaseState {
+impl<S: ::core::clone::Clone + ::rpstate::Store> ::core::clone::Clone
+for DatabaseState<S> {
     #[inline]
-    fn clone(&self) -> DatabaseState {
+    fn clone(&self) -> DatabaseState<S> {
         DatabaseState {
             pool: ::core::clone::Clone::clone(&self.pool),
         }
     }
 }
-impl ::rpstate::StateScope for DatabaseState {
+impl<S: ::rpstate::Store> ::rpstate::StateScope for DatabaseState<S> {
     const PREFIX: &'static str = "sys.database";
 }
-impl DatabaseState {
-    pub fn new(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
+impl<S: ::rpstate::Store> DatabaseState<S> {
+    pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
             pool: ::std::sync::Arc::new(
-                ConnectionPool::new(
+                ConnectionPool::<
+                    S,
+                >::new(
                     store,
                     &::alloc::__export::must_use({
                         ::alloc::fmt::format(
@@ -522,22 +491,26 @@ impl DatabaseState {
     pub fn __schema_field_pool(&self) -> ::rpstate::ReadOnly<ConnectionPool> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn pool(&self) -> ::std::sync::Arc<ConnectionPool> {
+    pub fn pool(&self) -> ::std::sync::Arc<ConnectionPool<S>> {
         self.pool.clone()
     }
 }
-impl ::rpstate::RpStateNode for DatabaseState {
-    fn new_node(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        _path: &str,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl DatabaseState<::rpstate::DefaultStore> {
+    pub fn new() -> ::rpstate::Result<Self> {
+        let store = ::rpstate::global_store();
+        Self::new_with(&store)
     }
 }
+impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for DatabaseState<S> {
+    fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
+    }
+}
+#[serde(crate = "::rpstate::serde")]
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct DatabaseState_Data {
-    pub pool: <ConnectionPool as ::rpstate::RpState>::Data,
+    pub pool: <ConnectionPool<::rpstate::DefaultStore> as ::rpstate::RpState>::Data,
 }
 #[doc(hidden)]
 #[allow(
@@ -547,8 +520,7 @@ pub struct DatabaseState_Data {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl _serde::Serialize for DatabaseState_Data {
         fn serialize<__S>(
@@ -580,8 +552,7 @@ const _: () = {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl<'de> _serde::Deserialize<'de> for DatabaseState_Data {
         fn deserialize<__D>(
@@ -688,7 +659,9 @@ const _: () = {
                     __A: _serde::de::SeqAccess<'de>,
                 {
                     let __field0 = match _serde::de::SeqAccess::next_element::<
-                        <ConnectionPool as ::rpstate::RpState>::Data,
+                        <ConnectionPool<
+                            ::rpstate::DefaultStore,
+                        > as ::rpstate::RpState>::Data,
                     >(&mut __seq)? {
                         _serde::__private228::Some(__value) => __value,
                         _serde::__private228::None => {
@@ -713,7 +686,9 @@ const _: () = {
                     __A: _serde::de::MapAccess<'de>,
                 {
                     let mut __field0: _serde::__private228::Option<
-                        <ConnectionPool as ::rpstate::RpState>::Data,
+                        <ConnectionPool<
+                            ::rpstate::DefaultStore,
+                        > as ::rpstate::RpState>::Data,
                     > = _serde::__private228::None;
                     while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                         __Field,
@@ -727,7 +702,9 @@ const _: () = {
                                 }
                                 __field0 = _serde::__private228::Some(
                                     _serde::de::MapAccess::next_value::<
-                                        <ConnectionPool as ::rpstate::RpState>::Data,
+                                        <ConnectionPool<
+                                            ::rpstate::DefaultStore,
+                                        > as ::rpstate::RpState>::Data,
                                     >(&mut __map)?,
                                 );
                             }
@@ -796,43 +773,7 @@ impl ::core::fmt::Debug for DatabaseState_Data {
         )
     }
 }
-impl DatabaseState_Data {
-    #[doc(hidden)]
-    pub fn __rpstate_load_from(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<Self> {
-        Ok(Self {
-            pool: <ConnectionPool as ::rpstate::RpState>::Data::__rpstate_load_from(
-                store,
-                &Self::__rpstate_path(prefix, "pool"),
-            )?,
-        })
-    }
-    #[doc(hidden)]
-    pub fn __rpstate_save_to(
-        &self,
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<()> {
-        self.pool.__rpstate_save_to(store, &Self::__rpstate_path(prefix, "pool"))?;
-        Ok(())
-    }
-    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
-        if prefix.is_empty() {
-            key.to_string()
-        } else {
-            ::alloc::__export::must_use({
-                ::alloc::fmt::format(
-                    format_args!(
-                        "{0}.{1}", prefix.trim_end_matches('.'), key
-                        .trim_start_matches('.'),
-                    ),
-                )
-            })
-        }
-    }
-}
+impl DatabaseState_Data {}
 impl ::rpstate::migration::types::RpType for DatabaseState_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "DatabaseState_Data".as_bytes(),
@@ -844,8 +785,10 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseState_Data {
         ::rpstate::migration::fields::FieldDescriptor {
             name: "pool",
             type_hash: 0xDEADBEEF
-                ^ <<ConnectionPool as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
-            type_name: "stringify!(ConnectionPool)",
+                ^ <<ConnectionPool<
+                    ::rpstate::DefaultStore,
+                > as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
+            type_name: "ConnectionPool",
         },
     ];
     const VERSION: u32 = 0u32;
@@ -873,35 +816,32 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseState_Data {
         Ok(())
     }
 }
-impl ::rpstate::RpState for DatabaseState {
+impl<S: ::rpstate::Store> ::rpstate::RpState for DatabaseState<S> {
     type Data = DatabaseState_Data;
 }
-impl ::rpstate::RpStateSlice for DatabaseState {
-    fn load_slice(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for DatabaseState<S> {
+    fn load_slice(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
     }
 }
-pub struct InspectorState {
-    pub db_pool_view: ::std::sync::Arc<ConnectionPool>,
+pub struct InspectorState<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    pub db_pool_view: ::std::sync::Arc<ConnectionPool<S>>,
 }
 #[automatically_derived]
-impl ::core::clone::Clone for InspectorState {
+impl<S: ::core::clone::Clone + ::rpstate::Store> ::core::clone::Clone
+for InspectorState<S> {
     #[inline]
-    fn clone(&self) -> InspectorState {
+    fn clone(&self) -> InspectorState<S> {
         InspectorState {
             db_pool_view: ::core::clone::Clone::clone(&self.db_pool_view),
         }
     }
 }
-impl ::rpstate::StateScope for InspectorState {
+impl<S: ::rpstate::Store> ::rpstate::StateScope for InspectorState<S> {
     const PREFIX: &'static str = "ui.inspector";
 }
-impl InspectorState {
-    pub fn new(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
+impl<S: ::rpstate::Store> InspectorState<S> {
+    pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
             db_pool_view: {
@@ -917,13 +857,15 @@ impl InspectorState {
                 let path = ::alloc::__export::must_use({
                     ::alloc::fmt::format(
                         format_args!(
-                            "{0}.{1}", < DatabaseState as ::rpstate::StateScope
+                            "{0}.{1}", < DatabaseState < S > as ::rpstate::StateScope
                             >::PREFIX, "pool",
                         ),
                     )
                 });
                 ::std::sync::Arc::new(
-                    <ConnectionPool as ::rpstate::RpStateNode>::new_node(store, &path)?,
+                    <ConnectionPool<
+                        S,
+                    > as ::rpstate::RpStateNode<S>>::new_node(store, &path)?,
                 )
             },
         };
@@ -934,18 +876,22 @@ impl InspectorState {
     pub fn __schema_field_db_pool_view(&self) -> ::rpstate::ReadOnly<ConnectionPool> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn db_pool_view(&self) -> ::std::sync::Arc<ConnectionPool> {
+    pub fn db_pool_view(&self) -> ::std::sync::Arc<ConnectionPool<S>> {
         self.db_pool_view.clone()
     }
 }
-impl ::rpstate::RpStateNode for InspectorState {
-    fn new_node(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        _path: &str,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl InspectorState<::rpstate::DefaultStore> {
+    pub fn new() -> ::rpstate::Result<Self> {
+        let store = ::rpstate::global_store();
+        Self::new_with(&store)
     }
 }
+impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for InspectorState<S> {
+    fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
+    }
+}
+#[serde(crate = "::rpstate::serde")]
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct InspectorState_Data {}
@@ -957,8 +903,7 @@ pub struct InspectorState_Data {}
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl _serde::Serialize for InspectorState_Data {
         fn serialize<__S>(
@@ -985,8 +930,7 @@ const _: () = {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl<'de> _serde::Deserialize<'de> for InspectorState_Data {
         fn deserialize<__D>(
@@ -1150,37 +1094,7 @@ impl ::core::fmt::Debug for InspectorState_Data {
         ::core::fmt::Formatter::write_str(f, "InspectorState_Data")
     }
 }
-impl InspectorState_Data {
-    #[doc(hidden)]
-    pub fn __rpstate_load_from(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<Self> {
-        Ok(Self {})
-    }
-    #[doc(hidden)]
-    pub fn __rpstate_save_to(
-        &self,
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<()> {
-        Ok(())
-    }
-    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
-        if prefix.is_empty() {
-            key.to_string()
-        } else {
-            ::alloc::__export::must_use({
-                ::alloc::fmt::format(
-                    format_args!(
-                        "{0}.{1}", prefix.trim_end_matches('.'), key
-                        .trim_start_matches('.'),
-                    ),
-                )
-            })
-        }
-    }
-}
+impl InspectorState_Data {}
 impl ::rpstate::migration::types::RpType for InspectorState_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "InspectorState_Data".as_bytes(),
@@ -1205,14 +1119,12 @@ impl ::rpstate::migration::fields::RpStateFields for InspectorState_Data {
         Ok(())
     }
 }
-impl ::rpstate::RpState for InspectorState {
+impl<S: ::rpstate::Store> ::rpstate::RpState for InspectorState<S> {
     type Data = InspectorState_Data;
 }
-impl ::rpstate::RpStateSlice for InspectorState {
-    fn load_slice(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for InspectorState<S> {
+    fn load_slice(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
     }
 }
 fn main() {}

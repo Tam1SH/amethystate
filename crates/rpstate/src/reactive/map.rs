@@ -1,5 +1,5 @@
-use crate::store::Store;
 use crate::store::sync_backend::StoreBackend;
+use crate::store::Store;
 use crate::{
     AccessMode, DefaultStore, Field, ReadOnlyMode, Result, StoreSubscription, WritableMode,
 };
@@ -44,17 +44,10 @@ where
         let mut d = f.debug_struct("ReactiveMap");
         d.field("path", &self.path);
 
-        match self.entries() {
-            Ok(entries) => {
-                d.field("entries", &entries);
-            }
-            Err(e) => {
-                d.field("entries_error", &format_args!("{:?}", e));
-
-                if let Ok(keys) = self.core.known_keys.try_lock() {
-                    d.field("known_keys", &*keys);
-                }
-            }
+        if let Ok(cache) = self.core.cache.try_lock() {
+            d.field("cache_entries", &*cache);
+        } else {
+            d.field("cache_entries", &"<locked>");
         }
 
         d.field("core", &self.core).finish()
@@ -164,31 +157,19 @@ mod tests {
     }
 
     use super::*;
-    use crate::DefaultStore;
     use crate::error::Error;
-    use crate::store::builder::StoreBuilder;
+    use crate::test_utils::unique_store;
+    use crate::DefaultStore;
     use rpstate_core::WritableMode;
     use std::collections::HashMap;
-    use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
     use std::time::Duration;
     use tracing_test::traced_test;
 
-    fn setup_store(name: &str) -> DefaultStore {
-        let suffix = rand::random::<u32>();
-        let path = std::env::temp_dir().join(format!("rpstate-map-unit-{}-{}.db", name, suffix));
-        if path.exists() {
-            let _ = std::fs::remove_file(&path);
-        }
-        StoreBuilder::new(path)
-            .debounce(50)
-            .build()
-            .expect("Failed to build DefaultStore")
-    }
-
     #[test]
     fn test_map_crud_logic() {
-        let store = setup_store("crud");
+        let store = unique_store("crud");
         let path: Arc<str> = Arc::from("test_map.data");
 
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
@@ -223,7 +204,7 @@ mod tests {
 
     #[test]
     fn test_map_intercept_and_reject() {
-        let store = setup_store("reject");
+        let store = unique_store("reject");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
             crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
@@ -252,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_map_intercept_transform() {
-        let store = setup_store("transform");
+        let store = unique_store("transform");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
             crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
@@ -284,7 +265,7 @@ mod tests {
 
     #[test]
     fn test_map_subscriptions() {
-        let store = setup_store("subs");
+        let store = unique_store("subs");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
             crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
@@ -316,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_reentrancy_guard() {
-        let store = setup_store("reentrancy");
+        let store = unique_store("reentrancy");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
             crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
@@ -343,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_map_clear() {
-        let store = setup_store("clear");
+        let store = unique_store("clear");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
             crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
@@ -377,7 +358,7 @@ mod tests {
 
     #[test]
     fn test_contains_key_and_cleanup() {
-        let store = setup_store("contains");
+        let store = unique_store("contains");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
             crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
@@ -407,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_key_specific_logic() {
-        let store = setup_store("key_spec");
+        let store = unique_store("key_spec");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
             crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
@@ -447,7 +428,7 @@ mod tests {
 
     #[test]
     fn test_entries_parsing_failures() {
-        let store = setup_store("parsing");
+        let store = unique_store("parsing");
         let path: Arc<str> = Arc::from("test.parse");
 
         {
@@ -484,7 +465,7 @@ mod tests {
 
     #[test]
     fn test_remove_edge_cases() {
-        let store = setup_store("remove_edge");
+        let store = unique_store("remove_edge");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
             crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,
@@ -507,7 +488,7 @@ mod tests {
     #[test]
     #[traced_test]
     fn test_map_recursion_warning() {
-        let store = setup_store("map_trace");
+        let store = unique_store("map_trace");
         let map: ReactiveMap<String, i32, DefaultStore, WritableMode> =
             crate::store::reactive_map_with_path::<TestScope, _, _, _, _>(
                 &store,

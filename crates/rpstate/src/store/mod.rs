@@ -8,13 +8,12 @@ pub(crate) mod sync_backend;
 pub mod util;
 pub use primitives_factory::*;
 
-use crate::migration::AppliedStep;
 use crate::migration::set::MigrationSet;
+use crate::migration::AppliedStep;
 use crate::store::meta::{PrefixMeta, SchemaSnapshot};
 use crate::{MigrationReport, Result};
-use bytes::Bytes;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::sync::Arc;
 
 pub type SubscriptionId = u64;
@@ -31,8 +30,8 @@ pub enum StoreOp {
 pub struct StoreEvent {
     pub path: Arc<str>,
     pub op: StoreOp,
-    pub old: Option<Bytes>,
-    pub new: Option<Bytes>,
+    pub old: Option<Vec<u8>>,
+    pub new: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,11 +48,12 @@ pub trait Store: Clone + Sized + Send + Sync + 'static {
         self.set(&path, value)
     }
     fn save_now(&self) -> Result<()>;
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Bytes)>>;
+    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>>;
     fn delete(&self, path: &str) -> Result<()>;
     fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId;
     fn unsubscribe(&self, id: SubscriptionId);
     fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T>;
+
     /// Flushes pending in-memory modifications under the specified prefix to disk.
     ///
     /// # Note
@@ -79,7 +79,30 @@ pub trait RpStateSlice<S: Store>: Sized {
     fn load_slice(store: &S) -> Result<Self>;
 }
 
-pub trait RawStorage {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CodecFormat {
+    #[cfg(test)]
+    Default,
+
+    #[cfg(feature = "redb")]
+    MessagePack,
+
+    #[cfg(feature = "json")]
+    Json,
+
+    #[cfg(feature = "sqlite")]
+    SonicJson,
+
+    #[cfg(feature = "toml")]
+    Toml,
+
+    #[cfg(feature = "ron")]
+    Ron,
+}
+
+pub trait MigrationBackend {
+    fn format(&self) -> CodecFormat;
+
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>>;
     fn set(&mut self, key: &str, value: &[u8]) -> Result<()>;
     fn delete(&mut self, key: &str) -> Result<()>;

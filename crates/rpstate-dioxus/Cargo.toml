@@ -31,3 +31,4 @@ rpstate-tauri = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
 rpstate-macros-arena.workspace = true
+rpstate = { workspace = true, features = ["test-utils"] }

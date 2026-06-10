@@ -1,5 +1,6 @@
 use rpstate::store::builder::StoreBuilder;
 use rpstate::{ReactiveMap, rpstate};
+use rpstate_core::test_utils::unique_path;
 
 mod v1 {
     use super::*;
@@ -21,14 +22,6 @@ pub struct AppConfig {
         "NEW_KEY": "new_default".to_string()
     })]
     pub env: ReactiveMap<String, String>,
-}
-
-fn unique_path(suffix: &str) -> std::path::PathBuf {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    std::env::temp_dir().join(format!("rpstate_map_defaults_{suffix}_{nanos}.redb"))
 }
 
 #[test]

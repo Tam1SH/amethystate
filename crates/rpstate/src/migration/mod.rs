@@ -34,8 +34,8 @@ pub struct FieldTypeChange {
 #[derive(Debug, Clone)]
 pub struct NaggingRecord {
     pub prefix: String,
-    pub old_hash: u64,
-    pub new_hash: u64,
+    pub old_hash: u32,
+    pub new_hash: u32,
     pub diff: Option<SchemaDiff>,
 }
 

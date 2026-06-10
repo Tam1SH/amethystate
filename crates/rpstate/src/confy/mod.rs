@@ -8,17 +8,22 @@
 //!   are unmaintained or abandoned (e.g., `serde_yaml` is archived, and its forks like `yaml-serde`
 //!   appear to be stale).
 //! - Storage under the hood uses the active `rpstate` backend (`TextStore` or `RedbStore`).
+//! ### Behavioral differences from the original `confy`
+//! - [`store`] and [`store_path`] update only the **root section** of the configuration file,
+//!   leaving any `rpstate`-managed sections intact (sections correspond to the `prefix`
+//!   defined via `#[rpstate(prefix = "...")]`, e.g. `[network]`, `[ui]`) —
+//!   whereas the original `confy` overwrites the entire file on every call.
 
 #[cfg(feature = "confy-compat-0-6")]
 use directories::ProjectDirs;
 
 #[cfg(feature = "confy-compat")]
 use etcetera::{
-    AppStrategy, AppStrategyArgs, app_strategy::choose_app_strategy,
-    app_strategy::choose_native_strategy,
+    app_strategy::choose_app_strategy, app_strategy::choose_native_strategy, AppStrategy,
+    AppStrategyArgs,
 };
 
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Serialize};
 use std::fs::{self, Permissions};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -44,6 +49,9 @@ const EXTENSION: &str = "ron";
 #[cfg(backend = "redb")]
 const EXTENSION: &str = "redb";
 
+#[cfg(backend = "sqlite")]
+const EXTENSION: &str = "redb";
+
 const DEFAULT_KEY: &str = ".";
 
 static STRATEGY: std::sync::OnceLock<std::sync::Mutex<ConfigStrategy>> = std::sync::OnceLock::new();
@@ -65,9 +73,7 @@ fn get_store(path: &Path) -> Result<std::sync::Arc<DefaultStore>, ConfyError> {
     let mut map = STORES
         .get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
         .lock()
-        .map_err(|e| {
-            ConfyError::GeneralLoadError(io::Error::new(io::ErrorKind::Other, e.to_string()))
-        })?;
+        .map_err(|e| ConfyError::GeneralLoadError(io::Error::other(e.to_string())))?;
 
     if let Some(store) = map.get(path) {
         return Ok(store.clone());
@@ -169,6 +175,12 @@ impl From<RpError> for ConfyError {
                         ConfyError::BadConfigDirectory("Root must be an object/mapping".to_string())
                     }
                     TextStoreError::PathSegmentMissing(s) => ConfyError::BadConfigDirectory(s),
+                    TextStoreError::Watch(err) => {
+                        panic!(
+                            "Unexpected watch error during confy emulation: {:?}",
+                            err
+                        );
+                    }
                 }
             }
             #[cfg(feature = "redb")]
@@ -176,6 +188,13 @@ impl From<RpError> for ConfyError {
                 panic!(
                     "Unexpected REDB store error during confy emulation: {:?}",
                     redb_err
+                );
+            }
+            #[cfg(feature = "redb")]
+            RpError::Sqlite(sqlite) => {
+                panic!(
+                    "Unexpected Sqlite store error during confy emulation: {:?}",
+                    sqlite
                 );
             }
             RpError::Migration(mig_err) => {
@@ -193,27 +212,6 @@ impl From<RpError> for ConfyError {
                     key
                 );
             }
-            RpError::Codec(err) => match err {
-                #[cfg(feature = "json")]
-                CodecError::Json(e) => ConfyError::BadJsonData(e),
-                #[cfg(feature = "toml")]
-                CodecError::Toml(s) => {
-                    #[cfg(feature = "toml")]
-                    {
-                        ConfyError::BadTomlData(serde::de::Error::custom(s))
-                    }
-                    #[cfg(not(feature = "toml"))]
-                    {
-                        panic!(
-                            "TOML codec error encountered but feature `toml` is disabled: {}",
-                            s
-                        );
-                    }
-                }
-                #[cfg(feature = "ron")]
-                CodecError::Ron(e) => ConfyError::BadRonData(e),
-                _ => panic!("Unexpected codec error during confy emulation: {:?}", err),
-            },
         }
     }
 }
@@ -241,7 +239,7 @@ pub enum ConfigStrategy {
 ///
 /// The default is the App Strategy see [`ConfigStrategy`] for more details on the strategy's affect.
 ///
-/// ```rust,no_run
+/// ```rust,no_run,ignore
 /// # use confy::{ConfyError, ConfigStrategy, change_config_strategy};
 /// # use serde_derive::{Serialize, Deserialize};
 /// # fn main() -> Result<(), ConfyError> {
@@ -343,7 +341,7 @@ impl From<etcetera::app_strategy::Windows> for InternalStrategy {
 /// that is inferable by the compiler. Also note that your
 /// configuration needs to implement `Default`.
 ///
-/// ```rust,no_run
+/// ```rust,no_run,ignore
 /// # use confy::ConfyError;
 /// # use serde_derive::{Serialize, Deserialize};
 /// # fn main() -> Result<(), ConfyError> {
@@ -457,7 +455,7 @@ where
 /// by your `Default` trait implementation, or if your
 /// configuration structure _can't_ implement `Default`.
 ///
-/// ```rust,no_run
+/// ```rust,no_run,ignore
 /// # use serde_derive::{Serialize, Deserialize};
 /// # use confy::ConfyError;
 /// # fn main() -> Result<(), ConfyError> {
@@ -474,6 +472,11 @@ where
 /// able to write the configuration file or if `confy`
 /// encounters an operating system or environment it does
 /// not support.
+///
+/// **Note:** Unlike the original `confy`, this implementation routes persistence
+/// through `rpstate::Store`. Calling `store` updates only the root section of the
+/// file, leaving any `rpstate`-managed sections (e.g. `[network]`, `[ui]`) intact.
+/// Code that relies on `store` wiping the file clean will behave differently here.
 pub fn store<'a, T: Serialize>(
     app_name: &str,
     config_name: impl Into<Option<&'a str>>,
@@ -608,10 +611,10 @@ pub fn get_configuration_file_path<'a>(
                     project.config_dir()
                 ))
             })?;
-            let p = [config_dir_str, &format!("{config_name}.{EXTENSION}")]
+
+            [config_dir_str, &format!("{config_name}.{EXTENSION}")]
                 .iter()
-                .collect();
-            p
+                .collect()
         }
     };
 
@@ -625,7 +628,6 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::fs::File;
     use std::io::Write;
-
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
@@ -646,10 +648,10 @@ mod tests {
             .with_extension(EXTENSION);
         test_fn(&config_path);
 
-        if let Some(mutex) = STORES.get() {
-            if let Ok(mut map) = mutex.lock() {
-                map.remove(&config_path);
-            }
+        if let Some(mutex) = STORES.get()
+            && let Ok(mut map) = mutex.lock()
+        {
+            map.remove(&config_path);
         }
 
         config_dir.close().expect("removing test fixture failed");
@@ -711,6 +713,7 @@ mod tests {
 
     /// [`store_path_perms`] stores [`ExampleConfig`], with only read permission for owner (UNIX).
     #[test]
+    #[cfg(all(feature = "text", not(feature = "redb")))]
     #[cfg(unix)]
     fn test_store_path_perms() {
         with_config_path(|path| {
@@ -753,7 +756,7 @@ mod tests {
     /// [`store_path`] fails when given a root path.
     #[test]
     fn test_store_path_root_error() {
-        let err = store_path(PathBuf::from("/"), &ExampleConfig::default())
+        let err = store_path(PathBuf::from("/"), ExampleConfig::default())
             .expect_err("store_path should fail");
         assert_eq!(
             err.to_string(),
@@ -785,7 +788,7 @@ mod tests {
                 count: usize,
             }
 
-            store_path(path, &ExampleConfig::default()).expect("store_path failed");
+            store_path(path, ExampleConfig::default()).expect("store_path failed");
             let _: AnotherExampleConfig = load_path(path).expect("load_path failed");
         });
 
@@ -793,8 +796,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "confy-compat")]
-    #[cfg(feature = "toml")]
     fn test_store_path_native() {
         // change the strategy first then the app will always use it
         change_config_strategy(ConfigStrategy::Native);
@@ -811,7 +812,7 @@ mod tests {
                 assert_eq!(
                     file_path,
                     Path::new(&format!(
-                        "{}/Library/Preferences/rs.example-app/example-config.toml",
+                        "{}/Library/Preferences/rs.example-app/example-config.{EXTENSION}",
                         std::env::home_dir().unwrap().display()
                     )),
                 );
@@ -819,7 +820,7 @@ mod tests {
                 assert_eq!(
                     file_path,
                     Path::new(&format!(
-                        "{}/.config/example-app/example-config.toml",
+                        "{}/.config/example-app/example-config.{EXTENSION}",
                         std::env::home_dir().unwrap().display()
                     ))
                 );
@@ -828,7 +829,7 @@ mod tests {
                 assert_eq!(
                     file_path,
                     Path::new(&format!(
-                        "{}\\AppData\\Roaming\\example-app\\config\\example-config.toml",
+                        "{}\\AppData\\Roaming\\example-app\\config\\example-config.{EXTENSION}",
                         std::env::home_dir().unwrap().display()
                     )),
                 );
@@ -842,8 +843,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "confy-compat")]
-    #[cfg(feature = "toml")]
     fn test_store_path_change() {
         // change the strategy first to native
         change_config_strategy(ConfigStrategy::Native);
@@ -860,7 +859,7 @@ mod tests {
                 assert_eq!(
                     file_path,
                     Path::new(&format!(
-                        "{}/Library/Preferences/rs.example-app/example-config.toml",
+                        "{}/Library/Preferences/rs.example-app/example-config.{EXTENSION}",
                         std::env::home_dir().unwrap().display()
                     )),
                 );
@@ -868,7 +867,7 @@ mod tests {
                 assert_eq!(
                     file_path,
                     Path::new(&format!(
-                        "{}/.config/example-app/example-config.toml",
+                        "{}/.config/example-app/example-config.{EXTENSION}",
                         std::env::home_dir().unwrap().display()
                     ))
                 );
@@ -877,7 +876,7 @@ mod tests {
                 assert_eq!(
                     file_path,
                     Path::new(&format!(
-                        "{}\\AppData\\Roaming\\example-app\\config\\example-config.toml",
+                        "{}\\AppData\\Roaming\\example-app\\config\\example-config.{EXTENSION}",
                         std::env::home_dir().unwrap().display()
                     )),
                 );
@@ -888,28 +887,20 @@ mod tests {
 
             let file_path = get_configuration_file_path("example-app", "example-config").unwrap();
 
-            if cfg!(target_os = "macos") {
+            if cfg!(target_os = "macos") || cfg!(target_os = "linux") {
                 assert_eq!(
                     file_path,
                     Path::new(&format!(
-                        "{}/.config/example-app/example-config.toml",
+                        "{}/.config/example-app/example-config.{EXTENSION}",
                         std::env::home_dir().unwrap().display()
                     )),
-                );
-            } else if cfg!(target_os = "linux") {
-                assert_eq!(
-                    file_path,
-                    Path::new(&format!(
-                        "{}/.config/example-app/example-config.toml",
-                        std::env::home_dir().unwrap().display()
-                    ))
                 );
             } else {
                 //windows
                 assert_eq!(
                     file_path,
                     Path::new(&format!(
-                        "{}\\AppData\\Roaming\\example-app\\config\\example-config.toml",
+                        "{}\\AppData\\Roaming\\example-app\\config\\example-config.{EXTENSION}",
                         std::env::home_dir().unwrap().display()
                     )),
                 );

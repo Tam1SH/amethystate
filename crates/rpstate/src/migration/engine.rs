@@ -4,14 +4,14 @@ use crate::migration::set::MigrationSet;
 use crate::migration::{
     AppliedStep, ComponentOutcome, ComponentResult, FieldTypeChange, NaggingRecord, SchemaDiff,
 };
-use crate::store::RawStorage;
+use crate::store::MigrationBackend;
 use crate::{MigrationContext, MigrationError, MigrationPlan, MigrationReport, Result};
 use std::collections::HashMap;
 
 pub trait StorageProvider {
     fn atomic<F, T>(&self, f: F) -> Result<T>
     where
-        F: FnOnce(&mut dyn RawStorage) -> Result<T>;
+        F: FnOnce(&mut dyn MigrationBackend) -> Result<T>;
 }
 
 pub struct MigrationEngine<'a, P: StorageProvider> {
@@ -58,12 +58,12 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
                 }
             }
         }
-        Ok(report)
+        Ok(dbg!(report))
     }
 
     fn component_needs_work(
         &self,
-        storage: &mut dyn RawStorage,
+        storage: &mut dyn MigrationBackend,
         prefixes: &[String],
         mset: &MigrationSet,
     ) -> Result<bool> {
@@ -82,7 +82,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
 
     fn execute_component_migration(
         &self,
-        storage: &mut dyn RawStorage,
+        storage: &mut dyn MigrationBackend,
         prefixes: &[String],
         mset: &MigrationSet,
     ) -> Result<(Vec<AppliedStep>, Vec<NaggingRecord>)> {
@@ -100,7 +100,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
 
     fn calculate_drift(
         &self,
-        storage: &mut dyn RawStorage,
+        storage: &mut dyn MigrationBackend,
         prefix: &str,
         current_fields: &[FieldDescriptor],
     ) -> Result<Option<SchemaDiff>> {
@@ -150,7 +150,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
 
     fn migrate_prefix(
         &self,
-        storage: &mut dyn RawStorage,
+        storage: &mut dyn MigrationBackend,
         prefix: &str,
         mset: &MigrationSet,
     ) -> Result<(Vec<AppliedStep>, Vec<NaggingRecord>)> {
@@ -162,7 +162,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
             Some(m) => m,
             None => {
                 let start_v = mset
-                    .get_migrator(prefix)
+                    .get_migration_plan(prefix)
                     .and_then(|m| m.steps.iter().map(|s| s.target_version()).min())
                     .map(|v| v.saturating_sub(1))
                     .unwrap_or(target_v);
@@ -208,13 +208,13 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
         }
 
         let mut applied_steps = Vec::new();
-        if let Some(migrator) = mset.get_migrator(prefix) {
+        if let Some(plan) = mset.get_migration_plan(prefix) {
             let mut history = storage.get_migration_log(prefix)?.unwrap_or_default();
 
             applied_steps = self.run_migrator_steps(
                 storage,
                 prefix,
-                migrator,
+                plan,
                 &mut meta,
                 target_v,
                 &mut history,
@@ -225,15 +225,6 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
                 storage.set_meta(prefix, &meta)?;
                 storage.set_migration_log(prefix, &history)?;
             }
-        }
-
-        if meta.version < target_v {
-            return Err(MigrationError::Gap {
-                prefix: prefix.to_string(),
-                reached_version: meta.version,
-                expected_version: target_v,
-            }
-            .into());
         }
 
         if meta.version == target_v && !target_fields.is_empty() {
@@ -257,7 +248,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
 
     fn run_migrator_steps(
         &self,
-        storage: &mut dyn RawStorage,
+        storage: &mut dyn MigrationBackend,
         prefix: &str,
         migrator: &MigrationPlan,
         meta: &mut PrefixMeta,
@@ -309,11 +300,15 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
 mod tests {
     use super::*;
     use crate::error::Error;
+    use crate::migration::context::{decode, encode};
     use crate::migration::fields::FieldDescriptor;
+    use crate::store::CodecFormat;
     use std::cell::RefCell;
     use std::collections::HashMap;
-    use std::sync::Arc;
+    use std::ops::Deref;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use tracing_test::traced_test;
 
     const EMPTY_FIELDS: &[FieldDescriptor] = &[];
 
@@ -327,13 +322,15 @@ mod tests {
 
     impl InMemoryStorage {
         fn get_decoded<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
-            self.data
-                .get(key)
-                .map(|b| rmp_serde::from_slice(b).unwrap())
+            self.data.get(key).map(|b| decode(self, b).unwrap())
         }
     }
 
-    impl RawStorage for InMemoryStorage {
+    impl MigrationBackend for InMemoryStorage {
+        fn format(&self) -> CodecFormat {
+            CodecFormat::Default
+        }
+
         fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
             Ok(self.data.get(key).cloned())
         }
@@ -380,7 +377,7 @@ mod tests {
     impl StorageProvider for RefCell<InMemoryStorage> {
         fn atomic<F, T>(&self, f: F) -> Result<T>
         where
-            F: FnOnce(&mut dyn RawStorage) -> Result<T>,
+            F: FnOnce(&mut dyn MigrationBackend) -> Result<T>,
         {
             let backup = self.borrow().clone();
 
@@ -495,6 +492,11 @@ mod tests {
             ComponentOutcome::Skipped
         ));
 
+        assert!(
+            report.components[0].nagging.is_empty(),
+            "Nagging must remain empty for a hashless target"
+        );
+
         let meta = storage.borrow().get_meta("net").unwrap().unwrap();
         assert_eq!(meta.version, 1);
         assert_eq!(meta.hash, 100);
@@ -583,10 +585,9 @@ mod tests {
                 },
             )
             .unwrap();
-        storage
-            .borrow_mut()
-            .data
-            .insert("app.v".into(), rmp_serde::to_vec(&1).unwrap());
+        let val = encode(storage.borrow().deref(), &1).unwrap();
+
+        storage.borrow_mut().data.insert("app.v".into(), val);
 
         let mset = MigrationSet::default().add(
             "app",
@@ -696,10 +697,9 @@ mod tests {
                 },
             )
             .unwrap();
-        storage.borrow_mut().data.insert(
-            "app.log".into(),
-            rmp_serde::to_vec(&"1".to_string()).unwrap(),
-        );
+
+        let val = encode(storage.borrow().deref(), &"1").unwrap();
+        storage.borrow_mut().data.insert("app.log".into(), val);
 
         let mset = MigrationSet::default().add(
             "app",
@@ -966,7 +966,12 @@ mod tests {
         );
 
         let engine = MigrationEngine::new(&storage);
-        engine.run(mset).unwrap();
+        let report = engine.run(mset).unwrap();
+
+        assert!(
+            report.components[0].nagging.is_empty(),
+            "Nagging must remain empty during active upgrades"
+        );
 
         let snap = storage
             .borrow()
@@ -977,5 +982,68 @@ mod tests {
         assert_eq!(snap.fields.len(), 1);
         assert_eq!(snap.fields[0].name, "new_f");
         assert_eq!(snap.fields[0].type_name, "u16");
+    }
+
+    #[traced_test]
+    #[test]
+    fn test_drift_automatic_warning_log() {
+        let storage = RefCell::new(InMemoryStorage::default());
+        let prefix = "app_settings";
+
+        {
+            let fields_v1: &'static [FieldDescriptor] = &[
+                FieldDescriptor {
+                    name: "port",
+                    type_hash: 10,
+                    type_name: "u16",
+                },
+                FieldDescriptor {
+                    name: "host",
+                    type_hash: 20,
+                    type_name: "String",
+                },
+            ];
+            let hash_v1 = 111;
+
+            let mset = MigrationSet::default().add(
+                prefix,
+                MigrationPlan::new().step(1, "v1", |_| Ok(())),
+                hash_v1,
+                fields_v1,
+                &[],
+            );
+
+            let engine = MigrationEngine::new(&storage);
+            let _ = engine.run(mset).unwrap();
+        }
+
+        {
+            let fields_v2: &'static [FieldDescriptor] = &[
+                FieldDescriptor {
+                    name: "port",
+                    type_hash: 30,
+                    type_name: "u32",
+                },
+                FieldDescriptor {
+                    name: "timeout",
+                    type_hash: 40,
+                    type_name: "Duration",
+                },
+            ];
+            let hash_v2 = 222;
+
+            let mset = MigrationSet::default().add(
+                prefix,
+                MigrationPlan::new().step(1, "v1", |_| Ok(())),
+                hash_v2,
+                fields_v2,
+                &[],
+            );
+
+            let engine = MigrationEngine::new(&storage);
+            let report = engine.run(mset).unwrap();
+
+            assert!(report.has_drift(), "Report should detect drift");
+        }
     }
 }

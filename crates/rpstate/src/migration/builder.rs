@@ -15,7 +15,7 @@ pub(crate) struct PrefixPlan {
     migrator: MigrationPlan,
     dependencies: BTreeSet<String>,
     pub(crate) fields: &'static [FieldDescriptor],
-    pub(crate) schema_hash: u64,
+    pub(crate) schema_hash: u32,
 }
 
 pub struct PrefixMigrationBuilder<'a> {

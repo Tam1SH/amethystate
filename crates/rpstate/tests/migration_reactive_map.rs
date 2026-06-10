@@ -1,6 +1,7 @@
 use rpstate::store::builder::StoreBuilder;
-use rpstate::{ReactiveMap, Store, migrate};
-use rpstate_macros::{RpType, rpstate};
+use rpstate::{migrate, ReactiveMap, RpData, Store};
+use rpstate_core::test_utils::unique_path;
+use rpstate_macros::{rpstate, RpType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, RpType)]
@@ -26,31 +27,41 @@ pub struct ProxyConfig {
     pub endpoints: ReactiveMap<String, ProxyEndpoint>,
 }
 
-migrate! {
-    v1::ProxyConfig_Data => ProxyConfig_Data,
-    |old, ctx| {
-        for key in old.routes.keys() {
-            ctx.delete(&format!("routes.{}", key))?;
-        }
+#[migrate]
+fn migrate_proxy_config_v1_to_v2(
+    old: RpData<v1::ProxyConfig>,
+    ctx: &mut rpstate::migration::MigrationContext,
+) -> rpstate::Result<RpData<ProxyConfig>> {
 
-        let endpoints = old.routes.into_iter()
-            .filter(|(k, _)| k != "obsolete")
-            .map(|(k, v)| (k, ProxyEndpoint { url: v, timeout_ms: 5000 }))
-            .collect();
-
-        Ok(Self {
-            name: old.name,
-            endpoints,
-        })
+    for key in old.routes.keys() {
+        ctx.delete(&format!("routes.{}", key))?;
     }
+
+    let endpoints = old
+        .routes
+        .into_iter()
+        .filter(|(k, _)| k != "obsolete")
+        .map(|(k, v)| {
+            (
+                k,
+                ProxyEndpoint {
+                    url: v,
+                    timeout_ms: 5000,
+                },
+            )
+        })
+        .collect();
+
+    Ok(RpData::<ProxyConfig> {
+        name: old.name,
+        endpoints,
+    })
 }
 
 #[test]
 fn test_embedded_map_migration() {
-    let path = std::env::temp_dir().join("rpstate_embedded_map.redb");
-    if path.exists() {
-        let _ = std::fs::remove_file(&path);
-    }
+    let path = unique_path("rpstate_embedded_map.redb");
+
 
     {
         let store = StoreBuilder::new(&path).build().unwrap();
@@ -78,10 +89,12 @@ fn test_embedded_map_migration() {
     assert_eq!(config.name().get(), "legacy-proxy");
 
     let entries = config.endpoints().entries().unwrap();
+
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].0, "api");
     assert_eq!(entries[0].1.url, "http://api.v1");
 
     let old_keys = store.scan_prefix("network.routes.").unwrap();
     assert!(old_keys.is_empty());
+
 }

@@ -190,3 +190,12 @@ impl StoreFieldEntry {
         None
     }
 }
+
+pub fn get_type_ident_str(ty: &syn::Type) -> String {
+    if let syn::Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+    {
+        return segment.ident.to_string();
+    }
+    "any".to_string()
+}

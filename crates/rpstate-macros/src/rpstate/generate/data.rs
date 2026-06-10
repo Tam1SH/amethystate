@@ -403,7 +403,7 @@ pub(crate) fn data_impl(
         }
 
         impl #crate_name::migration::types::RpType for #data_struct_name {
-            const TYPE_HASH: u64 = #crate_name::migration::types::fnv1a(stringify!(#data_struct_name).as_bytes());
+            const TYPE_HASH: u32 = #crate_name::migration::types::fnv1a(stringify!(#data_struct_name).as_bytes());
             const TYPE_NAME: &'static str = stringify!(#data_struct_name);
         }
 
@@ -412,7 +412,7 @@ pub(crate) fn data_impl(
                 #(#field_descriptors),*
             ];
             const VERSION: u32 = #version_val;
-            const SCHEMA_HASH: u64 = #crate_name::migration::types::schema_hash(Self::FIELDS);
+            const SCHEMA_HASH: u32 = #crate_name::migration::types::schema_hash(Self::FIELDS);
             const PARENT_PREFIX: &'static str = #prefix_expr;
             const MIGRATION_DEPS: &'static [&'static str] = &[ #(#deps),* ];
 

@@ -1,8 +1,8 @@
 use rpstate::migration::ComponentOutcome;
 use rpstate::store::builder::StoreBuilder;
-use rpstate::{MigrationError, Store, migrate};
+use rpstate::{migrate, MigrationError, RpData, Store};
+use rpstate_core::test_utils::unique_path;
 use rpstate_macros::rpstate;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tracing_test::traced_test;
 
 mod identity_v1 {
@@ -200,52 +200,43 @@ pub struct BrokenChild {
     pub fail: bool,
 }
 
-migrate! {
-    identity_v1::Identity_Data => Identity_Data,
-    rename: [login => username, tier => plan],
-    |old| {
-        Ok(Self {
-            username: old.login,
-            plan: match old.tier.as_str() {
-                "pro" => "professional".to_string(),
-                other => other.to_string(),
-            },
-            created_at_ms: 1_700_000_000_000,
-        })
-    }
+#[migrate]
+#[rename(login => username, tier => plan)]
+fn migrate_identity_v1_to_v2(
+    old: RpData<identity_v1::Identity>,
+) -> rpstate::Result<RpData<Identity>> {
+    Ok(RpData::<Identity> {
+        username: old.login,
+        plan: match old.tier.as_str() {
+            "pro" => "professional".to_string(),
+            other => other.to_string(),
+        },
+        created_at_ms: 1_700_000_000_000,
+    })
 }
 
-migrate! {
-    workspace_v1::Workspace_Data => workspace_v2::Workspace_Data,
-    rename: [title => name, theme => appearance_theme],
-    |old| {
-        Ok(Self {
-            name: old.title,
-            appearance_theme: old.theme,
-        })
-    }
+#[migrate]
+#[rename(title => name, theme => appearance_theme)]
+fn migrate_workspace_v1_to_v2(
+    old: RpData<workspace_v1::Workspace>,
+) -> rpstate::Result<RpData<workspace_v2::Workspace>> {
+    Ok(RpData::<workspace_v2::Workspace> {
+        name: old.title,
+        appearance_theme: old.theme,
+    })
 }
 
-migrate! {
-    telemetry_v1::Telemetry_Data => Telemetry_Data,
-    rename:[sample_rate => sample_rate_per_mille],
-    |old| {
-        Ok(Self {
-            enabled: old.enabled,
-            sample_rate_per_mille: old.sample_rate.saturating_mul(10),
-        })
-    }
+#[migrate]
+#[rename(sample_rate => sample_rate_per_mille)]
+fn migrate_telemetry_v1_to_v2(
+    old: RpData<telemetry_v1::Telemetry>,
+) -> rpstate::Result<RpData<Telemetry>> {
+    Ok(RpData::<Telemetry> {
+        enabled: old.enabled,
+        sample_rate_per_mille: old.sample_rate.saturating_mul(10),
+    })
 }
 
-fn unique_path(suffix: &str) -> std::path::PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time is after epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("rpstate-{suffix}-{nanos}.redb"))
-}
-
-#[cfg(feature = "redb")]
 #[traced_test]
 #[test]
 fn complex_hybrid_migrations_handle_dependency_tree_and_rollback() {

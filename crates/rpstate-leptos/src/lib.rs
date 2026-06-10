@@ -4,7 +4,7 @@ use leptos::prelude::*;
 pub use rpstate::*;
 
 use leptos::callback::Callback;
-use rpstate_arena::{DefaultArena, ReactiveBackend, RpStateFrameworkNested};
+use rpstate_arena::{DefaultArena, ReactiveBackend};
 
 pub struct LeptosBackend;
 

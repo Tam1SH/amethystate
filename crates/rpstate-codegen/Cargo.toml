@@ -23,3 +23,4 @@ inventory = { workspace = true }
 
 [dev-dependencies]
 rpstate = { workspace = true, features = ["tauri"] }
+insta.workspace = true

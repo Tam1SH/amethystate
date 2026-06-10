@@ -3,40 +3,31 @@ use super::error::TextStoreError;
 use crate::codec::CodecError;
 use crate::migration::engine::{MigrationEngine, StorageProvider};
 use crate::migration::set::MigrationSet;
-use crate::store::backend::text::events;
-use crate::store::backend::text::raw_storage::TextRawStorage;
+use crate::store::backend::text::migration::TextMigrationBackend;
+use crate::store::backend::utils;
 use crate::store::config::StoreConfig;
 use crate::store::util::debouncer::Debouncer;
-use crate::store::util::ticker::Ticker;
 use crate::store::{
-    RawStorage, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionEntry,
-    SubscriptionId, SubscriptionKind, matches_kind,
+    MigrationBackend, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp,
+    SubscriptionEntry, SubscriptionId, SubscriptionKind,
 };
 use crate::{MigrationReport, Result};
-use bytes::Bytes;
-use parking_lot::{Mutex, RwLock};
-use serde::Serialize;
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
-use std::collections::HashMap;
+use serde::Serialize;
 use std::fmt::Debug;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::SystemTime;
 use tempfile::NamedTempFile;
 use tracing::{info, warn};
-
-/// Tracks what happened to a key since the last persist.
-/// `Some(())` = Set, `None` = Delete.
-type DirtyKeys = Arc<Mutex<HashMap<String, Option<()>>>>;
 
 pub struct StoreFile<D> {
     pub path: PathBuf,
     pub backup_path: PathBuf,
     pub doc: Arc<RwLock<D>>,
-    pub last_write_mtime: Arc<Mutex<Option<SystemTime>>>,
-    pub dirty_keys: DirtyKeys,
 }
 
 impl<D> Clone for StoreFile<D> {
@@ -45,8 +36,6 @@ impl<D> Clone for StoreFile<D> {
             path: self.path.clone(),
             backup_path: self.backup_path.clone(),
             doc: self.doc.clone(),
-            last_write_mtime: self.last_write_mtime.clone(),
-            dirty_keys: self.dirty_keys.clone(),
         }
     }
 }
@@ -58,13 +47,7 @@ impl<D: TextDocument> StoreFile<D> {
             path,
             backup_path,
             doc: Arc::new(RwLock::new(initial_doc)),
-            last_write_mtime: Arc::new(Mutex::new(None)),
-            dirty_keys: Arc::new(Mutex::new(HashMap::new())),
         }
-    }
-
-    pub fn mark_dirty(&self, path: String, op: Option<()>) {
-        self.dirty_keys.lock().insert(path, op);
     }
 
     pub fn create_backup(&self) -> Result<()> {
@@ -83,90 +66,20 @@ impl<D: TextDocument> StoreFile<D> {
         }
     }
 
-    /// Merge-persist: reads the current on-disk state, applies only the dirty
-    /// keys from the in-memory doc on top, then writes the result atomically.
-    /// This ensures concurrent writers (e.g. confy) are not clobbered.
     pub fn persist(&self) -> Result<()> {
-        let dirty = {
-            let mut guard = self.dirty_keys.lock();
-            if guard.is_empty() {
-                return Ok(());
-            }
-            std::mem::take(&mut *guard)
-        };
-
-        // Read what is currently on disk (another writer may have changed it).
-        let mut on_disk = if self.path.exists() {
-            let content = std::fs::read_to_string(&self.path).map_err(TextStoreError::from)?;
-            D::parse(&content)?
-        } else {
-            D::empty()
-        };
-
-        // Apply only our dirty keys on top of the on-disk document.
-        {
-            let doc_guard = self.doc.read();
-            for (key, op) in &dirty {
-                let parts = split_path(key);
-                match op {
-                    Some(()) => {
-                        if let Some(node) = doc_guard.get(&parts) {
-                            on_disk.set(&parts, node.clone())?;
-                        }
-                    }
-                    None => {
-                        on_disk.delete(&parts)?;
-                    }
-                }
-            }
-        }
-
-        // Bring the in-memory doc up to date with the merged result so that the
-        // next persist (or a watcher reload) sees a consistent picture.
-        *self.doc.write() = on_disk.clone();
-
-        let content = on_disk.serialize()?;
-        persist_atomic(&self.path, &content).map_err(TextStoreError::from)?;
-
-        if let Ok(meta) = std::fs::metadata(&self.path)
-            && let Ok(mtime) = meta.modified()
-        {
-            *self.last_write_mtime.lock() = Some(mtime);
-        }
-        Ok(())
-    }
-
-    /// Full overwrite — used for the meta file which is exclusively owned by
-    /// internal migrations and never shared with external writers.
-    pub fn persist_full(&self) -> Result<()> {
         let content = self.doc.read().serialize()?;
         persist_atomic(&self.path, &content).map_err(TextStoreError::from)?;
-
-        if let Ok(meta) = std::fs::metadata(&self.path)
-            && let Ok(mtime) = meta.modified()
-        {
-            *self.last_write_mtime.lock() = Some(mtime);
-        }
         Ok(())
     }
 
     pub fn restore_from_backup(&self, fallback_to_initial: &D) {
         *self.doc.write() = fallback_to_initial.clone();
-        self.dirty_keys.lock().clear();
 
         if self.backup_path.exists() {
             let _ = std::fs::copy(&self.backup_path, &self.path);
             let _ = std::fs::remove_file(&self.backup_path);
         } else if self.path.exists() {
             let _ = std::fs::remove_file(&self.path);
-        }
-
-        if let Ok(meta) = std::fs::metadata(&self.path)
-            && let Ok(mtime) = meta.modified()
-        {
-            *self.last_write_mtime.lock() = Some(mtime);
-        } else {
-            *self.last_write_mtime.lock() = None;
         }
     }
 
@@ -200,8 +113,7 @@ impl<D: TextDocument> StoreFiles<D> {
 
     pub fn persist(&self) -> Result<()> {
         self.data.persist()?;
-        // Meta is exclusively owned by internal migrations — full overwrite is correct.
-        self.meta.persist_full()?;
+        self.meta.persist()?;
         Ok(())
     }
 
@@ -216,25 +128,45 @@ impl<D: TextDocument> StoreFiles<D> {
     }
 }
 
-#[derive(Clone)]
-pub struct TextStore<D: TextDocument> {
+struct TextStoreInner<D: TextDocument> {
     pub(crate) files: StoreFiles<D>,
     pub(crate) subscriptions: Arc<RwLock<Vec<SubscriptionEntry>>>,
     pub(crate) next_id: Arc<AtomicU64>,
     pub(crate) debouncer: Arc<Debouncer>,
-    pub(crate) watcher: Arc<Ticker>,
+    pub(crate) has_pending: Arc<AtomicBool>,
+    _watcher: RecommendedWatcher,
+}
+
+impl<D: TextDocument> TextStoreInner<D> {
+    fn check_debouncer(&self) -> Result<()> {
+        if self.debouncer.is_poisoned() {
+            panic!("debouncer thread is dead — store integrity cannot be guaranteed");
+        }
+        Ok(())
+    }
+}
+
+impl<D: TextDocument> Drop for TextStoreInner<D> {
+    fn drop(&mut self) {
+        let _ = self.save_now();
+    }
+}
+
+#[derive(Clone)]
+pub struct TextStore<D: TextDocument> {
+    inner: Arc<TextStoreInner<D>>,
 }
 
 impl<D: TextDocument> Debug for TextStore<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TextStore")
-            .field("data_path", &self.files.data.path)
-            .field("meta_path", &self.files.meta.path)
+            .field("data_path", &self.inner.files.data.path)
+            .field("meta_path", &self.inner.files.meta.path)
             .finish()
     }
 }
 
-impl<D: TextDocument + 'static> TextStore<D> {
+impl<D: TextDocument + Send + 'static> TextStore<D> {
     pub fn open(
         config: StoreConfig,
         migration_set: MigrationSet,
@@ -255,15 +187,17 @@ impl<D: TextDocument + 'static> TextStore<D> {
         *files.data.doc.write() = initial_data.clone();
         *files.meta.doc.write() = initial_meta.clone();
 
-        let store = Self::new(config, files);
+        let store = Self::new(config, files)?;
 
         match store.run_migrations(migration_set) {
             Ok(report) => {
-                store.files.clean_backups();
+                store.inner.files.persist()?;
+                store.inner.files.clean_backups();
                 Ok((store, report))
             }
             Err(e) => {
                 store
+                    .inner
                     .files
                     .restore_from_backups(&initial_data, &initial_meta);
                 Err(e)
@@ -271,90 +205,107 @@ impl<D: TextDocument + 'static> TextStore<D> {
         }
     }
 
-    fn new(config: StoreConfig, files: StoreFiles<D>) -> Self {
+    fn new(config: StoreConfig, files: StoreFiles<D>) -> Result<Self> {
         info!(
             path = %config.path.display(),
             "initializing TextStore"
         );
 
         let subscriptions = Arc::new(RwLock::new(Vec::<SubscriptionEntry>::new()));
+        let has_pending = Arc::new(AtomicBool::new(false));
 
         let files_debounce = files.clone();
+        let has_pending_debounce = has_pending.clone();
         let debouncer = Debouncer::new(config.save_debounce, move || {
             if let Err(e) = files_debounce.persist() {
                 warn!("store persist failed: {e:#}");
+            } else {
+                has_pending_debounce.store(false, Ordering::Release);
             }
         });
 
         let files_watch = files.clone();
         let watch_subs = subscriptions.clone();
+        let has_pending_watch = has_pending.clone();
+        let data_path = files.data.path.clone();
+        let meta_path = files.meta.path.clone();
 
-        let watcher = Ticker::new(config.watch_interval, move || {
-            if let Some(on_disk) = check_reload_file(&files_watch.data) {
-                let events = {
-                    let mut guard = files_watch.data.doc.write();
-                    let old = guard.clone();
-                    *guard = on_disk;
-                    info!("external store change detected");
-                    diff_documents::<D>(&old, &*guard)
-                };
-                for event in events {
-                    events::emit_event(&watch_subs, event);
-                }
+        let watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
+            let Ok(event) = res else { return };
+
+            let is_modify = matches!(
+                event.kind,
+                EventKind::Modify(_) | EventKind::Create(_)
+            );
+            if !is_modify {
+                return;
             }
 
-            if let Some(on_disk) = check_reload_file(&files_watch.meta) {
-                let matches = {
+            if has_pending_watch.load(Ordering::Acquire) {
+                return;
+            }
+
+            for path in &event.paths {
+                if *path == data_path {
+
+                    let Ok(content) = std::fs::read_to_string(path) else { continue };
+
+                    let Ok(on_disk) = D::parse(&content) else { continue };
+
+                    let events = {
+                        let mut guard = files_watch.data.doc.write();
+
+                        let old_serialized = guard.serialize().unwrap_or_default();
+                        let new_serialized = on_disk.serialize().unwrap_or_default();
+                        if old_serialized == new_serialized {
+                            Vec::new()
+                        } else {
+                            let old = guard.clone();
+                            *guard = on_disk;
+                            info!("external store change detected");
+                            diff_documents::<D>(&old, &*guard)
+                        }
+                    };
+                    for event in events {
+                        utils::emit_events(&watch_subs, event);
+                    }
+                } else if *path == meta_path {
+                    let Ok(content) = std::fs::read_to_string(path) else { continue };
+                    let Ok(on_disk) = D::parse(&content) else { continue };
                     let guard = files_watch.meta.doc.read();
                     let current_str = guard.serialize().unwrap_or_default();
                     let on_disk_str = on_disk.serialize().unwrap_or_default();
-                    current_str == on_disk_str
-                };
-                if !matches {
-                    warn!(
-                        "⚠️ External modification of metadata file detected! Metadata must only be mutated via internal migrations."
-                    );
+                    if current_str != on_disk_str {
+                        warn!(
+                            "⚠️  External modification of metadata file detected! \
+                             Metadata must only be mutated via internal migrations."
+                        );
+                    }
                 }
             }
-        });
+        })
+        .map_err(|e| TextStoreError::Watch(e.to_string()))?;
 
-        Self {
+        let watch_dir = config.path.parent().unwrap_or(Path::new("."));
+        let mut watcher = watcher;
+        watcher
+            .watch(watch_dir, RecursiveMode::NonRecursive)
+            .map_err(|e| TextStoreError::Watch(e.to_string()))?;
+
+        let inner = Arc::new(TextStoreInner {
             files,
             subscriptions,
             next_id: Arc::new(AtomicU64::new(1)),
             debouncer: Arc::new(debouncer),
-            watcher: Arc::new(watcher),
-        }
-    }
+            has_pending,
+            _watcher: watcher,
+        });
 
-    pub(crate) fn emit(&self, event: StoreEvent) {
-        let callbacks = self
-            .subscriptions
-            .read()
-            .iter()
-            .filter(|s| matches_kind(&s.kind, &event.path))
-            .map(|s| s.callback.clone())
-            .collect::<Vec<_>>();
-        for cb in callbacks {
-            cb(&event);
-        }
-    }
-
-    fn check_debouncer(&self) -> Result<()> {
-        if self.debouncer.is_poisoned() {
-            panic!("debouncer thread is dead — store integrity cannot be guaranteed");
-        }
-        Ok(())
-    }
-
-    fn check_watcher(&self) {
-        if self.watcher.is_poisoned() {
-            panic!("watcher thread is dead — external change detection unavailable");
-        }
+        Ok(Self { inner })
     }
 }
 
-impl<D: TextDocument + 'static> SchemaAwareStore for TextStore<D> {
+impl<D: TextDocument + Send + 'static> SchemaAwareStore for TextStore<D> {
     fn run_migrations(&self, mset: MigrationSet) -> Result<MigrationReport> {
         struct TextProvider<D: TextDocument> {
             data_doc: Arc<RwLock<D>>,
@@ -364,32 +315,41 @@ impl<D: TextDocument + 'static> SchemaAwareStore for TextStore<D> {
         impl<D: TextDocument> StorageProvider for TextProvider<D> {
             fn atomic<F, T>(&self, f: F) -> Result<T>
             where
-                F: FnOnce(&mut dyn RawStorage) -> Result<T>,
+                F: FnOnce(&mut dyn MigrationBackend) -> Result<T>,
             {
                 let mut data_guard = self.data_doc.write();
                 let mut meta_guard = self.meta_doc.write();
 
-                let mut storage = TextRawStorage {
+                let backup_data = data_guard.clone();
+                let backup_meta = meta_guard.clone();
+
+                let mut storage = TextMigrationBackend {
                     data_doc: &mut *data_guard,
                     meta_doc: &mut *meta_guard,
                 };
 
-                f(&mut storage)
+                match f(&mut storage) {
+                    Ok(val) => Ok(val),
+                    Err(e) => {
+                        *data_guard = backup_data;
+                        *meta_guard = backup_meta;
+                        Err(e)
+                    }
+                }
             }
         }
 
         let provider = TextProvider {
-            data_doc: self.files.data.doc.clone(),
-            meta_doc: self.files.meta.doc.clone(),
+            data_doc: self.inner.files.data.doc.clone(),
+            meta_doc: self.inner.files.meta.doc.clone(),
         };
         let engine = MigrationEngine::new(&provider);
         engine.run(mset)
     }
 }
 
-impl<D: TextDocument> Store for TextStore<D> {
+impl<D: TextDocument> TextStoreInner<D> {
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
-        self.check_watcher();
         let guard = self.files.data.doc.read();
         let parts = split_path(path);
         if let Some(node) = guard.get(&parts) {
@@ -401,7 +361,6 @@ impl<D: TextDocument> Store for TextStore<D> {
 
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
         self.check_debouncer()?;
-        self.check_watcher();
 
         let path_str = normalize_path(path)?;
         let parts = split_path(&path_str);
@@ -412,22 +371,24 @@ impl<D: TextDocument> Store for TextStore<D> {
             let old = guard
                 .get(&parts)
                 .map(|n| D::node_to_bytes(n))
-                .transpose()?
-                .map(Bytes::from);
+                .transpose()?;
             guard.set(&parts, node)?;
             let new_node = guard.get(&parts).unwrap();
-            let new_bytes = Bytes::from(D::node_to_bytes(new_node)?);
+            let new_bytes = D::node_to_bytes(new_node)?;
             (old, new_bytes)
         };
 
-        self.files.data.mark_dirty(path_str.clone(), Some(()));
+        self.has_pending.store(true, Ordering::Release);
 
-        self.emit(StoreEvent {
-            path: Arc::from(path_str),
-            op: StoreOp::Set,
-            old: old_bytes,
-            new: Some(new_bytes),
-        });
+        utils::emit_events(
+            &self.subscriptions,
+            StoreEvent {
+                path: Arc::from(path_str),
+                op: StoreOp::Set,
+                old: old_bytes,
+                new: Some(new_bytes),
+            },
+        );
 
         self.debouncer.schedule();
         Ok(())
@@ -435,26 +396,17 @@ impl<D: TextDocument> Store for TextStore<D> {
 
     fn save_now(&self) -> Result<()> {
         self.files.persist()?;
+        self.has_pending.store(false, Ordering::Release);
         Ok(())
     }
 
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Bytes)>> {
+    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
         let guard = self.files.data.doc.read();
-        let parts = split_path(prefix);
-        let mut raw_nodes = Vec::new();
-        scan_prefix_recursive(&*guard, &parts, prefix, &mut raw_nodes);
-
-        let mut results = Vec::new();
-        for (k, node) in raw_nodes {
-            let bytes = D::node_to_bytes(&node)?;
-            results.push((k, Bytes::from(bytes)));
-        }
-        Ok(results)
+        scan_prefix_impl(&*guard, prefix)
     }
 
     fn delete(&self, path: &str) -> Result<()> {
         self.check_debouncer()?;
-        self.check_watcher();
 
         let path_str = normalize_path(path)?;
         let parts = split_path(&path_str);
@@ -464,20 +416,22 @@ impl<D: TextDocument> Store for TextStore<D> {
             let old = guard
                 .get(&parts)
                 .map(|n| D::node_to_bytes(n))
-                .transpose()?
-                .map(Bytes::from);
+                .transpose()?;
             guard.delete(&parts)?;
             old
         };
 
-        self.files.data.mark_dirty(path_str.clone(), None);
+        self.has_pending.store(true, Ordering::Release);
 
-        self.emit(StoreEvent {
-            path: Arc::from(path_str),
-            op: StoreOp::Delete,
-            old: old_bytes,
-            new: None,
-        });
+        utils::emit_events(
+            &self.subscriptions,
+            StoreEvent {
+                path: Arc::from(path_str),
+                op: StoreOp::Delete,
+                old: old_bytes,
+                new: None,
+            },
+        );
 
         self.debouncer.schedule();
         Ok(())
@@ -509,15 +463,6 @@ impl<D: TextDocument> Store for TextStore<D> {
         }
     }
 
-    fn flush_prefix(&self, _prefix: &str) -> Result<()> {
-        // Unlike RedbStore, which can selectively commit pending updates for specific
-        // prefixes to distinct tables, TextStore manages monolithic files (JSON/TOML).
-        // Writing only a single prefix to disk is physically impossible—the entire
-        // document must be serialized and written as a whole. Therefore, flushing
-        // any prefix is semantically equivalent to a full synchronous save.
-        self.save_now()
-    }
-
     fn is_initialized(&self, namespace: &str) -> Result<bool> {
         let guard = self.files.meta.doc.read();
         let parts = vec!["__init", namespace];
@@ -532,8 +477,54 @@ impl<D: TextDocument> Store for TextStore<D> {
             guard.set(&parts, node)?;
         }
 
-        self.files.meta.persist_full()?;
+        self.files.meta.persist()?;
         Ok(())
+    }
+}
+
+impl<D: TextDocument + Send + 'static> Store for TextStore<D> {
+    fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
+        self.inner.get(path)
+    }
+
+    fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
+        self.inner.set(path, value)
+    }
+
+    fn save_now(&self) -> Result<()> {
+        self.inner.save_now()
+    }
+
+    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
+        self.inner.scan_prefix(prefix)
+    }
+
+    fn delete(&self, path: &str) -> Result<()> {
+        self.inner.delete(path)
+    }
+
+    fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId {
+        self.inner.subscribe(kind, callback)
+    }
+
+    fn unsubscribe(&self, id: SubscriptionId) {
+        self.inner.unsubscribe(id)
+    }
+
+    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
+        self.inner.decode(bytes)
+    }
+
+    fn flush_prefix(&self, _prefix: &str) -> Result<()> {
+        self.save_now()
+    }
+
+    fn is_initialized(&self, namespace: &str) -> Result<bool> {
+        self.inner.is_initialized(namespace)
+    }
+
+    fn mark_initialized(&self, namespace: &str) -> Result<()> {
+        self.inner.mark_initialized(namespace)
     }
 }
 
@@ -565,7 +556,7 @@ pub fn split_path(path: &str) -> Vec<&str> {
     if path.is_empty() {
         return vec![];
     }
-    path.split('.').collect()
+    path.split('.').filter(|s| !s.is_empty()).collect()
 }
 
 fn persist_atomic(path: &Path, content: &str) -> std::io::Result<()> {
@@ -574,31 +565,60 @@ fn persist_atomic(path: &Path, content: &str) -> std::io::Result<()> {
     }
 
     let dir = path.parent().unwrap_or(Path::new("."));
-    let mut tmp = NamedTempFile::new_in(dir)?;
-    tmp.write_all(content.as_bytes())?;
-    tmp.persist(path).map_err(|e| e.error)?;
 
-    Ok(())
-}
-
-fn check_reload_file<D: TextDocument>(file: &StoreFile<D>) -> Option<D> {
-    if let Ok(meta) = std::fs::metadata(&file.path) {
-        let mtime = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        let should_reload = {
-            let guard = file.last_write_mtime.lock();
-            guard.map(|last| mtime > last).unwrap_or(true)
-        };
-
-        if should_reload && file.path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&file.path) {
-                if let Ok(on_disk) = D::parse(&content) {
-                    *file.last_write_mtime.lock() = Some(mtime);
-                    return Some(on_disk);
+    let mut attempts = 5;
+    loop {
+        match NamedTempFile::new_in(dir) {
+            Ok(mut tmp) => {
+                if let Err(e) = tmp.write_all(content.as_bytes()) {
+                    attempts -= 1;
+                    if attempts == 0 {
+                        return Err(e);
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(15));
+                    continue;
                 }
+
+                match tmp.persist(path) {
+                    Ok(_) => return Ok(()),
+                    Err(e) => {
+                        attempts -= 1;
+                        if attempts == 0 {
+                            return Err(e.error);
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(15));
+                    }
+                }
+            }
+            Err(e) => {
+                attempts -= 1;
+                if attempts == 0 {
+                    return Err(e);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(15));
             }
         }
     }
-    None
+}
+
+pub(super) fn scan_prefix_impl<D: TextDocument>(
+    doc: &D,
+    prefix: &str,
+) -> Result<Vec<(String, Vec<u8>)>> {
+    let parts = split_path(prefix);
+    let target_depth = parts.len() + 1;
+    let mut raw_nodes = Vec::new();
+    scan_prefix_recursive(doc, &parts, prefix, &mut raw_nodes, Some(target_depth));
+
+    let mut results = Vec::new();
+    for (k, node) in raw_nodes {
+        if k.starts_with(prefix) {
+            let bytes = D::node_to_bytes(&node)?;
+            results.push((k, bytes));
+        }
+    }
+
+    Ok(results)
 }
 
 pub(super) fn scan_prefix_recursive<D: TextDocument>(
@@ -606,24 +626,42 @@ pub(super) fn scan_prefix_recursive<D: TextDocument>(
     parts: &[&str],
     prefix_str: &str,
     results: &mut Vec<(String, D::Node)>,
+    target_depth: Option<usize>,
 ) {
+    let current_depth = parts.len();
+
+    if let Some(target_depth) = target_depth && current_depth >= target_depth {
+        if !prefix_str.is_empty()
+            && !prefix_str.ends_with('.')
+            && let Some(node) = doc.get(parts)
+        {
+            results.push((prefix_str.to_string(), node.clone()));
+        }
+        return;
+    }
+
     let children = doc.scan(parts);
     if children.is_empty() {
-        if !prefix_str.is_empty() {
-            if let Some(node) = doc.get(parts) {
-                results.push((prefix_str.to_string(), node.clone()));
-            }
+        if !prefix_str.is_empty()
+            && !prefix_str.ends_with('.')
+            && let Some(node) = doc.get(parts)
+        {
+            results.push((prefix_str.to_string(), node.clone()));
         }
     } else {
         for (full_key, _node) in children {
             let child_parts = split_path(&full_key);
             let grand_children = doc.scan(&child_parts);
-            if grand_children.is_empty() {
+
+            let should_stop = grand_children.is_empty()
+                || target_depth.is_some_and(|depth| child_parts.len() >= depth);
+
+            if should_stop {
                 if let Some(child_node) = doc.get(&child_parts) {
                     results.push((full_key, child_node.clone()));
                 }
             } else {
-                scan_prefix_recursive(doc, &child_parts, prefix_str, results);
+                scan_prefix_recursive(doc, &child_parts, prefix_str, results, target_depth);
             }
         }
     }
@@ -631,11 +669,11 @@ pub(super) fn scan_prefix_recursive<D: TextDocument>(
 
 fn diff_documents<D: TextDocument>(old: &D, new: &D) -> Vec<StoreEvent> {
     let mut old_nodes = Vec::new();
-    scan_prefix_recursive(old, &[], "", &mut old_nodes);
+    scan_prefix_recursive(old, &[], "", &mut old_nodes, None);
     let old_map: std::collections::HashMap<String, D::Node> = old_nodes.into_iter().collect();
 
     let mut new_nodes = Vec::new();
-    scan_prefix_recursive(new, &[], "", &mut new_nodes);
+    scan_prefix_recursive(new, &[], "", &mut new_nodes, None);
     let new_map: std::collections::HashMap<String, D::Node> = new_nodes.into_iter().collect();
 
     let mut events = Vec::new();
@@ -655,8 +693,8 @@ fn diff_documents<D: TextDocument>(old: &D, new: &D) -> Vec<StoreEvent> {
                     events.push(StoreEvent {
                         path: Arc::from(key),
                         op: StoreOp::Set,
-                        old: old_bytes.map(Bytes::from),
-                        new: new_bytes.map(Bytes::from),
+                        old: old_bytes,
+                        new: new_bytes,
                     });
                 }
             }
@@ -665,7 +703,7 @@ fn diff_documents<D: TextDocument>(old: &D, new: &D) -> Vec<StoreEvent> {
                 events.push(StoreEvent {
                     path: Arc::from(key),
                     op: StoreOp::Delete,
-                    old: old_bytes.map(Bytes::from),
+                    old: old_bytes,
                     new: None,
                 });
             }
@@ -675,7 +713,7 @@ fn diff_documents<D: TextDocument>(old: &D, new: &D) -> Vec<StoreEvent> {
                     path: Arc::from(key),
                     op: StoreOp::Set,
                     old: None,
-                    new: new_bytes.map(Bytes::from),
+                    new: new_bytes,
                 });
             }
             (None, None) => {}
@@ -702,8 +740,8 @@ mod tests {
                     assert!(!norm.is_empty(), "Normalized path cannot be empty");
                     if norm != "." {
                         assert!(!norm.starts_with('.'), "Should not start with a dot: {}", norm);
+                        assert!(!norm.ends_with('.'), "Should not end with a dot: {}", norm);
                     }
-                    assert!(!norm.ends_with('.'), "Should not end with a dot: {}", norm);
                     assert!(!norm.contains(".."), "Should not contain double dots: {}", norm);
                 }
                 Err(_) => {

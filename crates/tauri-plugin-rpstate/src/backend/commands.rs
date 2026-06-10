@@ -10,7 +10,7 @@ pub struct PluginState {
 
 #[tauri::command]
 pub async fn rpstate_get(
-    store: State<'_, Arc<rpstate::DefaultStore>>,
+    store: State<'_, rpstate::DefaultStore>,
     key: String,
 ) -> Result<Option<serde_json::Value>, String> {
     store.get(&key).map_err(|e| e.to_string())
@@ -18,7 +18,7 @@ pub async fn rpstate_get(
 
 #[tauri::command]
 pub async fn rpstate_set(
-    store: State<'_, Arc<rpstate::DefaultStore>>,
+    store: State<'_, rpstate::DefaultStore>,
     key: String,
     value: serde_json::Value,
 ) -> Result<(), String> {
@@ -27,11 +27,10 @@ pub async fn rpstate_set(
 
 #[tauri::command]
 pub async fn rpstate_get_prefix(
-    store: State<'_, Arc<rpstate::DefaultStore>>,
+    store: State<'_, rpstate::DefaultStore>,
     prefix: String,
 ) -> Result<HashMap<String, serde_json::Value>, String> {
-    let raw =
-        rpstate::Store::scan_prefix(store.inner().as_ref(), &prefix).map_err(|e| e.to_string())?;
+    let raw = rpstate::Store::scan_prefix(store.inner(), &prefix).map_err(|e| e.to_string())?;
 
     let mut map = HashMap::new();
     for (path, bytes) in raw {
@@ -44,15 +43,15 @@ pub async fn rpstate_get_prefix(
 
 #[tauri::command]
 pub async fn rpstate_flush(
-    store: State<'_, Arc<rpstate::DefaultStore>>,
+    store: State<'_, rpstate::DefaultStore>,
     prefix: String,
 ) -> Result<(), String> {
-    rpstate::Store::flush_prefix(store.inner().as_ref(), &prefix).map_err(|e| e.to_string())
+    rpstate::Store::flush_prefix(store.inner(), &prefix).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn rpstate_subscribe<R: Runtime>(
-    store: State<'_, Arc<rpstate::DefaultStore>>,
+    store: State<'_, rpstate::DefaultStore>,
     app: AppHandle<R>,
     state: State<'_, PluginState>,
     key: String,
@@ -122,7 +121,7 @@ pub async fn rpstate_subscribe<R: Runtime>(
 
 #[tauri::command]
 pub async fn rpstate_unsubscribe(
-    store: State<'_, Arc<rpstate::DefaultStore>>,
+    store: State<'_, rpstate::DefaultStore>,
     state: State<'_, PluginState>,
     key: String,
 ) -> Result<(), String> {
@@ -134,7 +133,7 @@ pub async fn rpstate_unsubscribe(
 }
 #[tauri::command]
 pub async fn rpstate_delete(
-    store: State<'_, Arc<rpstate::DefaultStore>>,
+    store: State<'_, rpstate::DefaultStore>,
     key: String,
 ) -> Result<(), String> {
     store.delete(&key).map_err(|e| e.to_string())

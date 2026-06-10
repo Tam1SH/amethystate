@@ -1,41 +1,22 @@
 fn main() {
-    println!("cargo::rustc-check-cfg=cfg(backend, values(\"redb\", \"json\", \"toml\", \"ron\"))");
+    let backends = ["json", "toml", "ron", "sqlite", "redb"];
 
-    let redb = std::env::var_os("CARGO_FEATURE_REDB").is_some();
-    let json = std::env::var_os("CARGO_FEATURE_JSON").is_some();
-    let toml = std::env::var_os("CARGO_FEATURE_TOML").is_some();
-    let ron = std::env::var_os("CARGO_FEATURE_RON").is_some();
+    println!(
+        "cargo::rustc-check-cfg=cfg(backend, values(\"redb\", \"json\", \"toml\", \"ron\", \"sqlite\"))"
+    );
 
-    let mut active = Vec::new();
-    if redb {
-        active.push("redb");
-    }
-    if json {
-        active.push("json");
-    }
-    if toml {
-        active.push("toml");
-    }
-    if ron {
-        active.push("ron");
-    }
+    let active: Vec<&str> = backends
+        .iter()
+        .copied()
+        .filter(|&b| std::env::var_os(format!("CARGO_FEATURE_{}", b.to_uppercase())).is_some())
+        .collect();
 
-    let selected = if json {
-        "json"
-    } else if toml {
-        "toml"
-    } else if ron {
-        "ron"
-    } else {
-        "redb"
-    };
-
-    println!("cargo:rustc-cfg=backend=\"{}\"", selected);
+    let selected = active.first().copied().unwrap_or("redb");
+    println!("cargo:rustc-cfg=backend=\"{selected}\"");
 
     if active.len() > 1 {
         println!(
-            "cargo:warning=Multiple storage backends enabled: {:?}. Defaulting to '{}'.",
-            active, selected
+            "cargo:warning=Multiple storage backends enabled: {active:?}. Defaulting to '{selected}'."
         );
     }
 }

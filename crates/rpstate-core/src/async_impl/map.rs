@@ -34,18 +34,20 @@ impl<K, V, B> PartialEq for ReactiveMap<K, V, B> {
 
 impl<K, V, B> Eq for ReactiveMap<K, V, B> {}
 
+
 impl<K, V, B> std::fmt::Debug for ReactiveMap<K, V, B>
 where
     K: std::fmt::Debug,
+    V: std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut d = f.debug_struct("ReactiveMap");
         d.field("prefix", &self.prefix);
 
-        if let Ok(keys) = self.core.known_keys.try_lock() {
-            d.field("known_keys", &*keys);
+        if let Ok(cache) = self.core.cache.try_lock() {
+            d.field("cache", &*cache);
         } else {
-            d.field("known_keys", &"<locked>");
+            d.field("cache", &"<locked>");
         }
 
         d.field("core", &self.core).finish()
@@ -72,11 +74,10 @@ where
     ) -> Self {
         let prefix = prefix.into();
         let core = ReactiveMapCore::new();
+
         {
-            let mut keys = core.known_keys.lock().unwrap();
-            for k in initial_values.keys() {
-                keys.insert(k.clone());
-            }
+            let mut cache = core.cache.lock().unwrap();
+            *cache = initial_values;
         }
 
         let subscription = backend.subscribe_map(prefix.clone(), core.clone());
@@ -113,7 +114,7 @@ where
             value,
             true,
         )
-        .await
+            .await
     }
 
     pub async fn clear(&self) -> Result<(), B::Error> {

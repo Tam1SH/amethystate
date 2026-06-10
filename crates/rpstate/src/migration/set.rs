@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 #[derive(Default)]
 pub struct MigrationSet {
     migrators: HashMap<String, MigrationPlan>,
-    targets: HashMap<String, (u32, u64, &'static [FieldDescriptor])>,
+    targets: HashMap<String, (u32, u32, &'static [FieldDescriptor])>,
     graph: DiGraph<String, ()>,
     nodes: HashMap<String, NodeIndex>,
 }
@@ -19,7 +19,7 @@ impl MigrationSet {
         mut self,
         prefix: impl Into<String>,
         migrator: MigrationPlan,
-        hash: u64,
+        hash: u32,
         fields: &'static [FieldDescriptor],
         deps: &[&str],
     ) -> Self {
@@ -53,7 +53,7 @@ impl MigrationSet {
         self
     }
 
-    pub(crate) fn get_target(&self, prefix: &str) -> (u32, u64, &'static [FieldDescriptor]) {
+    pub(crate) fn get_target(&self, prefix: &str) -> (u32, u32, &'static [FieldDescriptor]) {
         self.targets.get(prefix).cloned().unwrap_or((0, 0, &[]))
     }
 
@@ -114,7 +114,7 @@ impl MigrationSet {
             .map_err(|cycle| MigrationError::Cycle(sub_graph[cycle.node_id()].clone()).into())
     }
 
-    pub(crate) fn get_migrator(&self, prefix: &str) -> Option<&MigrationPlan> {
+    pub(crate) fn get_migration_plan(&self, prefix: &str) -> Option<&MigrationPlan> {
         self.migrators.get(prefix)
     }
 }

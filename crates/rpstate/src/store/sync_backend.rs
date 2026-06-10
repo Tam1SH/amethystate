@@ -1,9 +1,8 @@
-use crate::Store;
 use crate::error::Error;
-use bytes::Bytes;
+use crate::Store;
 use rpstate_core::RpBackend;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 pub(crate) struct StoreBackend<S> {
     pub(crate) store: S,
@@ -20,7 +19,7 @@ where
     S: Store,
 {
     type Error = Error;
-    type Raw = Bytes;
+    type Raw = Vec<u8>;
 
     fn get<T>(&self, path: &str) -> Result<Option<T>, Self::Error>
     where

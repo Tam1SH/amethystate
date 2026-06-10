@@ -34,33 +34,7 @@ fn test_rust_codegen_export() {
     let rust_content =
         std::fs::read_to_string(&out_path).expect("Failed to read exported Rust file");
 
-    assert!(rust_content.contains("use tauri_plugin_rpstate::client::field::Field;"));
-    assert!(rust_content.contains("use tauri_plugin_rpstate::client::map::ReactiveMap;"));
-    assert!(
-        rust_content
-            .contains("use tauri_plugin_rpstate::client::{invoke_get_prefix, invoke_flush};")
-    );
-
-    assert!(rust_content.contains("pub struct TestRoot {"));
-    assert!(rust_content.contains("pub value: Field<i32>,"));
-    assert!(rust_content.contains("pub session: Field<String>,"));
-    assert!(rust_content.contains("pub child: TestNestedFields,"));
-
-    assert!(rust_content.contains("impl TestRoot {"));
-    assert!(rust_content.contains("pub async fn load() -> Result<Self, String> {"));
-    assert!(rust_content.contains("let initial = invoke_get_prefix(\"test_root\").await?;"));
-    assert!(rust_content.contains("pub async fn save(&self) -> Result<(), String> {"));
-    assert!(rust_content.contains("invoke_flush(\"test_root\").await"));
-
-    assert!(rust_content.contains("value: Field::new(\"test_root.value\", initial.get(\"test_root.value\").and_then(|v| tauri_plugin_rpstate::serde_json::from_value::<i32>((*v).clone()).ok()).unwrap_or_default()),"));
-    assert!(rust_content.contains("session: Field::new(\"test_root.session\", initial.get(\"test_root.session\").and_then(|v| tauri_plugin_rpstate::serde_json::from_value::<String>((*v).clone()).ok()).unwrap_or_default()),"));
-    assert!(rust_content.contains("child: TestNestedFields::new(\"test_root.child\", &initial),"));
-
-    assert!(rust_content.contains("pub struct TestNestedFields {"));
-    assert!(rust_content.contains("pub name: Field<String>,"));
-    assert!(rust_content.contains("impl TestNestedFields {"));
-    assert!(rust_content.contains("pub fn new(prefix: &str, initial: &std::collections::HashMap<String, tauri_plugin_rpstate::serde_json::Value>) -> Self {"));
-    assert!(rust_content.contains("name: Field::new(format!(\"{}.name\", prefix), initial.get(&format!(\"{}.name\", prefix)).and_then(|v| tauri_plugin_rpstate::serde_json::from_value::<String>((*v).clone()).ok()).unwrap_or_default()),"));
+    insta::assert_snapshot!("rust_codegen_export", rust_content);
 }
 
 #[test]
@@ -102,29 +76,5 @@ fn test_typescript_codegen_export() {
     assert!(out_path.exists());
     let ts_content = std::fs::read_to_string(&out_path).expect("Failed to read exported TS file");
 
-    assert!(ts_content.contains("export class Field<T>"));
-    assert!(ts_content.contains("export class ReadonlyField<T>"));
-    assert!(ts_content.contains("export class ReactiveMapField<K extends string, V>"));
-
-    assert!(ts_content.contains("\"test_root.value\": number;"));
-    assert!(ts_content.contains("\"test_root.session\": string;"));
-    assert!(ts_content.contains("\"test_root.child.name\": string;"));
-
-    assert!(ts_content.contains("export class TestRoot {"));
-    assert!(ts_content.contains("readonly value: Field<number>;"));
-    assert!(ts_content.contains(
-        "this.value = new Field<number>(\"test_root.value\", initialValues?.[\"test_root.value\"]);"
-    ));
-    assert!(ts_content.contains("readonly session: Field<string>;"));
-    assert!(ts_content.contains("this.session = new Field<string>(\"test_root.session\", initialValues?.[\"test_root.session\"]);"));
-    assert!(ts_content.contains("readonly child: TestNestedFields;"));
-    assert!(
-        ts_content
-            .contains("this.child = new TestNestedFields(\"test_root.child\", initialValues);")
-    );
-    assert!(ts_content.contains("class TestNestedFields {"));
-    assert!(ts_content.contains("readonly name: Field<string>;"));
-    assert!(ts_content.contains(
-        r#"this.name = new Field(`${prefix}.name`, initialValues?.[`${prefix}.name`]);"#
-    ));
+    insta::assert_snapshot!("typescript_codegen_export", ts_content);
 }

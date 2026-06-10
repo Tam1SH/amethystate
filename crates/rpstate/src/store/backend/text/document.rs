@@ -1,10 +1,12 @@
+use crate::store::CodecFormat;
 use crate::Result;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::fmt::Debug;
 
 pub trait TextDocument: Send + Sync + Sized + Clone + 'static {
     type Node: Clone + Debug;
+    fn format() -> CodecFormat;
 
     fn get(&self, parts: &[&str]) -> Option<&Self::Node>;
     fn set(&mut self, parts: &[&str], node: Self::Node) -> Result<()>;
@@ -81,13 +83,11 @@ pub fn generic_delete<N: Navigable>(root: &mut N, parts: &[&str]) -> Result<Opti
     let (last, heads) = parts.split_last().unwrap();
     let mut current = root;
     for &part in heads {
-        current = current.get_child_mut(part).ok_or_else(|| {
-            crate::error::Error::from(
-                crate::store::backend::text::error::TextStoreError::PathSegmentMissing(
-                    part.to_string(),
-                ),
-            )
-        })?;
+        if let Some(next) = current.get_child_mut(part) {
+            current = next;
+        } else {
+            return Ok(None);
+        }
     }
     Ok(current.remove_child(last))
 }
@@ -98,7 +98,6 @@ pub fn generic_scan<N: Navigable>(root: &N, parts: &[&str]) -> Vec<(String, N)> 
     let mut results = Vec::new();
     let prefix_str = parts.join(".");
 
-    // For the root case we scan the root itself, not a child.
     let node = if parts.is_empty() {
         Some(root)
     } else {

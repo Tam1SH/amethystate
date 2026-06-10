@@ -1,5 +1,6 @@
 use crate::Result;
 use crate::codec::CodecError;
+use crate::store::CodecFormat;
 use crate::store::backend::text::document::{
     Navigable, TextDocument, generic_delete, generic_get, generic_scan, generic_set,
 };
@@ -61,6 +62,10 @@ impl Navigable for ::ron::value::Value {
 
 impl TextDocument for RonDocument {
     type Node = ::ron::value::Value;
+
+    fn format() -> CodecFormat {
+        CodecFormat::Ron
+    }
 
     fn get(&self, parts: &[&str]) -> Option<&Self::Node> {
         generic_get(&self.0, parts)
@@ -130,7 +135,9 @@ impl TextDocument for RonDocument {
     }
 
     fn bytes_to_node(bytes: &[u8]) -> Result<Self::Node> {
-        let s = std::str::from_utf8(bytes).map_err(|e| CodecError::Custom(e.to_string()))?;
+        let s = std::str::from_utf8(bytes)
+            .map_err(|e| CodecError::Custom(e.to_string()))
+            .map_err(TextStoreError::from)?;
         let node: ::ron::value::Value =
             ::ron::from_str(s).map_err(|e| TextStoreError::Codec(CodecError::Ron(e.into())))?;
         Ok(node)

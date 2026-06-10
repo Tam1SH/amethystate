@@ -1,32 +1,26 @@
 use rpstate_macros::rpstate;
-pub struct AppConfig {
-    pub port: ::rpstate::Field<u16, ::rpstate::DefaultStore, ::rpstate::WritableMode>,
-    pub session_id: ::rpstate::Field<
-        String,
-        ::rpstate::DefaultStore,
-        ::rpstate::WritableMode,
-    >,
+pub struct AppConfig<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    pub port: ::rpstate::Field<u16, S, ::rpstate::WritableMode>,
+    pub session_id: ::rpstate::Field<String, S, ::rpstate::WritableMode>,
 }
 #[automatically_derived]
-impl ::core::clone::Clone for AppConfig {
+impl<S: ::core::clone::Clone + ::rpstate::Store> ::core::clone::Clone for AppConfig<S> {
     #[inline]
-    fn clone(&self) -> AppConfig {
+    fn clone(&self) -> AppConfig<S> {
         AppConfig {
             port: ::core::clone::Clone::clone(&self.port),
             session_id: ::core::clone::Clone::clone(&self.session_id),
         }
     }
 }
-impl ::rpstate::StateScope for AppConfig {
+impl<S: ::rpstate::Store> ::rpstate::StateScope for AppConfig<S> {
     const PREFIX: &'static str = "app";
 }
-impl AppConfig {
-    pub fn new(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
+impl<S: ::rpstate::Store> AppConfig<S> {
+    pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
-            port: ::rpstate::field::<Self, u16>(store, "port", 8080)?,
+            port: ::rpstate::store::field::<Self, u16, S>(store, "port", 8080)?,
             session_id: ::rpstate::Field::new_volatile(
                 ::std::sync::Arc::from(
                     ::alloc::__export::must_use({
@@ -52,25 +46,25 @@ impl AppConfig {
     pub fn __schema_field_session_id(&self) -> ::rpstate::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn port(
-        &self,
-    ) -> ::rpstate::Field<u16, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
+    pub fn port(&self) -> ::rpstate::Field<u16, S, ::rpstate::WritableMode> {
         self.port.clone()
     }
-    pub fn session_id(
-        &self,
-    ) -> ::rpstate::Field<String, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
+    pub fn session_id(&self) -> ::rpstate::Field<String, S, ::rpstate::WritableMode> {
         self.session_id.clone()
     }
 }
-impl ::rpstate::RpStateNode for AppConfig {
-    fn new_node(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        _path: &str,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl AppConfig<::rpstate::DefaultStore> {
+    pub fn new() -> ::rpstate::Result<Self> {
+        let store = ::rpstate::global_store();
+        Self::new_with(&store)
     }
 }
+impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for AppConfig<S> {
+    fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
+    }
+}
+#[serde(crate = "::rpstate::serde")]
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct AppConfig_Data {
@@ -84,8 +78,7 @@ pub struct AppConfig_Data {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl _serde::Serialize for AppConfig_Data {
         fn serialize<__S>(
@@ -117,8 +110,7 @@ const _: () = {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl<'de> _serde::Deserialize<'de> for AppConfig_Data {
         fn deserialize<__D>(
@@ -325,47 +317,7 @@ impl ::core::fmt::Debug for AppConfig_Data {
         )
     }
 }
-impl AppConfig_Data {
-    #[doc(hidden)]
-    pub fn __rpstate_load_from(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<Self> {
-        Ok(Self {
-            port: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
-                u16,
-            >(&**store, &Self::__rpstate_path(prefix, "port"))?
-                .unwrap_or_else(|| 8080),
-        })
-    }
-    #[doc(hidden)]
-    pub fn __rpstate_save_to(
-        &self,
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<()> {
-        <::rpstate::DefaultStore as ::rpstate::Store>::set(
-            &**store,
-            &Self::__rpstate_path(prefix, "port"),
-            &self.port,
-        )?;
-        Ok(())
-    }
-    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
-        if prefix.is_empty() {
-            key.to_string()
-        } else {
-            ::alloc::__export::must_use({
-                ::alloc::fmt::format(
-                    format_args!(
-                        "{0}.{1}", prefix.trim_end_matches('.'), key
-                        .trim_start_matches('.'),
-                    ),
-                )
-            })
-        }
-    }
-}
+impl AppConfig_Data {}
 impl ::rpstate::migration::types::RpType for AppConfig_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "AppConfig_Data".as_bytes(),
@@ -377,7 +329,7 @@ impl ::rpstate::migration::fields::RpStateFields for AppConfig_Data {
         ::rpstate::migration::fields::FieldDescriptor {
             name: "port",
             type_hash: <u16 as ::rpstate::migration::types::RpType>::TYPE_HASH,
-            type_name: "stringify!(u16)",
+            type_name: "u16",
         },
     ];
     const VERSION: u32 = 0u32;
@@ -397,14 +349,12 @@ impl ::rpstate::migration::fields::RpStateFields for AppConfig_Data {
         Ok(())
     }
 }
-impl ::rpstate::RpState for AppConfig {
+impl<S: ::rpstate::Store> ::rpstate::RpState for AppConfig<S> {
     type Data = AppConfig_Data;
 }
-impl ::rpstate::RpStateSlice for AppConfig {
-    fn load_slice(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for AppConfig<S> {
+    fn load_slice(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
     }
 }
 fn main() {}

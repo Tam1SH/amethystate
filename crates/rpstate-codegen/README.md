@@ -27,7 +27,7 @@ rpstate-codegen = { version = "*", features = ["leptos"] }
 
 **2. Create `src/bin/codegen.rs`**
 
-```rust
+```rust,ignore
 #[allow(unused_imports)]
 use your_crate_with_rpstate_types as _; // pulls inventory registrations into the binary
 

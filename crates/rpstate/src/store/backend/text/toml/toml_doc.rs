@@ -1,5 +1,6 @@
 use crate::Result;
 use crate::codec::CodecError;
+use crate::store::CodecFormat;
 use crate::store::backend::text::TextStoreError;
 use crate::store::backend::text::document::{
     Navigable, TextDocument, generic_delete, generic_get, generic_scan, generic_set,
@@ -46,6 +47,10 @@ impl Navigable for toml_edit::Item {
 impl TextDocument for TomlDocument {
     type Node = toml_edit::Item;
 
+    fn format() -> CodecFormat {
+        CodecFormat::Toml
+    }
+
     fn get(&self, parts: &[&str]) -> Option<&Self::Node> {
         generic_get(self.0.as_item(), parts)
     }
@@ -81,7 +86,8 @@ impl TextDocument for TomlDocument {
     fn parse(src: &str) -> Result<Self> {
         let doc = src
             .parse::<toml_edit::DocumentMut>()
-            .map_err(|e| CodecError::Toml(e.to_string()))?;
+            .map_err(|e| CodecError::Toml(e.to_string()))
+            .map_err(TextStoreError::from)?;
 
         Ok(TomlDocument(doc))
     }
@@ -103,8 +109,9 @@ impl TextDocument for TomlDocument {
         struct Unwrap<T> {
             val: T,
         }
-        let unwrapped: Unwrap<T> =
-            toml_edit::de::from_str(&s).map_err(|e| CodecError::Toml(e.to_string()))?;
+        let unwrapped: Unwrap<T> = toml_edit::de::from_str(&s)
+            .map_err(|e| CodecError::Toml(e.to_string()))
+            .map_err(TextStoreError::from)?;
 
         Ok(unwrapped.val)
     }
@@ -116,11 +123,13 @@ impl TextDocument for TomlDocument {
         }
 
         let s = toml_edit::ser::to_string(&Wrap { val: value })
-            .map_err(|e| CodecError::Toml(e.to_string()))?;
+            .map_err(|e| CodecError::Toml(e.to_string()))
+            .map_err(TextStoreError::from)?;
 
         let doc = s
             .parse::<toml_edit::DocumentMut>()
-            .map_err(|e| CodecError::Toml(e.to_string()))?;
+            .map_err(|e| CodecError::Toml(e.to_string()))
+            .map_err(TextStoreError::from)?;
         Ok(doc
             .as_table()
             .get("val")
@@ -135,11 +144,14 @@ impl TextDocument for TomlDocument {
     }
 
     fn bytes_to_node(bytes: &[u8]) -> Result<Self::Node> {
-        let s = std::str::from_utf8(bytes).map_err(|e| CodecError::Toml(e.to_string()))?;
+        let s = std::str::from_utf8(bytes)
+            .map_err(|e| CodecError::Toml(e.to_string()))
+            .map_err(TextStoreError::from)?;
 
         let doc = s
             .parse::<toml_edit::DocumentMut>()
-            .map_err(|e| CodecError::Toml(e.to_string()))?;
+            .map_err(|e| CodecError::Toml(e.to_string()))
+            .map_err(TextStoreError::from)?;
 
         Ok(doc
             .as_table()

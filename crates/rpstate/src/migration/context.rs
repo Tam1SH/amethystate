@@ -1,21 +1,21 @@
-use crate::Result;
 use crate::codec::CodecError;
 use crate::migration::fields::RpStateFields;
 use crate::migration::migrate_from::MigrateFrom;
-use crate::store::RawStorage;
-use serde::Serialize;
+use crate::store::{CodecFormat, MigrationBackend};
+use crate::{MigrationError, Result};
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::str::FromStr;
 
 pub struct MigrationContext<'a> {
     prefix: String,
-    storage: &'a mut dyn RawStorage,
+    storage: &'a mut dyn MigrationBackend,
 }
 
 impl<'a> MigrationContext<'a> {
-    pub fn new(prefix: String, storage: &'a mut dyn RawStorage) -> Self {
+    pub fn new(prefix: String, storage: &'a mut dyn MigrationBackend) -> Self {
         Self { prefix, storage }
     }
 
@@ -109,24 +109,24 @@ impl<'a> MigrationContext<'a> {
 
     pub fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
         match self.get_raw(key)? {
-            Some(bytes) => Ok(Some(decode(&bytes)?)),
+            Some(bytes) => Ok(Some(decode(self.storage, &bytes)?)),
             None => Ok(None),
         }
     }
 
     pub fn set<T: Serialize>(&mut self, key: &str, value: &T) -> Result<()> {
-        self.set_raw(key, &encode(value)?)
+        self.set_raw(key, &encode(self.storage, value)?)
     }
 
     pub fn global_get<T: DeserializeOwned>(&self, full_key: &str) -> Result<Option<T>> {
         match self.storage.get(full_key)? {
-            Some(bytes) => Ok(Some(decode(&bytes)?)),
+            Some(bytes) => Ok(Some(decode(self.storage, &bytes)?)),
             None => Ok(None),
         }
     }
 
     pub fn global_set<T: Serialize>(&mut self, full_key: &str, value: &T) -> Result<()> {
-        let bytes = encode(value)?;
+        let bytes = encode(self.storage, value)?;
         self.storage.set(full_key, &bytes)
     }
 
@@ -156,7 +156,7 @@ impl<'a> MigrationContext<'a> {
         for (path, bytes) in raw {
             if let Some(k_str) = path.strip_prefix(&full_prefix)
                 && let Ok(kv) = K::from_str(k_str)
-                && let Ok(vv) = decode::<V>(&bytes)
+                && let Ok(vv) = decode::<V>(self.storage, &bytes)
             {
                 map.insert(kv, vv);
             }
@@ -173,51 +173,96 @@ impl<'a> MigrationContext<'a> {
     }
 }
 
-fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>> {
-    #[cfg(backend = "redb")]
-    {
-        rmp_serde::to_vec(value).map_err(|e| CodecError::from(e).into())
-    }
+pub fn encode<T: Serialize>(storage: &dyn MigrationBackend, value: &T) -> Result<Vec<u8>> {
+    match storage.format() {
+        #[cfg(feature = "redb")]
+        CodecFormat::MessagePack => rmp_serde::to_vec(value)
+            .map_err(CodecError::from)
+            .map_err(MigrationError::from)
+            .map_err(Into::into),
 
-    #[cfg(backend = "json")]
-    {
-        serde_json::to_vec(value).map_err(|e| CodecError::from(e).into())
-    }
+        #[cfg(feature = "json")]
+        CodecFormat::Json => serde_json::to_vec(value)
+            .map_err(CodecError::from)
+            .map_err(MigrationError::from)
+            .map_err(Into::into),
 
-    #[cfg(backend = "toml")]
-    {
-        toml_edit::ser::to_string(value)
+        #[cfg(feature = "toml")]
+        CodecFormat::Toml => {
+            #[derive(serde::Serialize)]
+            struct Wrap<'a, T> {
+                val: &'a T,
+            }
+            toml_edit::ser::to_string(&Wrap { val: value })
+                .map(|s| s.into_bytes())
+                .map_err(|e| CodecError::Toml(e.to_string()))
+                .map_err(MigrationError::from)
+                .map_err(Into::into)
+        }
+        #[cfg(feature = "sqlite")]
+        CodecFormat::SonicJson => sonic_rs::to_vec(value)
+            .map_err(CodecError::from)
+            .map_err(MigrationError::from)
+            .map_err(Into::into),
+
+        #[cfg(feature = "ron")]
+        CodecFormat::Ron => ron::to_string(value)
             .map(|s| s.into_bytes())
-            .map_err(|e| CodecError::Toml(e.to_string()).into())
-    }
+            .map_err(CodecError::from)
+            .map_err(MigrationError::from)
+            .map_err(Into::into),
 
-    #[cfg(backend = "ron")]
-    {
-        ron::to_string(value)
-            .map(|s| s.into_bytes())
-            .map_err(|e| CodecError::from(e).into())
+        #[cfg(test)]
+        CodecFormat::Default => serde_json::to_vec(value)
+            .map_err(CodecError::from)
+            .map_err(MigrationError::from)
+            .map_err(Into::into),
     }
 }
 
-fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
-    #[cfg(backend = "redb")]
-    {
-        rmp_serde::from_slice(bytes).map_err(|e| CodecError::from(e).into())
-    }
+pub fn decode<T: DeserializeOwned>(storage: &dyn MigrationBackend, bytes: &[u8]) -> Result<T> {
+    match storage.format() {
+        #[cfg(feature = "redb")]
+        CodecFormat::MessagePack => rmp_serde::from_slice(bytes)
+            .map_err(CodecError::from)
+            .map_err(MigrationError::from)
+            .map_err(Into::into),
 
-    #[cfg(backend = "json")]
-    {
-        serde_json::from_slice(bytes).map_err(|e| CodecError::from(e).into())
-    }
+        #[cfg(feature = "json")]
+        CodecFormat::Json => serde_json::from_slice(bytes)
+            .map_err(CodecError::from)
+            .map_err(MigrationError::from)
+            .map_err(Into::into),
 
-    #[cfg(backend = "toml")]
-    {
-        toml_edit::de::from_slice(bytes).map_err(|e| CodecError::Toml(e.to_string()).into())
-    }
+        #[cfg(feature = "toml")]
+        CodecFormat::Toml => {
+            #[derive(serde::Deserialize)]
+            struct Unwrap<T> {
+                val: T,
+            }
+            toml_edit::de::from_slice::<Unwrap<T>>(bytes)
+                .map(|unwrapped| unwrapped.val)
+                .map_err(|e| CodecError::Toml(e.to_string()))
+                .map_err(MigrationError::from)
+                .map_err(Into::into)
+        }
+        #[cfg(feature = "sqlite")]
+        CodecFormat::SonicJson => sonic_rs::from_slice(bytes)
+            .map_err(CodecError::from)
+            .map_err(MigrationError::from)
+            .map_err(Into::into),
 
-    #[cfg(backend = "ron")]
-    {
-        ron::de::from_bytes(bytes).map_err(|e| CodecError::from(e).into())
+        #[cfg(feature = "ron")]
+        CodecFormat::Ron => ron::de::from_bytes(bytes)
+            .map_err(|e| CodecError::from(e.code))
+            .map_err(MigrationError::from)
+            .map_err(Into::into),
+
+        #[cfg(test)]
+        CodecFormat::Default => serde_json::from_slice(bytes)
+            .map_err(CodecError::from)
+            .map_err(MigrationError::from)
+            .map_err(Into::into),
     }
 }
 
@@ -232,7 +277,11 @@ mod tests {
         data: HashMap<String, Vec<u8>>,
     }
 
-    impl RawStorage for MemoryStorage {
+    impl MigrationBackend for MemoryStorage {
+        fn format(&self) -> CodecFormat {
+            CodecFormat::Default
+        }
+
         fn get(&self, key: &str) -> crate::Result<Option<Vec<u8>>> {
             Ok(self.data.get(key).cloned())
         }

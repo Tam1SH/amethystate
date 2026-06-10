@@ -1,13 +1,8 @@
 use crate::MigrationError;
-use crate::codec::CodecError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    //TODO: replace to store errs
-    #[error(transparent)]
-    Codec(#[from] CodecError),
-
     #[cfg(feature = "text")]
     #[error(transparent)]
     TextStore(#[from] crate::store::backend::text::error::TextStoreError),
@@ -15,6 +10,10 @@ pub enum Error {
     #[cfg(feature = "redb")]
     #[error(transparent)]
     RedbStore(#[from] crate::store::backend::redb::error::RedbStoreError),
+
+    #[cfg(feature = "sqlite")]
+    #[error(transparent)]
+    Sqlite(#[from] crate::store::backend::sqlite::error::SqliteStoreError),
 
     #[error(transparent)]
     Migration(#[from] MigrationError),

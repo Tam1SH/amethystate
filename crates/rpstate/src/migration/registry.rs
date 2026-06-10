@@ -1,6 +1,6 @@
-use crate::MigrationContext;
 use crate::migration::fields::FieldDescriptor;
 use crate::store::StateScope;
+use crate::MigrationContext;
 use std::collections::BTreeSet;
 
 #[derive(Clone)]
@@ -10,7 +10,7 @@ pub struct MigrationStepEntry {
     pub description: &'static str,
     pub dependencies: &'static [&'static str],
     pub fields: &'static [FieldDescriptor],
-    pub schema_hash: u64,
+    pub schema_hash: u32,
     pub run: fn(&mut MigrationContext) -> crate::Result<()>,
 }
 

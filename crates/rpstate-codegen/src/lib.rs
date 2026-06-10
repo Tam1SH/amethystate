@@ -3,7 +3,7 @@ pub use backends::*;
 
 use heck::ToLowerCamelCase;
 use rpstate_core::{FieldExportMeta, FieldKind, SchemaExportEntry};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 pub trait FrameworkCodegen {
@@ -19,13 +19,13 @@ pub trait FrameworkCodegen {
 }
 
 pub struct CodegenRegistry {
-    registry: HashMap<&'static str, &'static SchemaExportEntry>,
+    registry: BTreeMap<&'static str, &'static SchemaExportEntry>,
 }
 
 impl CodegenRegistry {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        let mut registry = HashMap::new();
+        let mut registry = BTreeMap::new();
         for entry in inventory::iter::<SchemaExportEntry> {
             registry.insert(entry.struct_name, entry);
         }

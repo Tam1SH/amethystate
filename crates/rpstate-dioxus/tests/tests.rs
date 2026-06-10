@@ -1,6 +1,7 @@
 use dioxus::core::NoOpMutations;
 use dioxus::prelude::*;
 use rpstate::store::field_with_path;
+use rpstate::test_utils::unique_store;
 use rpstate::{DefaultStore, MapChange, rpstate};
 use rpstate_arena::{
     DefaultArena, IntoArenaPipeline, PIPELINE_ARENA, PipelineHandle, WritableHandle,
@@ -13,21 +14,6 @@ use rpstate_dioxus::{
 use rpstate_macros_arena::rpstate_framework_arena;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-
-fn unique_store(suffix: &str) -> DefaultStore {
-    use rpstate::store::config::StoreConfig;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let path = std::env::temp_dir().join(format!("rpstate-arena-test-{suffix}-{nanos}.json"));
-
-    DefaultStore::open(StoreConfig::new(path), Default::default())
-        .unwrap()
-        .0
-}
 
 #[derive(Clone)]
 struct Probe<T>(Arc<Mutex<Vec<T>>>);
@@ -543,8 +529,6 @@ fn AllPrimitivesComponent(props: AllPrimitivesProps) -> Element {
 
     let arena = use_context::<DefaultArena>();
     let cleanup = use_hook(|| {
-        let field = arena.get_field(field_handle_copy);
-
         PIPELINE_ARENA.with(|a| *a.borrow_mut() = Some(arena.clone()));
         let pipeline = field_handle_copy.pipe().map(|v| v * 3);
         PIPELINE_ARENA.with(|a| *a.borrow_mut() = None);

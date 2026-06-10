@@ -20,5 +20,8 @@ slotmap = "1.0"
 serde.workspace = true
 parking_lot = "0.12.5"
 
+[dev-dependencies]
+rpstate = { workspace = true, features = ["test-utils"] }
+
 [features]
 tauri-backend = ["dep:rpstate-tauri", "rpstate/tauri"]

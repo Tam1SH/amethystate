@@ -1,5 +1,5 @@
-use crate::RpBackend;
 use crate::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
+use crate::RpBackend;
 use crate::{MapChange, ReactiveMapCore};
 
 use serde::de::DeserializeOwned;
@@ -33,6 +33,7 @@ where
 {
     let prefix = format!("{}.", path);
     let kvs = backend.scan_prefix(&prefix)?;
+
     let mut results = Vec::new();
 
     for (full_path, raw) in kvs {
@@ -127,7 +128,7 @@ where
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
-    let exists = core.known_keys.lock().unwrap().contains(&key);
+    let exists = core.cache.lock().unwrap().contains_key(&key);
     if !exists {
         return Ok(None);
     }
@@ -142,7 +143,7 @@ where
         map_apply_change(backend, core, path, change, notify_after_commit)?;
         Ok(Some(old_value))
     } else {
-        core.known_keys.lock().unwrap().remove(&key);
+        core.cache.lock().unwrap().remove(&key);
         Ok(None)
     }
 }
@@ -216,10 +217,15 @@ where
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
-    let mut keys = core.known_keys.lock().unwrap();
+    let mut keys = core.cache.lock().unwrap();
     match change {
-        MapChange::Insert { key, .. } | MapChange::Update { key, .. } => {
-            keys.insert(key.clone());
+        MapChange::Insert { key, value }
+        | MapChange::Update {
+            key,
+            new_value: value,
+            ..
+        } => {
+            keys.insert(key.clone(), value.clone());
         }
         MapChange::Remove { key, .. } => {
             keys.remove(key);

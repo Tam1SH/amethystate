@@ -1,31 +1,31 @@
 use rpstate_macros::rpstate;
-pub struct NetworkState {
-    pub port: ::rpstate::Field<u16, ::rpstate::DefaultStore, ::rpstate::WritableMode>,
-    pub host: ::rpstate::Field<String, ::rpstate::DefaultStore, ::rpstate::WritableMode>,
+pub struct NetworkState<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    pub port: ::rpstate::Field<u16, S, ::rpstate::WritableMode>,
+    pub host: ::rpstate::Field<String, S, ::rpstate::WritableMode>,
 }
 #[automatically_derived]
-impl ::core::clone::Clone for NetworkState {
+impl<S: ::core::clone::Clone + ::rpstate::Store> ::core::clone::Clone
+for NetworkState<S> {
     #[inline]
-    fn clone(&self) -> NetworkState {
+    fn clone(&self) -> NetworkState<S> {
         NetworkState {
             port: ::core::clone::Clone::clone(&self.port),
             host: ::core::clone::Clone::clone(&self.host),
         }
     }
 }
-impl ::rpstate::StateScope for NetworkState {
+impl<S: ::rpstate::Store> ::rpstate::StateScope for NetworkState<S> {
     const PREFIX: &'static str = "net";
 }
-impl NetworkState {
-    pub fn new(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
+impl<S: ::rpstate::Store> NetworkState<S> {
+    pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
-            port: ::rpstate::field::<Self, u16>(store, "port", 8080)?,
-            host: ::rpstate::field::<
+            port: ::rpstate::store::field::<Self, u16, S>(store, "port", 8080)?,
+            host: ::rpstate::store::field::<
                 Self,
                 String,
+                S,
             >(store, "host", "127.0.0.1".to_string())?,
         };
         store.mark_initialized(<Self as ::rpstate::StateScope>::PREFIX)?;
@@ -39,25 +39,25 @@ impl NetworkState {
     pub fn __schema_field_host(&self) -> ::rpstate::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn port(
-        &self,
-    ) -> ::rpstate::Field<u16, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
+    pub fn port(&self) -> ::rpstate::Field<u16, S, ::rpstate::WritableMode> {
         self.port.clone()
     }
-    pub fn host(
-        &self,
-    ) -> ::rpstate::Field<String, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
+    pub fn host(&self) -> ::rpstate::Field<String, S, ::rpstate::WritableMode> {
         self.host.clone()
     }
 }
-impl ::rpstate::RpStateNode for NetworkState {
-    fn new_node(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        _path: &str,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl NetworkState<::rpstate::DefaultStore> {
+    pub fn new() -> ::rpstate::Result<Self> {
+        let store = ::rpstate::global_store();
+        Self::new_with(&store)
     }
 }
+impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for NetworkState<S> {
+    fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
+    }
+}
+#[serde(crate = "::rpstate::serde")]
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct NetworkState_Data {
@@ -72,8 +72,7 @@ pub struct NetworkState_Data {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl _serde::Serialize for NetworkState_Data {
         fn serialize<__S>(
@@ -110,8 +109,7 @@ const _: () = {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl<'de> _serde::Deserialize<'de> for NetworkState_Data {
         fn deserialize<__D>(
@@ -362,56 +360,7 @@ impl ::core::fmt::Debug for NetworkState_Data {
         )
     }
 }
-impl NetworkState_Data {
-    #[doc(hidden)]
-    pub fn __rpstate_load_from(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<Self> {
-        Ok(Self {
-            host: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
-                String,
-            >(&**store, &Self::__rpstate_path(prefix, "host"))?
-                .unwrap_or_else(|| "127.0.0.1".to_string()),
-            port: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
-                u16,
-            >(&**store, &Self::__rpstate_path(prefix, "port"))?
-                .unwrap_or_else(|| 8080),
-        })
-    }
-    #[doc(hidden)]
-    pub fn __rpstate_save_to(
-        &self,
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<()> {
-        <::rpstate::DefaultStore as ::rpstate::Store>::set(
-            &**store,
-            &Self::__rpstate_path(prefix, "host"),
-            &self.host,
-        )?;
-        <::rpstate::DefaultStore as ::rpstate::Store>::set(
-            &**store,
-            &Self::__rpstate_path(prefix, "port"),
-            &self.port,
-        )?;
-        Ok(())
-    }
-    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
-        if prefix.is_empty() {
-            key.to_string()
-        } else {
-            ::alloc::__export::must_use({
-                ::alloc::fmt::format(
-                    format_args!(
-                        "{0}.{1}", prefix.trim_end_matches('.'), key
-                        .trim_start_matches('.'),
-                    ),
-                )
-            })
-        }
-    }
-}
+impl NetworkState_Data {}
 impl ::rpstate::migration::types::RpType for NetworkState_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "NetworkState_Data".as_bytes(),
@@ -423,12 +372,12 @@ impl ::rpstate::migration::fields::RpStateFields for NetworkState_Data {
         ::rpstate::migration::fields::FieldDescriptor {
             name: "host",
             type_hash: <String as ::rpstate::migration::types::RpType>::TYPE_HASH,
-            type_name: "stringify!(String)",
+            type_name: "String",
         },
         ::rpstate::migration::fields::FieldDescriptor {
             name: "port",
             type_hash: <u16 as ::rpstate::migration::types::RpType>::TYPE_HASH,
-            type_name: "stringify!(u16)",
+            type_name: "u16",
         },
     ];
     const VERSION: u32 = 0u32;
@@ -450,45 +399,33 @@ impl ::rpstate::migration::fields::RpStateFields for NetworkState_Data {
         Ok(())
     }
 }
-impl ::rpstate::RpState for NetworkState {
+impl<S: ::rpstate::Store> ::rpstate::RpState for NetworkState<S> {
     type Data = NetworkState_Data;
 }
-impl ::rpstate::RpStateSlice for NetworkState {
-    fn load_slice(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for NetworkState<S> {
+    fn load_slice(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
     }
 }
-pub struct UiState {
-    pub proxy_port: ::rpstate::Field<
-        u16,
-        ::rpstate::DefaultStore,
-        ::rpstate::ReadOnlyMode,
-    >,
-    pub proxy_host: ::rpstate::Field<
-        String,
-        ::rpstate::DefaultStore,
-        ::rpstate::ReadOnlyMode,
-    >,
+pub struct UiState<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    pub proxy_port: ::rpstate::Field<u16, S, ::rpstate::ReadOnlyMode>,
+    pub proxy_host: ::rpstate::Field<String, S, ::rpstate::ReadOnlyMode>,
 }
 #[automatically_derived]
-impl ::core::clone::Clone for UiState {
+impl<S: ::core::clone::Clone + ::rpstate::Store> ::core::clone::Clone for UiState<S> {
     #[inline]
-    fn clone(&self) -> UiState {
+    fn clone(&self) -> UiState<S> {
         UiState {
             proxy_port: ::core::clone::Clone::clone(&self.proxy_port),
             proxy_host: ::core::clone::Clone::clone(&self.proxy_host),
         }
     }
 }
-impl ::rpstate::StateScope for UiState {
+impl<S: ::rpstate::Store> ::rpstate::StateScope for UiState<S> {
     const PREFIX: &'static str = "ui";
 }
-impl UiState {
-    pub fn new(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
+impl<S: ::rpstate::Store> UiState<S> {
+    pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
             proxy_port: {
@@ -567,25 +504,25 @@ impl UiState {
     pub fn __schema_field_proxy_host(&self) -> ::rpstate::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn proxy_port(
-        &self,
-    ) -> ::rpstate::Field<u16, ::rpstate::DefaultStore, ::rpstate::ReadOnlyMode> {
+    pub fn proxy_port(&self) -> ::rpstate::Field<u16, S, ::rpstate::ReadOnlyMode> {
         self.proxy_port.clone()
     }
-    pub fn proxy_host(
-        &self,
-    ) -> ::rpstate::Field<String, ::rpstate::DefaultStore, ::rpstate::ReadOnlyMode> {
+    pub fn proxy_host(&self) -> ::rpstate::Field<String, S, ::rpstate::ReadOnlyMode> {
         self.proxy_host.clone()
     }
 }
-impl ::rpstate::RpStateNode for UiState {
-    fn new_node(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        _path: &str,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl UiState<::rpstate::DefaultStore> {
+    pub fn new() -> ::rpstate::Result<Self> {
+        let store = ::rpstate::global_store();
+        Self::new_with(&store)
     }
 }
+impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for UiState<S> {
+    fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
+    }
+}
+#[serde(crate = "::rpstate::serde")]
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct UiState_Data {}
@@ -597,8 +534,7 @@ pub struct UiState_Data {}
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl _serde::Serialize for UiState_Data {
         fn serialize<__S>(
@@ -625,8 +561,7 @@ const _: () = {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl<'de> _serde::Deserialize<'de> for UiState_Data {
         fn deserialize<__D>(
@@ -790,37 +725,7 @@ impl ::core::fmt::Debug for UiState_Data {
         ::core::fmt::Formatter::write_str(f, "UiState_Data")
     }
 }
-impl UiState_Data {
-    #[doc(hidden)]
-    pub fn __rpstate_load_from(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<Self> {
-        Ok(Self {})
-    }
-    #[doc(hidden)]
-    pub fn __rpstate_save_to(
-        &self,
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<()> {
-        Ok(())
-    }
-    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
-        if prefix.is_empty() {
-            key.to_string()
-        } else {
-            ::alloc::__export::must_use({
-                ::alloc::fmt::format(
-                    format_args!(
-                        "{0}.{1}", prefix.trim_end_matches('.'), key
-                        .trim_start_matches('.'),
-                    ),
-                )
-            })
-        }
-    }
-}
+impl UiState_Data {}
 impl ::rpstate::migration::types::RpType for UiState_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a("UiState_Data".as_bytes());
     const TYPE_NAME: &'static str = "UiState_Data";
@@ -844,14 +749,12 @@ impl ::rpstate::migration::fields::RpStateFields for UiState_Data {
         Ok(())
     }
 }
-impl ::rpstate::RpState for UiState {
+impl<S: ::rpstate::Store> ::rpstate::RpState for UiState<S> {
     type Data = UiState_Data;
 }
-impl ::rpstate::RpStateSlice for UiState {
-    fn load_slice(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for UiState<S> {
+    fn load_slice(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
     }
 }
 fn main() {}

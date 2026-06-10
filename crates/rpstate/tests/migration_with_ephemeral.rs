@@ -1,5 +1,6 @@
 use rpstate::store::builder::StoreBuilder;
-use rpstate::{Store, migrate, migrate_field};
+use rpstate::{migrate, migrate_field, RpData, Store};
+use rpstate_core::test_utils::unique_path;
 use rpstate_macros::rpstate;
 
 mod v1 {
@@ -54,31 +55,29 @@ pub struct Dashboard {
     pub is_loading: bool,
 }
 
-migrate! {
-    v1::NetworkSettings_Data => NetworkSettings_Data,
-    rename: [port => listen_port],
-    |old, _ctx| {
-        Ok(Self { listen_port: old.port })
-    }
+#[migrate]
+#[rename(port => listen_port)]
+fn migrate_network_settings_v1_to_v2(
+    old: RpData<v1::NetworkSettings>,
+) -> rpstate::Result<RpData<NetworkSettings>> {
+    Ok(RpData::<NetworkSettings> {
+        listen_port: old.port,
+    })
 }
 
-migrate! {
-    v1::SystemConfig_Data => SystemConfig_Data,
-    rename: [],
-    |old, ctx| {
-        Ok(Self {
-            net: migrate_field!(ctx, old.net),
-        })
-    }
+#[migrate]
+fn migrate_system_config_v1_to_v2(
+    old: RpData<v1::SystemConfig>,
+    ctx: &mut rpstate::migration::MigrationContext,
+) -> rpstate::Result<RpData<SystemConfig>> {
+    Ok(RpData::<SystemConfig> {
+        net: migrate_field!(ctx, old.net),
+    })
 }
 
-#[cfg(feature = "redb")]
 #[test]
 fn test_nested_and_ephemeral_integration() {
-    let path = std::env::temp_dir().join("rpstate_ephemeral_test.redb");
-    if path.exists() {
-        std::fs::remove_file(&path).ok();
-    }
+    let path = unique_path("rpstate_ephemeral_test.redb");
 
     {
         let store = StoreBuilder::new(&path).build().unwrap();

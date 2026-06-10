@@ -2,9 +2,13 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum CodecError {
-    #[cfg(feature = "json")]
+    #[cfg(any(feature = "json", test))]
     #[error("JSON codec error: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[cfg(feature = "sqlite")]
+    #[error("JSON codec error: {0}")]
+    SonicJson(#[from] sonic_rs::Error),
 
     #[cfg(feature = "toml")]
     #[error("TOML error: {0}")]

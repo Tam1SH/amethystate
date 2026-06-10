@@ -1,6 +1,6 @@
 use rpstate::store::builder::StoreBuilder;
 use rpstate::{Store, rpstate};
-use std::time::{SystemTime, UNIX_EPOCH};
+use rpstate_core::test_utils::unique_path;
 
 #[rpstate(prefix = "network", mode = "both")]
 pub struct NetworkState {
@@ -9,14 +9,6 @@ pub struct NetworkState {
 
     #[state(default = 8080)]
     pub port: u16,
-}
-
-fn unique_path(suffix: &str) -> std::path::PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time is after epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("rpstate-{suffix}-{nanos}.redb"))
 }
 
 #[test]

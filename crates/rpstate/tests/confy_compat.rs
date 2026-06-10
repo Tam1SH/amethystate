@@ -3,6 +3,7 @@ use rpstate::confy;
 use rpstate_macros::rpstate;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 struct TestConfig {
@@ -66,8 +67,25 @@ pub struct NetworkState {
     pub port: u16,
 }
 
+fn clean_up_files(file_path: &Path) {
+    if file_path.exists() {
+        let _ = fs::remove_file(file_path);
+    }
+
+    if let Some(ext) = file_path.extension().and_then(|s| s.to_str()) {
+        let meta_append = file_path.with_extension(format!("{ext}.meta"));
+        if meta_append.exists() {
+            let _ = fs::remove_file(&meta_append);
+        }
+    }
+
+    let meta_replace = file_path.with_extension("meta");
+    if meta_replace.exists() {
+        let _ = fs::remove_file(&meta_replace);
+    }
+}
 #[test]
-#[cfg(not(backend = "redb"))]
+#[cfg(not(any(backend = "redb", backend = "sqlite")))]
 fn test_confy_rpstate_coexistence() {
     use rpstate::{IntoGlobalStore, StoreBuilder};
 
@@ -76,8 +94,10 @@ fn test_confy_rpstate_coexistence() {
     let file_path =
         confy::get_configuration_file_path(app_name, None).expect("Failed to get config path");
 
-    if file_path.exists() {
-        let _ = fs::remove_file(&file_path);
+    clean_up_files(&file_path);
+
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent).expect("Failed to create parent directory");
     }
 
     StoreBuilder::new(&file_path).init_global();
@@ -99,15 +119,21 @@ fn test_confy_rpstate_coexistence() {
     assert_eq!(network.port, 9090);
 
     let contents = fs::read_to_string(&file_path).expect("read failed");
-    assert!(contents.contains(
-        r#"name = "legacy"
-comfy = true
-foo = 1
 
-[network]
-port = 9090
-"#
-    ));
+    #[cfg(feature = "json")]
+    insta::assert_snapshot!("coexistence_json", contents);
+
+    #[cfg(feature = "toml")]
+    insta::assert_snapshot!("coexistence_toml", contents);
+
+    #[cfg(feature = "ron")]
+    insta::assert_snapshot!("coexistence_ron", contents);
+
+    if let Some(parent) = file_path.parent()
+        && parent.exists()
+    {
+        fs::remove_dir_all(parent).expect("cleanup failed");
+    }
 
     if let Some(parent) = file_path.parent()
         && parent.exists()
@@ -117,6 +143,7 @@ port = 9090
 }
 
 #[test]
+#[cfg(feature = "toml")]
 fn test_compare_real_confy_and_rpstate() {
     let dir = tempfile::tempdir().expect("Failed to create temp dir");
 
@@ -133,12 +160,6 @@ fn test_compare_real_confy_and_rpstate() {
     let rp_path = dir.path().join("rpstate_confy.toml");
     confy::store_path(&rp_path, &legacy).expect("rpstate confy store failed");
     let rp_contents = std::fs::read_to_string(&rp_path).expect("read failed");
-
-    println!("=== REAL CONFY ===");
-    println!("{}", real_contents);
-
-    println!("=== RPSTATE CONFY ===");
-    println!("{}", rp_contents);
 
     assert_eq!(real_contents.trim(), rp_contents.trim());
 }

@@ -14,7 +14,7 @@ use ratatui::{
 use rpstate::{rpstate, DefaultStore, StoreBuilder};
 use std::io::{stdout, Stdout};
 use std::sync::Arc;
-#
+
 #[rpstate(prefix = "tui_settings", mode = "persistent")]
 pub struct TuiSettings {
     #[state(default = "Anonymous".to_string())]

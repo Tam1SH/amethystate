@@ -1,8 +1,8 @@
 use crate::{Field, ReactiveMap, StateScope, Store, StoreOp, StoreSubscription, SubscriptionKind};
 use rpstate_core::{AccessMode, FieldCore, MapChange, ReactiveMapCore, Signal, WritableMode};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
-use std::collections::{HashMap, HashSet};
+use serde::Serialize;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::str::FromStr;
@@ -95,15 +95,16 @@ where
     V: Serialize + Default + DeserializeOwned + Clone + Send + Sync + 'static,
     M: AccessMode,
 {
-    let mut known_keys = HashSet::new();
+    let mut known_cache = HashMap::new();
 
     let prefix = format!("{}.", path);
     let existing = store.scan_prefix(&prefix)?;
-    for (fpath, _) in existing {
+    for (fpath, val) in existing {
         if let Some(k_str) = fpath.strip_prefix(&prefix)
             && let Ok(k) = K::from_str(k_str)
+            && let Ok(v) = store.decode::<V>(&val)
         {
-            known_keys.insert(k);
+            known_cache.insert(k, v);
         }
     }
 
@@ -111,14 +112,14 @@ where
         for (k, v) in defaults {
             let full_path = format!("{}.{}", path, k);
             store.set(&full_path, &v)?;
-            known_keys.insert(k);
+            known_cache.insert(k, v);
         }
     }
 
     let core = ReactiveMapCore::new();
     {
-        let mut keys = core.known_keys.lock().unwrap();
-        *keys = known_keys;
+        let mut keys = core.cache.lock().unwrap();
+        *keys = known_cache;
     }
 
     let core_clone = core.clone();
@@ -132,8 +133,6 @@ where
             if let Some(key_str) = event.path.strip_prefix(&prefix_for_strip)
                 && let Ok(k) = K::from_str(key_str)
             {
-                let mut keys = core_clone.known_keys.lock().unwrap();
-
                 let new_val = event
                     .new
                     .as_ref()
@@ -143,27 +142,25 @@ where
                     .as_ref()
                     .and_then(|b| store_clone.decode::<V>(b).ok());
 
-                let change = match event.op {
-                    StoreOp::Set | StoreOp::Patch => {
-                        if keys.contains(&k) {
-                            MapChange::Update {
-                                key: k.clone(),
-                                old_value: old_val.unwrap_or_default(),
-                                new_value: new_val.unwrap_or_default(),
-                            }
-                        } else {
-                            keys.insert(k.clone());
-                            MapChange::Insert {
-                                key: k.clone(),
-                                value: new_val.unwrap_or_default(),
+                let change = {
+                    let mut keys = core_clone.cache.lock().unwrap();
+
+                    match event.op {
+                        StoreOp::Set | StoreOp::Patch => {
+                            if keys.contains_key(&k) {
+                                let old_value = old_val.unwrap_or_default();
+                                let new_value = new_val.unwrap_or_default();
+                                keys.insert(k.clone(), new_value.clone());
+                                MapChange::Update { key: k.clone(), old_value, new_value }
+                            } else {
+                                let val = new_val.unwrap_or_default();
+                                keys.insert(k.clone(), val.clone());
+                                MapChange::Insert { key: k.clone(), value: val }
                             }
                         }
-                    }
-                    StoreOp::Delete => {
-                        keys.remove(&k);
-                        MapChange::Remove {
-                            key: k.clone(),
-                            old_value: old_val.unwrap_or_default(),
+                        StoreOp::Delete => {
+                            keys.remove(&k);
+                            MapChange::Remove { key: k.clone(), old_value: old_val.unwrap_or_default() }
                         }
                     }
                 };

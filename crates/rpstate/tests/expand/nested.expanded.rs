@@ -1,21 +1,19 @@
 use rpstate_macros::rpstate;
-pub struct DatabaseConfig {
-    pub host: ::rpstate::Field<String, ::rpstate::DefaultStore, ::rpstate::WritableMode>,
+pub struct DatabaseConfig<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    pub host: ::rpstate::Field<String, S, ::rpstate::WritableMode>,
 }
 #[automatically_derived]
-impl ::core::clone::Clone for DatabaseConfig {
+impl<S: ::core::clone::Clone + ::rpstate::Store> ::core::clone::Clone
+for DatabaseConfig<S> {
     #[inline]
-    fn clone(&self) -> DatabaseConfig {
+    fn clone(&self) -> DatabaseConfig<S> {
         DatabaseConfig {
             host: ::core::clone::Clone::clone(&self.host),
         }
     }
 }
-impl DatabaseConfig {
-    pub fn new(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        namespace: &str,
-    ) -> ::rpstate::Result<Self> {
+impl<S: ::rpstate::Store> DatabaseConfig<S> {
+    pub fn new(store: &S, namespace: &str) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
             host: ::rpstate::store::field_with_path(
@@ -35,20 +33,16 @@ impl DatabaseConfig {
     pub fn __schema_field_host(&self) -> ::rpstate::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn host(
-        &self,
-    ) -> ::rpstate::Field<String, ::rpstate::DefaultStore, ::rpstate::WritableMode> {
+    pub fn host(&self) -> ::rpstate::Field<String, S, ::rpstate::WritableMode> {
         self.host.clone()
     }
 }
-impl ::rpstate::RpStateNode for DatabaseConfig {
-    fn new_node(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        path: &str,
-    ) -> ::rpstate::Result<Self> {
+impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for DatabaseConfig<S> {
+    fn new_node(store: &S, path: &str) -> ::rpstate::Result<Self> {
         Self::new(store, path)
     }
 }
+#[serde(crate = "::rpstate::serde")]
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct DatabaseConfig_Data {
@@ -62,8 +56,7 @@ pub struct DatabaseConfig_Data {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl _serde::Serialize for DatabaseConfig_Data {
         fn serialize<__S>(
@@ -95,8 +88,7 @@ const _: () = {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl<'de> _serde::Deserialize<'de> for DatabaseConfig_Data {
         fn deserialize<__D>(
@@ -309,43 +301,29 @@ impl ::core::fmt::Debug for DatabaseConfig_Data {
 }
 impl DatabaseConfig_Data {
     #[doc(hidden)]
-    pub fn __rpstate_load_from(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+    pub fn __rpstate_load_from<S: ::rpstate::Store>(
+        store: &S,
         prefix: &str,
     ) -> ::rpstate::Result<Self> {
         Ok(Self {
-            host: <::rpstate::DefaultStore as ::rpstate::Store>::get::<
+            host: <S as ::rpstate::Store>::get::<
                 String,
-            >(&**store, &Self::__rpstate_path(prefix, "host"))?
+            >(store, &::rpstate::join_path(prefix, "host"))?
                 .unwrap_or_else(|| "localhost".to_string()),
         })
     }
     #[doc(hidden)]
-    pub fn __rpstate_save_to(
+    pub fn __rpstate_save_to<S: ::rpstate::Store>(
         &self,
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
+        store: &S,
         prefix: &str,
     ) -> ::rpstate::Result<()> {
-        <::rpstate::DefaultStore as ::rpstate::Store>::set(
-            &**store,
-            &Self::__rpstate_path(prefix, "host"),
+        <S as ::rpstate::Store>::set(
+            &store,
+            &::rpstate::join_path(prefix, "host"),
             &self.host,
         )?;
         Ok(())
-    }
-    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
-        if prefix.is_empty() {
-            key.to_string()
-        } else {
-            ::alloc::__export::must_use({
-                ::alloc::fmt::format(
-                    format_args!(
-                        "{0}.{1}", prefix.trim_end_matches('.'), key
-                        .trim_start_matches('.'),
-                    ),
-                )
-            })
-        }
     }
 }
 impl ::rpstate::migration::types::RpType for DatabaseConfig_Data {
@@ -359,7 +337,7 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseConfig_Data {
         ::rpstate::migration::fields::FieldDescriptor {
             name: "host",
             type_hash: <String as ::rpstate::migration::types::RpType>::TYPE_HASH,
-            type_name: "stringify!(String)",
+            type_name: "String",
         },
     ];
     const VERSION: u32 = 0u32;
@@ -379,32 +357,33 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseConfig_Data {
         Ok(())
     }
 }
-impl ::rpstate::RpState for DatabaseConfig {
+impl<S: ::rpstate::Store> ::rpstate::RpState for DatabaseConfig<S> {
     type Data = DatabaseConfig_Data;
 }
-pub struct SystemSettings {
-    pub db: ::std::sync::Arc<DatabaseConfig>,
+pub struct SystemSettings<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    pub db: ::std::sync::Arc<DatabaseConfig<S>>,
 }
 #[automatically_derived]
-impl ::core::clone::Clone for SystemSettings {
+impl<S: ::core::clone::Clone + ::rpstate::Store> ::core::clone::Clone
+for SystemSettings<S> {
     #[inline]
-    fn clone(&self) -> SystemSettings {
+    fn clone(&self) -> SystemSettings<S> {
         SystemSettings {
             db: ::core::clone::Clone::clone(&self.db),
         }
     }
 }
-impl ::rpstate::StateScope for SystemSettings {
+impl<S: ::rpstate::Store> ::rpstate::StateScope for SystemSettings<S> {
     const PREFIX: &'static str = "sys";
 }
-impl SystemSettings {
-    pub fn new(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
+impl<S: ::rpstate::Store> SystemSettings<S> {
+    pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
             db: ::std::sync::Arc::new(
-                DatabaseConfig::new(
+                DatabaseConfig::<
+                    S,
+                >::new(
                     store,
                     &::alloc::__export::must_use({
                         ::alloc::fmt::format(
@@ -423,22 +402,26 @@ impl SystemSettings {
     pub fn __schema_field_db(&self) -> ::rpstate::ReadOnly<DatabaseConfig> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn db(&self) -> ::std::sync::Arc<DatabaseConfig> {
+    pub fn db(&self) -> ::std::sync::Arc<DatabaseConfig<S>> {
         self.db.clone()
     }
 }
-impl ::rpstate::RpStateNode for SystemSettings {
-    fn new_node(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        _path: &str,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl SystemSettings<::rpstate::DefaultStore> {
+    pub fn new() -> ::rpstate::Result<Self> {
+        let store = ::rpstate::global_store();
+        Self::new_with(&store)
     }
 }
+impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for SystemSettings<S> {
+    fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
+    }
+}
+#[serde(crate = "::rpstate::serde")]
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct SystemSettings_Data {
-    pub db: <DatabaseConfig as ::rpstate::RpState>::Data,
+    pub db: <DatabaseConfig<::rpstate::DefaultStore> as ::rpstate::RpState>::Data,
 }
 #[doc(hidden)]
 #[allow(
@@ -448,8 +431,7 @@ pub struct SystemSettings_Data {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl _serde::Serialize for SystemSettings_Data {
         fn serialize<__S>(
@@ -481,8 +463,7 @@ const _: () = {
     clippy::absolute_paths,
 )]
 const _: () = {
-    #[allow(unused_extern_crates, clippy::useless_attribute)]
-    extern crate serde as _serde;
+    use ::rpstate::serde as _serde;
     #[automatically_derived]
     impl<'de> _serde::Deserialize<'de> for SystemSettings_Data {
         fn deserialize<__D>(
@@ -589,7 +570,9 @@ const _: () = {
                     __A: _serde::de::SeqAccess<'de>,
                 {
                     let __field0 = match _serde::de::SeqAccess::next_element::<
-                        <DatabaseConfig as ::rpstate::RpState>::Data,
+                        <DatabaseConfig<
+                            ::rpstate::DefaultStore,
+                        > as ::rpstate::RpState>::Data,
                     >(&mut __seq)? {
                         _serde::__private228::Some(__value) => __value,
                         _serde::__private228::None => {
@@ -614,7 +597,9 @@ const _: () = {
                     __A: _serde::de::MapAccess<'de>,
                 {
                     let mut __field0: _serde::__private228::Option<
-                        <DatabaseConfig as ::rpstate::RpState>::Data,
+                        <DatabaseConfig<
+                            ::rpstate::DefaultStore,
+                        > as ::rpstate::RpState>::Data,
                     > = _serde::__private228::None;
                     while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                         __Field,
@@ -628,7 +613,9 @@ const _: () = {
                                 }
                                 __field0 = _serde::__private228::Some(
                                     _serde::de::MapAccess::next_value::<
-                                        <DatabaseConfig as ::rpstate::RpState>::Data,
+                                        <DatabaseConfig<
+                                            ::rpstate::DefaultStore,
+                                        > as ::rpstate::RpState>::Data,
                                     >(&mut __map)?,
                                 );
                             }
@@ -697,43 +684,7 @@ impl ::core::fmt::Debug for SystemSettings_Data {
         )
     }
 }
-impl SystemSettings_Data {
-    #[doc(hidden)]
-    pub fn __rpstate_load_from(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<Self> {
-        Ok(Self {
-            db: <DatabaseConfig as ::rpstate::RpState>::Data::__rpstate_load_from(
-                store,
-                &Self::__rpstate_path(prefix, "db"),
-            )?,
-        })
-    }
-    #[doc(hidden)]
-    pub fn __rpstate_save_to(
-        &self,
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-        prefix: &str,
-    ) -> ::rpstate::Result<()> {
-        self.db.__rpstate_save_to(store, &Self::__rpstate_path(prefix, "db"))?;
-        Ok(())
-    }
-    fn __rpstate_path(prefix: &str, key: &str) -> ::std::string::String {
-        if prefix.is_empty() {
-            key.to_string()
-        } else {
-            ::alloc::__export::must_use({
-                ::alloc::fmt::format(
-                    format_args!(
-                        "{0}.{1}", prefix.trim_end_matches('.'), key
-                        .trim_start_matches('.'),
-                    ),
-                )
-            })
-        }
-    }
-}
+impl SystemSettings_Data {}
 impl ::rpstate::migration::types::RpType for SystemSettings_Data {
     const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
         "SystemSettings_Data".as_bytes(),
@@ -745,8 +696,10 @@ impl ::rpstate::migration::fields::RpStateFields for SystemSettings_Data {
         ::rpstate::migration::fields::FieldDescriptor {
             name: "db",
             type_hash: 0xDEADBEEF
-                ^ <<DatabaseConfig as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
-            type_name: "stringify!(DatabaseConfig)",
+                ^ <<DatabaseConfig<
+                    ::rpstate::DefaultStore,
+                > as ::rpstate::RpState>::Data as ::rpstate::migration::types::RpType>::TYPE_HASH,
+            type_name: "DatabaseConfig",
         },
     ];
     const VERSION: u32 = 0u32;
@@ -774,14 +727,12 @@ impl ::rpstate::migration::fields::RpStateFields for SystemSettings_Data {
         Ok(())
     }
 }
-impl ::rpstate::RpState for SystemSettings {
+impl<S: ::rpstate::Store> ::rpstate::RpState for SystemSettings<S> {
     type Data = SystemSettings_Data;
 }
-impl ::rpstate::RpStateSlice for SystemSettings {
-    fn load_slice(
-        store: &::std::sync::Arc<::rpstate::DefaultStore>,
-    ) -> ::rpstate::Result<Self> {
-        Self::new(store)
+impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for SystemSettings<S> {
+    fn load_slice(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with(store)
     }
 }
 fn main() {}

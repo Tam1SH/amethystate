@@ -16,4 +16,7 @@ pub enum TextStoreError {
 
     #[error("Text path segment '{0}' not found")]
     PathSegmentMissing(String),
+
+    #[error("File watcher error: {0}")]
+    Watch(String),
 }

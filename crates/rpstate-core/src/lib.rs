@@ -9,6 +9,9 @@ pub mod primitives;
 pub mod scheme;
 mod state;
 
+#[cfg(feature = "test-utils")]
+pub mod test_utils;
+
 #[cfg(feature = "async")]
 pub use async_impl::*;
 

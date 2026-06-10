@@ -1,5 +1,6 @@
 use rpstate::store::builder::StoreBuilder;
-use rpstate::{Store, migrate};
+use rpstate::{migrate, RpData, Store};
+use rpstate_core::test_utils::unique_path;
 use rpstate_macros::rpstate;
 
 mod v1 {
@@ -7,37 +8,32 @@ mod v1 {
 
     #[rpstate(prefix = "app", version = 1)]
     pub struct Config {
-        #[state(default = "localhost".to_string())]
+        #[state(default = "localhostv1".to_string())]
         pub host: String,
     }
 }
 
 #[rpstate(prefix = "app", version = 2)]
 pub struct Config {
-    #[state(default = "localhost".to_string())]
+    #[state(default = "localhostv2".to_string())]
     pub address: String,
 
     #[state(default = 8080)]
     pub port: u16,
 }
 
-migrate! {
-    v1::Config_Data => Config_Data,
-    rename: [host => address],
-    |old| {
-        Ok(Self {
-            address: old.host,
-            port: 9090,
-        })
-    }
+#[migrate]
+#[rename(host => address)]
+fn migrate_config_v1_to_v2(old: RpData<v1::Config>) -> rpstate::Result<RpData<Config>> {
+    Ok(RpData::<Config> {
+        address: old.host,
+        port: 9090,
+    })
 }
 
 #[test]
 fn test_decentralized_codegen_migration() {
-    let path = std::env::temp_dir().join("rpstate_integration_test.redb");
-    if path.exists() {
-        std::fs::remove_file(&path).ok();
-    }
+    let path = unique_path("rpstate_integration_test.redb");
 
     {
         let store = StoreBuilder::new(&path).build().unwrap();
@@ -45,10 +41,12 @@ fn test_decentralized_codegen_migration() {
         config.host().set("10.0.0.1".to_string()).unwrap();
     }
 
-    let (store, _) = StoreBuilder::new(&path)
+    let (store, reports) = StoreBuilder::new(&path)
         .collect_migrations()
         .build()
         .unwrap();
+
+    assert!(!reports.has_failures());
 
     let config = Config::new_with(&store).expect("Failed to create Config");
 

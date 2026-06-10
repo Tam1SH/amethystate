@@ -1,9 +1,8 @@
 pub mod document;
 pub mod error;
-pub mod events;
 #[cfg(feature = "json")]
 pub mod json;
-pub mod raw_storage;
+pub mod migration;
 #[cfg(feature = "ron")]
 pub mod ron;
 pub mod store;
@@ -29,12 +28,12 @@ macro_rules! define_store_test_suite {
         #[cfg(test)]
         mod store_tests {
             use super::*;
-            use crate::store::config::StoreConfig;
-            use crate::store::{Store, StoreEvent, StoreOp, SubscriptionKind};
             use parking_lot::Mutex;
             use std::path::PathBuf;
             use std::sync::Arc;
             use std::time::{Duration, SystemTime, UNIX_EPOCH};
+            use $crate::store::config::StoreConfig;
+            use $crate::store::{Store, StoreEvent, StoreOp, SubscriptionKind};
 
             fn unique_test_path(suffix: &str) -> PathBuf {
                 let nanos = SystemTime::now()

@@ -1,18 +1,9 @@
+use crate::store::util::DeadNotifier;
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 use tracing::debug;
-
-struct DeadNotifier(Arc<(Mutex<bool>, Condvar)>);
-
-impl Drop for DeadNotifier {
-    fn drop(&mut self) {
-        let (lock, cvar) = &*self.0;
-        *lock.lock().unwrap() = true;
-        cvar.notify_all();
-    }
-}
 
 /// Runs `op` on a fixed interval until dropped.
 /// If `op` panics, the guard mutex is poisoned — detectable via `is_poisoned()`.
@@ -36,8 +27,8 @@ impl Ticker {
         let dead_inner = dead.clone();
 
         let handle = thread::spawn(move || {
-            let _hold = guard_inner.lock().unwrap();
             let _notify = DeadNotifier(dead_inner);
+            let _hold = guard_inner.lock().unwrap();
 
             loop {
                 match rx.recv_timeout(interval) {

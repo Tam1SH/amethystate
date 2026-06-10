@@ -115,9 +115,8 @@ where
     let arena = use_context::<DefaultArena>().expect("rpstate-leptos: Arena not found");
     let (signal, set_signal) = signal(arena.get_field(handle));
 
-    let set_signal_clone = set_signal.clone();
     let sub = arena.subscribe_field(handle, move |val| {
-        set_signal_clone.set(val);
+        set_signal.set(val);
     });
     on_cleanup(move || drop(sub));
 

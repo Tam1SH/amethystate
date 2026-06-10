@@ -1,4 +1,5 @@
 #![cfg(not(target_arch = "wasm32"))]
+use rpstate::test_utils::unique_store;
 use rpstate::{
     DefaultStore, Field, IntoPipeline, MapChange, ReactiveMap, Result as RpResult, Store,
     WritableMode, rpstate,
@@ -17,21 +18,6 @@ pub struct TestState {
 
     #[state(default = {})]
     pub sessions: ReactiveMap<String, String>,
-}
-
-fn unique_store(suffix: &str) -> DefaultStore {
-    use rpstate::store::config::StoreConfig;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let path = std::env::temp_dir().join(format!("rpstate-arena-test-{suffix}-{nanos}.json"));
-
-    DefaultStore::open(StoreConfig::new(path), Default::default())
-        .unwrap()
-        .0
 }
 
 #[test]

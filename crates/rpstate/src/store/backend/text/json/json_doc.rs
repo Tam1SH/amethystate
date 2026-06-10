@@ -1,5 +1,6 @@
 use crate::Result;
 use crate::codec::CodecError;
+use crate::store::CodecFormat;
 use crate::store::backend::text::document::{
     Navigable, TextDocument, generic_delete, generic_get, generic_scan, generic_set,
 };
@@ -45,6 +46,10 @@ impl Navigable for serde_json::Value {
 
 impl TextDocument for JsonDocument {
     type Node = serde_json::Value;
+
+    fn format() -> CodecFormat {
+        CodecFormat::Json
+    }
 
     fn get(&self, parts: &[&str]) -> Option<&Self::Node> {
         generic_get(&self.0, parts)

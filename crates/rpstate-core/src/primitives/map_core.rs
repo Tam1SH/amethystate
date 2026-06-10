@@ -1,9 +1,9 @@
-use crate::SignalSubscription;
 use crate::change::MapChange;
 use crate::primitives::intercept::{InterceptDisposer, InterceptGuard};
-use serde::Serialize;
+use crate::SignalSubscription;
 use serde::de::DeserializeOwned;
-use std::collections::{HashMap, HashSet};
+use serde::Serialize;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::str::FromStr;
@@ -36,8 +36,7 @@ pub struct ReactiveMapCore<K, V> {
     pub subscribers_key: Arc<Mutex<HashMap<K, Vec<(u64, SubscriberKey<K, V>)>>>>,
     pub next_id: Arc<AtomicU64>,
     pub intercept_depth: Arc<AtomicUsize>,
-    //TODO: cache Arc<Mutex<HashMap<K, V>>>
-    pub known_keys: Arc<Mutex<HashSet<K>>>,
+    pub cache: Arc<Mutex<HashMap<K, V>>>,
 }
 
 impl<K, V> Clone for ReactiveMapCore<K, V> {
@@ -49,19 +48,19 @@ impl<K, V> Clone for ReactiveMapCore<K, V> {
             subscribers_key: self.subscribers_key.clone(),
             next_id: self.next_id.clone(),
             intercept_depth: self.intercept_depth.clone(),
-            known_keys: self.known_keys.clone(),
+            cache: self.cache.clone(),
         }
     }
 }
 
-impl<K: std::fmt::Debug, V> std::fmt::Debug for ReactiveMapCore<K, V> {
+impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for ReactiveMapCore<K, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut d = f.debug_struct("ReactiveMapCore");
 
-        if let Ok(keys) = self.known_keys.try_lock() {
-            d.field("known_keys", &*keys);
+        if let Ok(cache) = self.cache.try_lock() {
+            d.field("cache", &*cache);
         } else {
-            d.field("known_keys", &"<locked>");
+            d.field("cache", &"<locked>");
         }
 
         let interceptors_count = self
@@ -96,7 +95,7 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
             subscribers_key: Arc::new(Mutex::new(HashMap::new())),
             next_id: Arc::new(AtomicU64::new(0)),
             intercept_depth: Arc::new(AtomicUsize::new(0)),
-            known_keys: Arc::new(Mutex::new(HashSet::new())),
+            cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -234,6 +233,7 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
     }
 
     pub fn notify(&self, change: &MapChange<K, V>) {
+
         if let Some(k) = change.key()
             && let Ok(lock) = self.subscribers_key.lock()
             && let Some(cbs) = lock.get(k)
@@ -242,6 +242,7 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
                 cb(change);
             }
         }
+
         if let Ok(lock) = self.subscribers_any.lock() {
             for (_, cb) in lock.iter() {
                 cb(change);

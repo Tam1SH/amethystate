@@ -1,14 +1,14 @@
 use crate::store::{
-    RawStorage, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp, SubscriptionEntry,
-    SubscriptionId, SubscriptionKind,
+    MigrationBackend, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp,
+    SubscriptionEntry, SubscriptionId, SubscriptionKind,
 };
 use error::RedbStoreError;
-use raw_storage::RedbRawStorage;
+use migration::RedbMigrationBackend;
 use redb::{Database, ReadableDatabase};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::collections::HashMap;
-use tables::{TABLE_DATA, TABLE_DIFF_LOG, TABLE_LOG, TABLE_META, TABLE_MIGRATION_LOG};
+use tables::{TABLE_DATA, TABLE_DIFF_LOG, TABLE_META, TABLE_MIGRATION_LOG};
 
 use crate::store::config::StoreConfig;
 use crate::{MigrationReport, Result};
@@ -17,20 +17,17 @@ use crate::codec::CodecError;
 use crate::migration::engine::{MigrationEngine, StorageProvider};
 use crate::migration::set::MigrationSet;
 use crate::store::backend::redb::tables::TABLE_SCHEMA_SNAPSHOT;
+use crate::store::backend::utils;
 use crate::store::util::debouncer::Debouncer;
-use bytes::Bytes;
 use parking_lot::{Mutex, RwLock};
-use rmp_serde::Serializer;
 use rmp_serde::config::BytesMode;
-use std::sync::Arc;
+use rmp_serde::Serializer;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::thread::JoinHandle;
-use std::{thread, time::Duration};
+use std::sync::Arc;
 use tracing::{info, warn};
 
 pub mod error;
-mod events;
-mod raw_storage;
+mod migration;
 mod tables;
 
 const BUF_SIZE: usize = 64 * 1024;
@@ -44,18 +41,68 @@ thread_local! {
         std::cell::RefCell::new(Vec::with_capacity(BUF_SIZE));
 }
 
-#[derive(Clone)]
-pub struct RedbStore {
+struct RedbStoreInner {
     db: Arc<Database>,
-    //TODO: ordering?
-    pending: Arc<Mutex<HashMap<Arc<str>, Option<Bytes>>>>,
+        pending: Arc<Mutex<HashMap<Arc<str>, Option<Vec<u8>>>>>,
     debouncer: Arc<Debouncer>,
     subscriptions: Arc<RwLock<Vec<SubscriptionEntry>>>,
     next_sub_id: Arc<AtomicU64>,
-
     write_lock: Arc<Mutex<()>>,
-    watcher_tx: Arc<std::sync::mpsc::Sender<()>>,
-    watcher_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+}
+
+impl RedbStoreInner {
+    pub fn close(&self) -> Result<()> {
+        info!("Closing RedbStore...");
+        self.save_now()?;
+        Ok(())
+    }
+
+    pub fn save_now(&self) -> Result<()> {
+        self.flush_prefix("")
+    }
+
+    pub fn flush_prefix(&self, prefix: &str) -> Result<()> {
+        let _write_guard = self.write_lock.lock();
+
+        let changes = {
+            let mut lock = self.pending.lock();
+            utils::drain_pending_prefix(&mut *lock, prefix)
+        };
+
+        let txn = self.db.begin_write().map_err(RedbStoreError::from)?;
+        {
+            let mut table = txn.open_table(TABLE_DATA).map_err(RedbStoreError::from)?;
+            for (path, opt_bytes) in changes {
+                match opt_bytes {
+                    Some(b) => {
+                        table.insert(&*path, &b[..]).map_err(RedbStoreError::from)?;
+                    }
+                    None => {
+                        table.remove(&*path).map_err(RedbStoreError::from)?;
+                    }
+                }
+            }
+        }
+        txn.commit().map_err(RedbStoreError::from)?;
+        Ok(())
+    }
+
+    fn check_debouncer(&self) {
+        if self.debouncer.is_poisoned() {
+            panic!("debouncer thread is dead — store integrity cannot be guaranteed");
+        }
+    }
+}
+
+impl Drop for RedbStoreInner {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
+#[derive(Clone)]
+pub struct RedbStore {
+    inner: Arc<RedbStoreInner>,
 }
 
 impl RedbStore {
@@ -69,9 +116,6 @@ impl RedbStore {
         {
             let _ = write_txn
                 .open_table(TABLE_DATA)
-                .map_err(RedbStoreError::from)?;
-            let _ = write_txn
-                .open_table(TABLE_LOG)
                 .map_err(RedbStoreError::from)?;
             let _ = write_txn
                 .open_table(TABLE_META)
@@ -88,11 +132,8 @@ impl RedbStore {
         }
         write_txn.commit().map_err(RedbStoreError::from)?;
 
-        let pending = Arc::new(Mutex::new(HashMap::<Arc<str>, Option<Bytes>>::new()));
+        let pending = Arc::new(Mutex::new(HashMap::<Arc<str>, Option<Vec<u8>>>::new()));
         let subscriptions = Arc::new(RwLock::new(Vec::new()));
-        let (w_tx, w_rx) = std::sync::mpsc::channel();
-        let db_inner = db.clone();
-        let subs_inner = subscriptions.clone();
 
         let db_save = db.clone();
         let pending_save = pending.clone();
@@ -144,103 +185,23 @@ impl RedbStore {
             }
         });
 
-        let watcher_handle = thread::spawn(move || {
-            while w_rx.recv_timeout(Duration::from_millis(300)).is_err() {
-                let _ = events::process_inbox(&db_inner, &subs_inner);
-            }
-        });
-
-        let store = Self {
-            db: db.clone(),
+        let inner = Arc::new(RedbStoreInner {
+            db,
             pending,
             debouncer: Arc::new(debouncer),
-            subscriptions: subscriptions.clone(),
+            subscriptions,
             next_sub_id: Arc::new(AtomicU64::new(1)),
             write_lock,
-            watcher_tx: Arc::new(w_tx),
-            watcher_handle: Arc::new(Mutex::new(Some(watcher_handle))),
-        };
+        });
 
+        let store = Self { inner };
         let report = store.run_migrations(migration_set)?;
 
         Ok((store, report))
     }
 
-    pub fn close(&mut self) -> Result<()> {
-        info!("Closing RedbStore explicitly...");
-
-        let _ = self.watcher_tx.send(());
-        if let Some(handle) = self.watcher_handle.lock().take() {
-            let _ = handle.join();
-        }
-
-        self.save_now()?;
-
-        Ok(())
-    }
-
-    pub fn flush_prefix(&self, prefix: &str) -> Result<()> {
-        let _write_guard = self.write_lock.lock();
-
-        let changes = {
-            let mut lock = self.pending.lock();
-            if lock.is_empty() {
-                return Ok(());
-            }
-
-            let mut matched = HashMap::new();
-
-            if prefix.is_empty() {
-                matched = std::mem::take(&mut *lock);
-            } else {
-                let prefix_dot = format!("{}.", prefix);
-                let keys_to_remove: Vec<Arc<str>> = lock
-                    .keys()
-                    .filter(|k| k.starts_with(&prefix_dot) || &***k == prefix)
-                    .cloned()
-                    .collect();
-
-                for k in keys_to_remove {
-                    if let Some(v) = lock.remove(&k) {
-                        matched.insert(k, v);
-                    }
-                }
-            }
-
-            if matched.is_empty() {
-                return Ok(());
-            }
-            matched
-        };
-
-        let txn = self.db.begin_write().map_err(RedbStoreError::from)?;
-        {
-            let mut table = txn.open_table(TABLE_DATA).map_err(RedbStoreError::from)?;
-            for (path, opt_bytes) in changes {
-                match opt_bytes {
-                    Some(b) => {
-                        table.insert(&*path, &b[..]).map_err(RedbStoreError::from)?;
-                    }
-                    None => {
-                        table.remove(&*path).map_err(RedbStoreError::from)?;
-                    }
-                }
-            }
-        }
-        txn.commit().map_err(RedbStoreError::from)?;
-        Ok(())
-    }
-
-    fn check_debouncer(&self) {
-        if self.debouncer.is_poisoned() {
-            panic!("debouncer thread is dead — store integrity cannot be guaranteed");
-        }
-    }
-}
-
-impl Drop for RedbStore {
-    fn drop(&mut self) {
-        let _ = self.close();
+    pub fn close(&self) -> Result<()> {
+        self.inner.close()
     }
 }
 
@@ -253,12 +214,12 @@ impl SchemaAwareStore for RedbStore {
         impl<'a> StorageProvider for RedbProvider<'a> {
             fn atomic<F, T>(&self, f: F) -> Result<T>
             where
-                F: FnOnce(&mut dyn RawStorage) -> Result<T>,
+                F: FnOnce(&mut dyn MigrationBackend) -> Result<T>,
             {
                 let write_txn = self.db.begin_write().map_err(RedbStoreError::from)?;
 
                 let res = {
-                    let mut storage = RedbRawStorage::new(&write_txn);
+                    let mut storage = RedbMigrationBackend::new(&write_txn);
                     f(&mut storage)?
                 };
 
@@ -267,7 +228,7 @@ impl SchemaAwareStore for RedbStore {
             }
         }
 
-        let provider = RedbProvider { db: &self.db };
+        let provider = RedbProvider { db: &self.inner.db };
         let engine = MigrationEngine::new(&provider);
         engine.run(mset)
     }
@@ -276,18 +237,20 @@ impl SchemaAwareStore for RedbStore {
 impl Store for RedbStore {
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
         {
-            let lock = self.pending.lock();
+            let lock = self.inner.pending.lock();
             if let Some(opt_bytes) = lock.get(path) {
                 return match opt_bytes {
                     Some(bytes) => Ok(Some(
-                        rmp_serde::from_slice(bytes).map_err(CodecError::from)?,
+                        rmp_serde::from_slice(bytes)
+                            .map_err(CodecError::from)
+                            .map_err(RedbStoreError::from)?,
                     )),
                     None => Ok(None),
                 };
             }
         }
 
-        let read_txn = self.db.begin_read().map_err(RedbStoreError::from)?;
+        let read_txn = self.inner.db.begin_read().map_err(RedbStoreError::from)?;
         let table = read_txn
             .open_table(TABLE_DATA)
             .map_err(RedbStoreError::from)?;
@@ -295,39 +258,42 @@ impl Store for RedbStore {
             Some(access_guard) => {
                 let bytes = access_guard.value();
                 Ok(Some(
-                    rmp_serde::from_slice(bytes).map_err(CodecError::from)?,
+                    rmp_serde::from_slice(bytes)
+                        .map_err(CodecError::from)
+                        .map_err(RedbStoreError::from)?,
                 ))
             }
             None => Ok(None),
         }
     }
+
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
         self.set_owned(Arc::from(path), value)
     }
 
     fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
-        self.check_debouncer();
+        self.inner.check_debouncer();
         let bytes = SERIALIZATION_BUFFER.with(|buf| {
             let mut b = buf.borrow_mut();
             b.clear();
             let mut ser = Serializer::new(&mut *b).with_bytes(BytesMode::ForceAll);
             value.serialize(&mut ser).map_err(CodecError::from)?;
 
-            Ok::<Bytes, RedbStoreError>(Bytes::copy_from_slice(&b))
+            Ok::<Vec<u8>, RedbStoreError>(Vec::from(&b[..]))
         })?;
 
         let old_bytes = {
-            let lock = self.pending.lock();
+            let lock = self.inner.pending.lock();
             lock.get(&*path).cloned().flatten()
         };
 
         {
-            let mut lock = self.pending.lock();
+            let mut lock = self.inner.pending.lock();
             lock.insert(path.clone(), Some(bytes.clone()));
         }
 
-        events::emit_local(
-            &self.subscriptions,
+        utils::emit_events(
+            &self.inner.subscriptions,
             StoreEvent {
                 path: path.clone(),
                 op: StoreOp::Set,
@@ -336,18 +302,18 @@ impl Store for RedbStore {
             },
         );
 
-        self.debouncer.schedule();
+        self.inner.debouncer.schedule();
         Ok(())
     }
 
     fn save_now(&self) -> Result<()> {
-        self.flush_prefix("")
+        self.inner.save_now()
     }
 
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Bytes)>> {
+    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
         let mut results = Vec::new();
 
-        let read_txn = self.db.begin_read().map_err(RedbStoreError::from)?;
+        let read_txn = self.inner.db.begin_read().map_err(RedbStoreError::from)?;
         let table = read_txn
             .open_table(TABLE_DATA)
             .map_err(RedbStoreError::from)?;
@@ -357,7 +323,7 @@ impl Store for RedbStore {
             let (k, v) = result.map_err(RedbStoreError::from)?;
             let key_str = k.value();
             if key_str.starts_with(prefix) {
-                results.push((key_str.to_string(), Bytes::copy_from_slice(v.value())));
+                results.push((key_str.to_string(), Vec::from(&v.value()[..])));
             } else {
                 break;
             }
@@ -365,7 +331,7 @@ impl Store for RedbStore {
 
         let mut pending_map = HashMap::new();
         {
-            let lock = self.pending.lock();
+            let lock = self.inner.pending.lock();
             for (k, opt_v) in lock.iter() {
                 if k.starts_with(prefix) {
                     pending_map.insert(k.to_string(), opt_v.clone());
@@ -384,37 +350,37 @@ impl Store for RedbStore {
                 results.retain(|(rk, _)| *rk != k);
             }
         }
-
+        
         Ok(results)
     }
 
     fn delete(&self, path: &str) -> Result<()> {
-        self.check_debouncer();
+        self.inner.check_debouncer();
         let path_arc: Arc<str> = Arc::from(path);
 
         let old_bytes = {
-            let lock = self.pending.lock();
+            let lock = self.inner.pending.lock();
             if let Some(p) = lock.get(path) {
                 p.clone()
             } else {
-                let read_txn = self.db.begin_read().map_err(RedbStoreError::from)?;
+                let read_txn = self.inner.db.begin_read().map_err(RedbStoreError::from)?;
                 let table = read_txn
                     .open_table(TABLE_DATA)
                     .map_err(RedbStoreError::from)?;
                 table
                     .get(path)
                     .map_err(RedbStoreError::from)?
-                    .map(|v| Bytes::copy_from_slice(v.value()))
+                    .map(|v| Vec::from(&v.value()[..]))
             }
         };
 
         {
-            let mut lock = self.pending.lock();
+            let mut lock = self.inner.pending.lock();
             lock.insert(path_arc.clone(), None);
         }
 
-        events::emit_local(
-            &self.subscriptions,
+        utils::emit_events(
+            &self.inner.subscriptions,
             StoreEvent {
                 path: path_arc,
                 op: StoreOp::Delete,
@@ -423,20 +389,21 @@ impl Store for RedbStore {
             },
         );
 
-        self.debouncer.schedule();
+        self.inner.debouncer.schedule();
         Ok(())
     }
 
     fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId {
-        let id = self.next_sub_id.fetch_add(1, Ordering::Relaxed);
-        self.subscriptions
+        let id = self.inner.next_sub_id.fetch_add(1, Ordering::Relaxed);
+        self.inner
+            .subscriptions
             .write()
             .push(SubscriptionEntry { id, kind, callback });
         id
     }
 
     fn unsubscribe(&self, id: SubscriptionId) {
-        self.subscriptions.write().retain(|s| s.id != id);
+        self.inner.subscriptions.write().retain(|s| s.id != id);
     }
 
     fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
@@ -454,12 +421,12 @@ impl Store for RedbStore {
     }
 
     fn flush_prefix(&self, prefix: &str) -> Result<()> {
-        Self::flush_prefix(self, prefix)
+        self.inner.flush_prefix(prefix)
     }
 
     fn is_initialized(&self, namespace: &str) -> Result<bool> {
         let key = format!("__init::{namespace}");
-        let read_txn = self.db.begin_read().map_err(RedbStoreError::from)?;
+        let read_txn = self.inner.db.begin_read().map_err(RedbStoreError::from)?;
         let table = read_txn
             .open_table(TABLE_META)
             .map_err(RedbStoreError::from)?;
@@ -471,7 +438,7 @@ impl Store for RedbStore {
 
     fn mark_initialized(&self, namespace: &str) -> Result<()> {
         let key = format!("__init::{namespace}");
-        let write_txn = self.db.begin_write().map_err(RedbStoreError::from)?;
+        let write_txn = self.inner.db.begin_write().map_err(RedbStoreError::from)?;
         {
             let mut table = write_txn
                 .open_table(TABLE_META)
@@ -488,23 +455,14 @@ impl Store for RedbStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::StoreBuilder;
     use crate::migration::fields::FieldDescriptor;
     use crate::migration::{MigrationError, MigrationPlan};
-    use redb::ReadableTableMetadata;
-    use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
-    use tracing_test::traced_test;
+    use rpstate_core::test_utils::unique_path;
+    use serial_test::serial;
+    use std::thread;
+    use std::time::Duration;
 
     const EMPTY_FIELDS: &[FieldDescriptor] = &[];
-
-    fn unique_path(suffix: &str) -> PathBuf {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        std::env::temp_dir().join(format!("rpstate-redb-{suffix}-{nanos}.redb"))
-    }
 
     #[test]
     fn test_set_get_immediate() {
@@ -518,6 +476,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_debouncer_persistence() {
         let path = unique_path("debounce");
 
@@ -529,7 +488,7 @@ mod tests {
         store.set("config.port", &8080u16).unwrap();
 
         {
-            let read_txn = store.db.begin_read().unwrap();
+            let read_txn = store.inner.db.begin_read().unwrap();
             let table = read_txn.open_table(TABLE_DATA).unwrap();
             assert!(table.get("config.port").unwrap().is_none());
         }
@@ -537,7 +496,7 @@ mod tests {
         thread::sleep(Duration::from_millis(500));
 
         {
-            let read_txn = store.db.begin_read().unwrap();
+            let read_txn = store.inner.db.begin_read().unwrap();
             let table = read_txn.open_table(TABLE_DATA).unwrap();
             assert!(table.get("config.port").unwrap().is_some());
         }
@@ -565,51 +524,6 @@ mod tests {
     }
 
     #[test]
-    fn test_inbox_watcher_sync() {
-        let path = unique_path("inbox");
-        let (store, _) = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
-
-        let (tx, rx) = std::sync::mpsc::channel();
-        store.subscribe(
-            SubscriptionKind::Any,
-            Arc::new(move |evt| {
-                let _ = tx.send(evt.clone());
-            }),
-        );
-
-        {
-            let write_txn = store.db.begin_write().unwrap();
-            {
-                let mut data_table = write_txn.open_table(TABLE_DATA).unwrap();
-                let mut log_table = write_txn.open_table(TABLE_LOG).unwrap();
-
-                let val = rmp_serde::to_vec(&"external_change").unwrap();
-                data_table.insert("app.version", val.as_slice()).unwrap();
-
-                log_table.insert(1u64, "app.version").unwrap();
-            }
-            write_txn.commit().unwrap();
-        }
-
-        let event = rx
-            .recv_timeout(Duration::from_secs(2))
-            .expect("Watcher should detect external change");
-
-        assert_eq!(&*event.path, "app.version");
-        assert_eq!(event.op, StoreOp::Set);
-
-        let val: String = store.get("app.version").unwrap().unwrap();
-        assert_eq!(val, "external_change");
-
-        thread::sleep(Duration::from_millis(100));
-        {
-            let read_txn = store.db.begin_read().unwrap();
-            let log_table = read_txn.open_table(TABLE_LOG).unwrap();
-            assert_eq!(log_table.len().unwrap(), 0);
-        }
-    }
-
-    #[test]
     fn test_delete_flow() {
         let path = unique_path("delete");
         let (store, _) = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
@@ -622,7 +536,7 @@ mod tests {
 
         store.save_now().unwrap();
 
-        let read_txn = store.db.begin_read().unwrap();
+        let read_txn = store.inner.db.begin_read().unwrap();
         let table = read_txn.open_table(TABLE_DATA).unwrap();
         assert!(table.get("temp.key").unwrap().is_none());
     }
@@ -641,7 +555,7 @@ mod tests {
     fn test_deterministic_closure_and_reopen() {
         let path = unique_path("closure");
         {
-            let (mut store, _) =
+            let (store, _) =
                 RedbStore::open(StoreConfig::new(&path), MigrationSet::default()).unwrap();
             store.set("test.key", &"hello".to_string()).unwrap();
             store.close().expect("Explicit close failed");
@@ -676,7 +590,7 @@ mod tests {
         config.save_debounce = Duration::from_secs(3600);
 
         {
-            let (mut store, _) = RedbStore::open(config, MigrationSet::default()).unwrap();
+            let (store, _) = RedbStore::open(config, MigrationSet::default()).unwrap();
             store.set("urgent.data", &true).unwrap();
             store.close().unwrap();
         }
@@ -699,11 +613,11 @@ mod tests {
         store.set("ui.theme", &"dark".to_string()).unwrap();
 
         {
-            let pending = store.pending.lock();
+            let pending = store.inner.pending.lock();
             assert_eq!(pending.len(), 3);
         }
         {
-            let read_txn = store.db.begin_read().unwrap();
+            let read_txn = store.inner.db.begin_read().unwrap();
             let table = read_txn.open_table(TABLE_DATA).unwrap();
             assert!(table.get("net.host").unwrap().is_none());
             assert!(table.get("ui.theme").unwrap().is_none());
@@ -712,7 +626,7 @@ mod tests {
         store.flush_prefix("net").unwrap();
 
         {
-            let read_txn = store.db.begin_read().unwrap();
+            let read_txn = store.inner.db.begin_read().unwrap();
             let table = read_txn.open_table(TABLE_DATA).unwrap();
             assert_eq!(
                 store
@@ -733,7 +647,7 @@ mod tests {
         }
 
         {
-            let pending = store.pending.lock();
+            let pending = store.inner.pending.lock();
             assert_eq!(
                 pending.len(),
                 1,
@@ -746,14 +660,14 @@ mod tests {
 
         store.flush_prefix("").unwrap();
         {
-            let pending = store.pending.lock();
+            let pending = store.inner.pending.lock();
             assert!(
                 pending.is_empty(),
                 "Pending buffer should be completely empty"
             );
         }
         {
-            let read_txn = store.db.begin_read().unwrap();
+            let read_txn = store.inner.db.begin_read().unwrap();
             let table = read_txn.open_table(TABLE_DATA).unwrap();
             assert!(
                 table.get("ui.theme").unwrap().is_some(),
@@ -785,78 +699,6 @@ mod tests {
         store.mark_initialized("settings").unwrap();
         assert!(store.is_initialized("settings").unwrap());
         assert!(!store.is_initialized("other").unwrap());
-    }
-
-    #[traced_test]
-    #[test]
-    fn test_drift_automatic_warning_log() {
-        let path = unique_path("tracing_drift");
-        let prefix = "app_settings";
-
-        {
-            let fields_v1: &'static [FieldDescriptor] = &[
-                FieldDescriptor {
-                    name: "port",
-                    type_hash: 10,
-                    type_name: "u16",
-                },
-                FieldDescriptor {
-                    name: "host",
-                    type_hash: 20,
-                    type_name: "String",
-                },
-            ];
-            let hash_v1 = 111;
-
-            let mset = MigrationSet::default().add(
-                prefix,
-                MigrationPlan::new().step(1, "v1", |_| Ok(())),
-                hash_v1,
-                fields_v1,
-                &[],
-            );
-
-            let (store, _) = RedbStore::open(StoreConfig::new(&path), mset).unwrap();
-            store.save_now().unwrap();
-        }
-
-        let fields_v2: &'static [FieldDescriptor] = &[
-            FieldDescriptor {
-                name: "port",
-                type_hash: 30,
-                type_name: "u32",
-            },
-            FieldDescriptor {
-                name: "timeout",
-                type_hash: 40,
-                type_name: "Duration",
-            },
-        ];
-        let hash_v2 = 222;
-
-        let (_store, report) = StoreBuilder::new(&path)
-            .migrations(|m| {
-                m.for_prefix(prefix)
-                    .step(1, "v1", |_| Ok(()))
-                    .depends_on_raw("none");
-
-                let plan = m.prefix_plan(prefix);
-                plan.schema_hash = hash_v2;
-                plan.fields = fields_v2;
-            })
-            .build()
-            .unwrap();
-
-        assert!(report.has_drift(), "Report should detect drift");
-
-        assert!(logs_contain(&format!(
-            "Schema drift detected in prefix '{}'",
-            prefix
-        )));
-        assert!(logs_contain("+ field 'timeout': Duration"));
-        assert!(logs_contain("- field 'host'"));
-        assert!(logs_contain("~ field 'port': u16 -> u32"));
-        assert!(logs_contain("Suggestion: increment version"));
     }
 
     #[test]
@@ -895,6 +737,7 @@ mod tests {
         assert_eq!(val, "1.1.1.1");
     }
     #[test]
+    #[serial]
     fn test_debouncer_retains_buffer_on_simulated_transaction_failure() {
         let path = unique_path("debouncer_simulated_fail");
 
@@ -910,7 +753,7 @@ mod tests {
         store.set(test_key, &test_value).unwrap();
 
         {
-            let pending = store.pending.lock();
+            let pending = store.inner.pending.lock();
             assert!(pending.contains_key(test_key));
         }
 
@@ -919,7 +762,7 @@ mod tests {
         SIMULATE_WRITE_FAILURE.store(false, Ordering::Relaxed);
 
         {
-            let pending = store.pending.lock();
+            let pending = store.inner.pending.lock();
             assert!(
                 pending.contains_key(test_key),
                 "The pending changes buffer should not be cleared when a transaction fails!"

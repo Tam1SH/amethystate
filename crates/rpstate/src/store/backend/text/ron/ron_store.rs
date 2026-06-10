@@ -4,9 +4,8 @@ use crate::store::backend::text::store::TextStore;
 use crate::store::config::StoreConfig;
 use crate::store::{Store, StoreCallback, SubscriptionId, SubscriptionKind};
 use crate::{MigrationReport, Result};
-use bytes::Bytes;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 #[derive(Clone, Debug)]
 pub struct RonStore(pub TextStore<RonDocument>);
@@ -34,7 +33,7 @@ impl Store for RonStore {
         self.0.save_now()
     }
 
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Bytes)>> {
+    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
         self.0.scan_prefix(prefix)
     }
 

@@ -9,3 +9,6 @@ examples/*/dioxus-settings.redb
 
 /profile.json.gz
 /crates/rpstate/*.profraw
+
+/mutants.out
+/mutants.out.old

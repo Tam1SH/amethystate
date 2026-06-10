@@ -51,7 +51,7 @@ pub fn generate_wasm_code(
         let fname = e.ident.as_ref().unwrap();
         let key_suffix = if let Some(lookup) = &e.lookup { lookup.to_string() }
         else if let Some(lookup_node) = &e.lookup_node { lookup_node.to_string() }
-        else { e.key.as_ref().map(|s| s.as_str()).unwrap_or(&fname.to_string()).to_string() };
+        else { e.key.as_deref().unwrap_or(&fname.to_string()).to_string() };
 
         let full_key = if e.lookup.is_some() || e.lookup_node.is_some() { key_suffix }
         else { format!("{}.{}", prefix_str, key_suffix) };
@@ -113,7 +113,7 @@ pub fn generate_wasm_code(
     } else {
         let nested_init_fields = entries.iter().map(|e| {
             let fname = e.ident.as_ref().unwrap();
-            let key_str = e.key.as_ref().map(|s| s.as_str()).unwrap_or(&fname.to_string()).to_string();
+            let key_str = e.key.as_deref().unwrap_or(&fname.to_string()).to_string();
             let ty = &e.ty;
             let fallback = e.default.as_ref().map(parse_default).unwrap_or_else(|| quote! { ::std::default::Default::default() });
 
@@ -174,11 +174,11 @@ pub fn generate_wasm_code(
 }
 
 fn get_type_ident(ty: &syn::Type) -> proc_macro2::TokenStream {
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            let ident = &segment.ident;
-            return quote! { #ident };
-        }
+    if let syn::Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+    {
+        let ident = &segment.ident;
+        return quote! { #ident };
     }
     quote! { #ty }
 }

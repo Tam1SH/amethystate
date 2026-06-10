@@ -1,4 +1,5 @@
 use rpstate::store::builder::StoreBuilder;
+use rpstate_core::test_utils::unique_path;
 use rpstate_macros::rpstate;
 
 #[rpstate]
@@ -24,10 +25,7 @@ pub struct Dashboard {
 
 #[test]
 fn test_deep_lookup_compilation_and_runtime() {
-    let path = std::env::temp_dir().join("deep_lookup.redb");
-    if path.exists() {
-        std::fs::remove_file(&path).ok();
-    }
+    let path = unique_path("deep_lookup.redb");
 
     let store = StoreBuilder::new(&path).build().unwrap();
 

@@ -4,7 +4,6 @@ use rpstate::Store;
 #[tokio::test]
 async fn test_tauri_plugin_commands() {
     use rpstate::{DefaultStore, StoreBuilder};
-    use std::sync::Arc;
     use tauri::Manager;
     let db_path = std::env::temp_dir().join("rpstate_tauri_test_store.redb");
     if db_path.exists() {
@@ -19,7 +18,7 @@ async fn test_tauri_plugin_commands() {
     let app = tauri::test::mock_app();
     app.manage(store.clone());
 
-    let state_store = app.state::<Arc<DefaultStore>>();
+    let state_store = app.state::<DefaultStore>();
 
     let val = tauri_plugin_rpstate::backend::commands::rpstate_get(
         state_store.clone(),

@@ -3,7 +3,7 @@ use proc_macro::TokenStream;
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
-use rpstate_macros_core::StoreFieldEntry;
+use rpstate_macros_core::{StoreFieldEntry, get_type_ident_str};
 use syn::{Data, DataStruct, DeriveInput, Fields, parse_macro_input};
 
 fn rpstate_arena_crate_path() -> TokenStream2 {
@@ -99,13 +99,4 @@ pub fn rpstate_framework_arena(_args: TokenStream, input: TokenStream) -> TokenS
     };
 
     TokenStream::from(expanded)
-}
-
-fn get_type_ident_str(ty: &syn::Type) -> String {
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            return segment.ident.to_string();
-        }
-    }
-    "any".to_string()
 }

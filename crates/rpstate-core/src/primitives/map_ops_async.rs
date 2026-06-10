@@ -1,6 +1,6 @@
-use crate::RpBackendAsync as RpBackend;
 use crate::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
-use crate::{MapChange, ReactiveMapCore, map_apply_remote_change};
+use crate::RpBackendAsync as RpBackend;
+use crate::{map_apply_remote_change, MapChange, ReactiveMapCore};
 
 use serde::de::DeserializeOwned;
 use std::fmt::Display;
@@ -134,7 +134,7 @@ where
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
-    let exists = core.known_keys.lock().unwrap().contains(&key);
+    let exists = core.cache.lock().unwrap().contains_key(&key);
     if !exists {
         return Ok(None);
     }
@@ -149,7 +149,7 @@ where
         map_apply_change_async(backend, core, path, change, notify_after_commit).await?;
         Ok(Some(old_value))
     } else {
-        core.known_keys.lock().unwrap().remove(&key);
+        core.cache.lock().unwrap().remove(&key);
         Ok(None)
     }
 }

@@ -28,4 +28,5 @@ rpstate-tauri = { workspace = true, optional = true }
 
 [dev-dependencies]
 any_spawner = { version = "0.3", features = ["tokio"] }
+rpstate = { workspace = true, features = ["test-utils"] }
 tokio = { workspace = true, features = ["macros", "rt", "time"] }

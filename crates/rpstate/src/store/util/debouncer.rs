@@ -1,19 +1,10 @@
+use crate::store::util::DeadNotifier;
 use std::sync::mpsc;
 use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 use tracing::debug;
-
-struct DeadNotifier(Arc<(Mutex<bool>, Condvar)>);
-
-impl Drop for DeadNotifier {
-    fn drop(&mut self) {
-        let (lock, cvar) = &*self.0;
-        *lock.lock().unwrap() = true;
-        cvar.notify_all();
-    }
-}
 
 pub struct Debouncer {
     tx: Option<mpsc::Sender<()>>,
@@ -38,8 +29,8 @@ impl Debouncer {
             // Hold the lock for the entire lifetime of the thread.
             // If op() panics, the guard is dropped and the mutex becomes
             // poisoned, which is detected in schedule() via is_poisoned().
-            let _hold = guard_inner.lock().unwrap();
             let _notify = DeadNotifier(dead_inner);
+            let _hold = guard_inner.lock().unwrap();
 
             while rx.recv().is_ok() {
                 loop {

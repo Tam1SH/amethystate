@@ -132,25 +132,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::config::StoreConfig;
     use crate::store::{StateScope, Store};
+    use crate::test_utils::unique_store;
     use crate::{DefaultStore, SubscriptionKind};
     use std::sync::Mutex;
     use std::sync::atomic::Ordering;
-    use std::time::{SystemTime, UNIX_EPOCH};
     use tracing_test::traced_test;
-
-    fn unique_store(suffix: &str) -> DefaultStore {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-
-        let path = std::env::temp_dir().join(format!("rpstate-reactive-{suffix}-{nanos}.json"));
-        DefaultStore::open(StoreConfig::new(path), Default::default())
-            .unwrap()
-            .0
-    }
 
     struct UiScope;
     impl StateScope for UiScope {

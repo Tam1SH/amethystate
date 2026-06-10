@@ -1,23 +1,27 @@
 use super::error::RedbStoreError;
 use super::tables::{
-    TABLE_DATA, TABLE_META, TABLE_MIGRATION_LOG, TABLE_SCHEMA_SNAPSHOT, TableReader, TableWriter,
+    TableReader, TableWriter, TABLE_DATA, TABLE_META, TABLE_MIGRATION_LOG, TABLE_SCHEMA_SNAPSHOT,
 };
 use crate::migration::AppliedStep;
 use crate::store::meta::{PrefixMeta, SchemaSnapshot};
-use crate::store::{RawStorage, Result};
+use crate::store::{CodecFormat, MigrationBackend, Result};
 use redb::ReadableTable;
 
-pub(super) struct RedbRawStorage<'a> {
+pub(super) struct RedbMigrationBackend<'a> {
     txn: &'a redb::WriteTransaction,
 }
 
-impl<'a> RedbRawStorage<'a> {
+impl<'a> RedbMigrationBackend<'a> {
     pub(super) fn new(txn: &'a redb::WriteTransaction) -> Self {
         Self { txn }
     }
 }
 
-impl RawStorage for RedbRawStorage<'_> {
+impl MigrationBackend for RedbMigrationBackend<'_> {
+    fn format(&self) -> CodecFormat {
+        CodecFormat::MessagePack
+    }
+
     fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
         let table = self
             .txn

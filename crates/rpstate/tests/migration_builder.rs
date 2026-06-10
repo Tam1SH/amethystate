@@ -1,7 +1,7 @@
 use rpstate::store::builder::StoreBuilder;
-use rpstate::{Store, migrate};
+use rpstate::{RpData, Store, migrate};
+use rpstate_core::test_utils::unique_path;
 use rpstate_macros::rpstate;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 mod v1 {
     use super::*;
@@ -35,22 +35,12 @@ pub struct Profile {
     pub initials: String,
 }
 
-migrate! {
-    v1::Profile_Data => v2::Profile_Data,
-    rename: [full_name => display_name],
-    |old| {
-        Ok(Self {
-            display_name: old.full_name,
-        })
-    }
-}
-
-fn unique_path(suffix: &str) -> std::path::PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time is after epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("rpstate-{suffix}-{nanos}.redb"))
+#[migrate]
+#[rename(full_name => display_name)]
+fn migrate_profile_v1_to_v2(old: RpData<v1::Profile>) -> rpstate::Result<RpData<v2::Profile>> {
+    Ok(RpData::<v2::Profile> {
+        display_name: old.full_name,
+    })
 }
 
 #[test]

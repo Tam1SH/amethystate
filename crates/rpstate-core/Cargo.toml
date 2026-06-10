@@ -24,4 +24,5 @@ async-trait = { version = "0.1.89", optional = true }
 
 
 [features]
+test-utils = []
 async = ["dep:futures", "dep:serde_json", "dep:async-trait"]

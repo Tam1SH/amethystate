@@ -5,7 +5,6 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 pub(super) const TABLE_DATA: TableDefinition<&str, &[u8]> = TableDefinition::new("data");
-pub(super) const TABLE_LOG: TableDefinition<u64, &str> = TableDefinition::new("inbox_log");
 pub(super) const TABLE_META: TableDefinition<&str, &[u8]> = TableDefinition::new("metadata");
 pub(super) const TABLE_DIFF_LOG: TableDefinition<&str, &[u8]> = TableDefinition::new("diff_log");
 pub(super) const TABLE_MIGRATION_LOG: TableDefinition<&str, &[u8]> =

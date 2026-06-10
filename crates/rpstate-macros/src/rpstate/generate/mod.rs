@@ -5,7 +5,7 @@ mod wasm;
 
 use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
-use rpstate_macros_core::{MacroArgs, StoreFieldEntry};
+use rpstate_macros_core::{MacroArgs, StoreFieldEntry, get_type_ident_str};
 use syn::parse::{Parse, ParseStream, Parser};
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Expr, Ident, Token, Visibility};
@@ -240,15 +240,6 @@ fn map_type_to_ts(ty: &syn::Type) -> (String, String) {
         }
         _ => ("any".to_string(), "any".to_string()),
     }
-}
-
-fn get_type_ident_str(ty: &syn::Type) -> String {
-    if let syn::Type::Path(type_path) = ty
-        && let Some(segment) = type_path.path.segments.last()
-    {
-        return segment.ident.to_string();
-    }
-    "any".to_string()
 }
 
 struct MapEntry {

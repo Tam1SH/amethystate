@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use rpstate::DefaultStore;
+use rpstate::test_utils::unique_store;
 use rpstate_arena::{DefaultArena, IntoArenaPipeline, PIPELINE_ARENA};
 use rpstate_leptos::{
     use_field, use_map, use_map_subscribe_any, use_map_subscribe_key, use_pipeline,
@@ -7,21 +7,6 @@ use rpstate_leptos::{
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-
-fn unique_store(suffix: &str) -> DefaultStore {
-    use rpstate::store::config::StoreConfig;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let path = std::env::temp_dir().join(format!("rpstate-leptos-test-{suffix}-{nanos}.json"));
-
-    DefaultStore::open(StoreConfig::new(path), Default::default())
-        .unwrap()
-        .0
-}
 
 #[derive(Clone)]
 struct Probe<T>(Arc<Mutex<Vec<T>>>);

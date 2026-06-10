@@ -1,0 +1,20 @@
+---
+source: crates/rpstate-codegen/tests/tests.rs
+expression: rust_content
+---
+// GENERATED AUTOMATICALLY. DO NOT EDIT.
+use rpstate::client::*;
+
+#[::rpstate::rpstate(target = "tauri-wasm")]
+pub struct TestNested {
+    pub name: String,
+}
+
+#[::rpstate::rpstate(prefix = "test_root", target = "tauri-wasm")]
+pub struct TestRoot {
+    pub value: i32,
+    #[state(volatile)]
+    pub session: String,
+    #[state(nested)]
+    pub child: TestNested,
+}
