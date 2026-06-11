@@ -19,11 +19,11 @@ use directories::ProjectDirs;
 
 #[cfg(feature = "confy-compat")]
 use etcetera::{
-    app_strategy::choose_app_strategy, app_strategy::choose_native_strategy, AppStrategy,
-    AppStrategyArgs,
+    AppStrategy, AppStrategyArgs, app_strategy::choose_app_strategy,
+    app_strategy::choose_native_strategy,
 };
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::fs::{self, Permissions};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -176,10 +176,7 @@ impl From<RpError> for ConfyError {
                     }
                     TextStoreError::PathSegmentMissing(s) => ConfyError::BadConfigDirectory(s),
                     TextStoreError::Watch(err) => {
-                        panic!(
-                            "Unexpected watch error during confy emulation: {:?}",
-                            err
-                        );
+                        panic!("Unexpected watch error during confy emulation: {:?}", err);
                     }
                 }
             }

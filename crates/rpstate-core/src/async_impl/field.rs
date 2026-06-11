@@ -1,13 +1,15 @@
 use crate::async_impl::{AsyncSubscriptionBackend, SubscriptionHandle};
 use crate::primitives::field_core::FieldValue;
 use crate::{Change, FieldCore, InterceptDisposer, SignalSubscription};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 pub struct Field<T, B> {
     pub core: FieldCore<T>,
     pub path: Arc<str>,
+    pub instance_id: Uuid,
     _subscription: Arc<Mutex<Option<SubscriptionHandle>>>,
     backend: B,
 }
@@ -20,6 +22,7 @@ where
         Self {
             core: self.core.clone(),
             path: self.path.clone(),
+            instance_id: self.instance_id,
             _subscription: self._subscription.clone(),
             backend: self.backend.clone(),
         }
@@ -51,6 +54,20 @@ where
     T: FieldValue,
     B: AsyncSubscriptionBackend,
 {
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(Uuid::new_v4())
+    }
+
+    pub fn fork_with_id(&self, new_instance_id: Uuid) -> Self {
+        Self {
+            core: self.core.clone(),
+            path: self.path.clone(),
+            instance_id: new_instance_id,
+            _subscription: self._subscription.clone(),
+            backend: self.backend.clone(),
+        }
+    }
+
     pub fn new(key: impl Into<Arc<str>>, initial_value: T) -> Self
     where
         B: Default,
@@ -59,6 +76,15 @@ where
     }
 
     pub fn new_with_backend(key: impl Into<Arc<str>>, initial_value: T, backend: B) -> Self {
+        Self::new_with_backend_and_id(key, initial_value, backend, Uuid::new_v4())
+    }
+
+    pub fn new_with_backend_and_id(
+        key: impl Into<Arc<str>>,
+        initial_value: T,
+        backend: B,
+        instance_id: Uuid,
+    ) -> Self {
         let path = key.into();
         let core = FieldCore::new(initial_value);
         let subscription = backend.subscribe_field(path.clone(), core.clone());
@@ -66,6 +92,7 @@ where
         Self {
             core,
             path,
+            instance_id,
             _subscription: Arc::new(Mutex::new(subscription)),
             backend,
         }
@@ -82,8 +109,34 @@ where
             .ok_or_else(|| self.backend.key_not_found(self.path.to_string()))
     }
 
+    pub async fn update<F>(&self, f: F) -> Result<T, B::Error>
+    where
+        F: FnOnce(T) -> T,
+    {
+        let val = self.get().await?;
+        let new_val = f(val);
+        self.set(new_val.clone()).await?;
+        Ok(new_val)
+    }
+
+    pub async fn modify<F>(&self, f: F) -> Result<(), B::Error>
+    where
+        F: FnOnce(&mut T),
+    {
+        let mut val = self.get().await?;
+        f(&mut val);
+        self.set(val).await
+    }
+
     pub async fn set(&self, value: T) -> Result<(), B::Error> {
-        crate::field_set_async(&self.backend, &self.core, self.path.clone(), value, true).await
+        crate::field_set_async(
+            &self.backend,
+            &self.core,
+            self.path.clone(),
+            value,
+            Some(self.instance_id),
+        )
+        .await
     }
 
     pub fn subscribe<F>(&self, callback: F) -> SignalSubscription
@@ -91,6 +144,18 @@ where
         F: Fn(T) + Send + Sync + 'static,
     {
         self.core.subscribe(callback)
+    }
+
+    pub fn subscribe_external<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(T) + Send + Sync + 'static,
+    {
+        let my_id = self.instance_id;
+        self.core.subscribe_with_source(move |val, src| {
+            if src != Some(my_id) {
+                callback(val);
+            }
+        })
     }
 
     pub fn intercept<F>(&self, callback: F) -> InterceptDisposer
@@ -110,14 +175,15 @@ where
         self.core.get()
     }
 
-    fn subscribe<F>(&self, callback: F) -> SignalSubscription
+    fn subscribe_with_source<F>(&self, callback: F) -> SignalSubscription
     where
-        F: Fn(T) + Send + Sync + 'static,
+        F: Fn(T, Option<Uuid>) + Send + Sync + 'static,
     {
-        self.core.subscribe(callback)
+        self.core.subscribe_with_source(callback)
     }
 }
 
+//TODO: looks like shit
 impl<T, B> Drop for Field<T, B> {
     fn drop(&mut self) {
         if Arc::strong_count(&self._subscription) == 1 {

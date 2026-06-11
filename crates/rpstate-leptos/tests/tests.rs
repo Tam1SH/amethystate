@@ -1,5 +1,6 @@
 use leptos::prelude::*;
 use rpstate::test_utils::unique_store;
+use rpstate::uuid;
 use rpstate_arena::{DefaultArena, IntoArenaPipeline, PIPELINE_ARENA};
 use rpstate_leptos::{
     use_field, use_map, use_map_subscribe_any, use_map_subscribe_key, use_pipeline,
@@ -46,7 +47,7 @@ async fn test_use_field_requirements() {
     let store = unique_store("field");
     let arena = DefaultArena::new();
 
-    let field = rpstate::store::field_with_path(&store, Arc::from("field_1"), 10).unwrap();
+    let field = rpstate::store::field_with_path(&store, Arc::from("field_1"), 10, uuid::Uuid::new_v4()).unwrap();
     let handle = arena.register_field(field);
 
     let probe = Probe::new();
@@ -87,6 +88,7 @@ async fn test_use_map_requirements() {
         &store,
         std::sync::Arc::from("map_1"),
         HashMap::new(),
+        uuid::Uuid::new_v4(),
     )
     .unwrap();
     let handle = arena.register_map(map);
@@ -139,7 +141,8 @@ async fn test_use_pipeline_requirements() {
     let arena = DefaultArena::new();
 
     let field =
-        rpstate::store::field_with_path(&store, std::sync::Arc::from("field_2"), 5).unwrap();
+        rpstate::store::field_with_path(&store, std::sync::Arc::from("field_2"), 5,
+                                        uuid::Uuid::new_v4(),).unwrap();
     let dep_handle = arena.register_field(field);
 
     let probe = Probe::new();
@@ -189,6 +192,7 @@ async fn test_map_sub_requirements() {
         &store,
         std::sync::Arc::from("map_2"),
         HashMap::new(),
+        uuid::Uuid::new_v4(),
     )
     .unwrap();
     let write_handle = arena.register_map(map);
@@ -233,7 +237,8 @@ async fn test_real_component_lifecycle() {
     let store = unique_store("comp");
     let arena = DefaultArena::new();
     let field =
-        rpstate::store::field_with_path(&store, std::sync::Arc::from("field_1"), 10).unwrap();
+        rpstate::store::field_with_path(&store, std::sync::Arc::from("field_1"), 10,
+                                        uuid::Uuid::new_v4(),).unwrap();
     let handle = arena.register_field(field);
 
     let probe = Probe::new();

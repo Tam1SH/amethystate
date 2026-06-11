@@ -1,5 +1,6 @@
 use rpstate_macros::rpstate;
 pub struct NetworkState<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    __rpstate_instance_id: ::rpstate::uuid::Uuid,
     pub port: ::rpstate::Field<u16, S, ::rpstate::WritableMode>,
     pub host: ::rpstate::Field<String, S, ::rpstate::WritableMode>,
 }
@@ -9,6 +10,9 @@ for NetworkState<S> {
     #[inline]
     fn clone(&self) -> NetworkState<S> {
         NetworkState {
+            __rpstate_instance_id: ::core::clone::Clone::clone(
+                &self.__rpstate_instance_id,
+            ),
             port: ::core::clone::Clone::clone(&self.port),
             host: ::core::clone::Clone::clone(&self.host),
         }
@@ -19,14 +23,25 @@ impl<S: ::rpstate::Store> ::rpstate::StateScope for NetworkState<S> {
 }
 impl<S: ::rpstate::Store> NetworkState<S> {
     pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, ::rpstate::uuid::Uuid::new_v4())
+    }
+    pub fn new_with_id(
+        store: &S,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
-            port: ::rpstate::store::field::<Self, u16, S>(store, "port", 8080)?,
+            __rpstate_instance_id: instance_id,
+            port: ::rpstate::store::field::<
+                Self,
+                u16,
+                S,
+            >(store, "port", 8080, instance_id)?,
             host: ::rpstate::store::field::<
                 Self,
                 String,
                 S,
-            >(store, "host", "127.0.0.1".to_string())?,
+            >(store, "host", "127.0.0.1".to_string(), instance_id)?,
         };
         store.mark_initialized(<Self as ::rpstate::StateScope>::PREFIX)?;
         Ok(result)
@@ -45,6 +60,49 @@ impl<S: ::rpstate::Store> NetworkState<S> {
     pub fn host(&self) -> ::rpstate::Field<String, S, ::rpstate::WritableMode> {
         self.host.clone()
     }
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(::rpstate::uuid::Uuid::new_v4())
+    }
+    #[doc(hidden)]
+    pub fn fork_with_id(&self, new_id: ::rpstate::uuid::Uuid) -> Self {
+        Self {
+            __rpstate_instance_id: new_id,
+            port: self.port.fork_with_id(new_id),
+            host: self.host.fork_with_id(new_id),
+        }
+    }
+    pub fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.port.subscribe(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.host.subscribe(move |_| cb_clone()));
+        }
+        scope
+    }
+    pub fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.port.subscribe_external(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.host.subscribe_external(move |_| cb_clone()));
+        }
+        scope
+    }
 }
 impl NetworkState<::rpstate::DefaultStore> {
     pub fn new() -> ::rpstate::Result<Self> {
@@ -55,6 +113,13 @@ impl NetworkState<::rpstate::DefaultStore> {
 impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for NetworkState<S> {
     fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
         Self::new_with(store)
+    }
+    fn new_node_with_id(
+        store: &S,
+        _path: &str,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, instance_id)
     }
 }
 #[serde(crate = "::rpstate::serde")]
@@ -362,7 +427,7 @@ impl ::core::fmt::Debug for NetworkState_Data {
 }
 impl NetworkState_Data {}
 impl ::rpstate::migration::types::RpType for NetworkState_Data {
-    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
+    const TYPE_HASH: u32 = ::rpstate::migration::types::fnv1a(
         "NetworkState_Data".as_bytes(),
     );
     const TYPE_NAME: &'static str = "NetworkState_Data";
@@ -381,7 +446,7 @@ impl ::rpstate::migration::fields::RpStateFields for NetworkState_Data {
         },
     ];
     const VERSION: u32 = 0u32;
-    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
+    const SCHEMA_HASH: u32 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "net";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
@@ -406,8 +471,21 @@ impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for NetworkState<S> {
     fn load_slice(store: &S) -> ::rpstate::Result<Self> {
         Self::new_with(store)
     }
+    fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all(callback)
+    }
+    fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all_external(callback)
+    }
 }
 pub struct UiState<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    __rpstate_instance_id: ::rpstate::uuid::Uuid,
     pub proxy_port: ::rpstate::Field<u16, S, ::rpstate::ReadOnlyMode>,
     pub proxy_host: ::rpstate::Field<String, S, ::rpstate::ReadOnlyMode>,
 }
@@ -416,6 +494,9 @@ impl<S: ::core::clone::Clone + ::rpstate::Store> ::core::clone::Clone for UiStat
     #[inline]
     fn clone(&self) -> UiState<S> {
         UiState {
+            __rpstate_instance_id: ::core::clone::Clone::clone(
+                &self.__rpstate_instance_id,
+            ),
             proxy_port: ::core::clone::Clone::clone(&self.proxy_port),
             proxy_host: ::core::clone::Clone::clone(&self.proxy_host),
         }
@@ -426,8 +507,15 @@ impl<S: ::rpstate::Store> ::rpstate::StateScope for UiState<S> {
 }
 impl<S: ::rpstate::Store> UiState<S> {
     pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, ::rpstate::uuid::Uuid::new_v4())
+    }
+    pub fn new_with_id(
+        store: &S,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
+            __rpstate_instance_id: instance_id,
             proxy_port: {
                 const _: fn() = || {
                     trait TypeCheck<T> {}
@@ -458,6 +546,7 @@ impl<S: ::rpstate::Store> UiState<S> {
                     store,
                     ::std::sync::Arc::from(path),
                     ::std::default::Default::default(),
+                    instance_id,
                 )?
             },
             proxy_host: {
@@ -490,6 +579,7 @@ impl<S: ::rpstate::Store> UiState<S> {
                     store,
                     ::std::sync::Arc::from(path),
                     ::std::default::Default::default(),
+                    instance_id,
                 )?
             },
         };
@@ -510,6 +600,49 @@ impl<S: ::rpstate::Store> UiState<S> {
     pub fn proxy_host(&self) -> ::rpstate::Field<String, S, ::rpstate::ReadOnlyMode> {
         self.proxy_host.clone()
     }
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(::rpstate::uuid::Uuid::new_v4())
+    }
+    #[doc(hidden)]
+    pub fn fork_with_id(&self, new_id: ::rpstate::uuid::Uuid) -> Self {
+        Self {
+            __rpstate_instance_id: new_id,
+            proxy_port: self.proxy_port.fork_with_id(new_id),
+            proxy_host: self.proxy_host.fork_with_id(new_id),
+        }
+    }
+    pub fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.proxy_port.subscribe(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.proxy_host.subscribe(move |_| cb_clone()));
+        }
+        scope
+    }
+    pub fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.proxy_port.subscribe_external(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.proxy_host.subscribe_external(move |_| cb_clone()));
+        }
+        scope
+    }
 }
 impl UiState<::rpstate::DefaultStore> {
     pub fn new() -> ::rpstate::Result<Self> {
@@ -520,6 +653,13 @@ impl UiState<::rpstate::DefaultStore> {
 impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for UiState<S> {
     fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
         Self::new_with(store)
+    }
+    fn new_node_with_id(
+        store: &S,
+        _path: &str,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, instance_id)
     }
 }
 #[serde(crate = "::rpstate::serde")]
@@ -727,13 +867,13 @@ impl ::core::fmt::Debug for UiState_Data {
 }
 impl UiState_Data {}
 impl ::rpstate::migration::types::RpType for UiState_Data {
-    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a("UiState_Data".as_bytes());
+    const TYPE_HASH: u32 = ::rpstate::migration::types::fnv1a("UiState_Data".as_bytes());
     const TYPE_NAME: &'static str = "UiState_Data";
 }
 impl ::rpstate::migration::fields::RpStateFields for UiState_Data {
     const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[];
     const VERSION: u32 = 0u32;
-    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
+    const SCHEMA_HASH: u32 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "ui";
     const MIGRATION_DEPS: &'static [&'static str] = &[
         <NetworkState as ::rpstate::StateScope>::PREFIX,
@@ -755,6 +895,18 @@ impl<S: ::rpstate::Store> ::rpstate::RpState for UiState<S> {
 impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for UiState<S> {
     fn load_slice(store: &S) -> ::rpstate::Result<Self> {
         Self::new_with(store)
+    }
+    fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all(callback)
+    }
+    fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all_external(callback)
     }
 }
 fn main() {}

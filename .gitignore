@@ -6,6 +6,8 @@ examples/*/egui-settings.redb
 examples/*/iced-settings.redb
 examples/*/slint-settings.redb
 examples/*/dioxus-settings.redb
+/examples/*/app_data.redb
+
 
 /profile.json.gz
 /crates/rpstate/*.profraw

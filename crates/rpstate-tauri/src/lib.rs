@@ -1,5 +1,5 @@
-use futures::StreamExt;
 use futures::future::AbortHandle;
+use futures::StreamExt;
 use rpstate_core::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
 use rpstate_core::{AsyncSubscriptionBackend, RpBackendAsync, SubscriptionHandle};
 use rpstate_core::{FieldCore, MapChange, ReactiveMapCore};
@@ -7,9 +7,14 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri_sys::event::Event;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct TauriBackend;
+
+impl TauriBackend {
+    pub fn new() -> Self { Self }
+}
 
 impl RpBackendAsync for TauriBackend {
     type Error = String;
@@ -28,7 +33,7 @@ impl RpBackendAsync for TauriBackend {
             "plugin:rpstate|rpstate_get",
             &GetArgs { key: path },
         )
-        .await?;
+            .await?;
 
         raw.map(serde_json::from_value)
             .transpose()
@@ -39,31 +44,55 @@ impl RpBackendAsync for TauriBackend {
     where
         T: Serialize,
     {
+        self.set_with_source(path, value, None).await
+    }
+
+    async fn set_with_source<T: Serialize>(
+        &self,
+        path: &str,
+        value: &T,
+        source: Option<Uuid>,
+    ) -> Result<(), Self::Error> {
         #[derive(Serialize)]
         struct SetArgs<'a> {
             key: &'a str,
             value: serde_json::Value,
+            source: Option<Uuid>,
         }
 
         let value = serde_json::to_value(value).map_err(|e| e.to_string())?;
         tauri_sys::core::invoke_result::<(), String>(
             "plugin:rpstate|rpstate_set",
-            &SetArgs { key: path, value },
+            &SetArgs { key: path, value, source },
         )
-        .await
+            .await
+    }
+
+    async fn set_owned_with_source<T: Serialize>(
+        &self,
+        path: Arc<str>,
+        value: &T,
+        source: Option<Uuid>,
+    ) -> Result<(), Self::Error> {
+        self.set_with_source(&path, value, source).await
     }
 
     async fn delete(&self, path: &str) -> Result<(), Self::Error> {
+        self.delete_with_source(path, None).await
+    }
+
+    async fn delete_with_source(&self, path: &str, source: Option<Uuid>) -> Result<(), Self::Error> {
         #[derive(Serialize)]
         struct DeleteArgs<'a> {
             key: &'a str,
+            source: Option<Uuid>,
         }
 
         tauri_sys::core::invoke_result::<(), String>(
             "plugin:rpstate|rpstate_delete",
-            &DeleteArgs { key: path },
+            &DeleteArgs { key: path, source },
         )
-        .await
+            .await
     }
 
     async fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Self::Raw)>, Self::Error> {
@@ -77,7 +106,7 @@ impl RpBackendAsync for TauriBackend {
                 "plugin:rpstate|rpstate_get_prefix",
                 &PrefixArgs { prefix },
             )
-            .await?;
+                .await?;
 
         Ok(raw.into_iter().collect())
     }
@@ -116,13 +145,13 @@ impl AsyncSubscriptionBackend for TauriBackend {
                 "plugin:rpstate|rpstate_subscribe",
                 &SubArgs { key: &path },
             )
-            .await;
+                .await;
 
             if let Ok(stream) = tauri_sys::event::listen::<T>(&event_channel).await {
                 let mut aborted_stream =
                     futures::stream::Abortable::new(stream, abort_registration);
                 while let Some(Event { payload, .. }) = aborted_stream.next().await {
-                    rpstate_core::field_apply_remote_value(&core, payload);
+                    rpstate_core::field_apply_remote_value(&core, payload, None);
                 }
             }
         });
@@ -152,7 +181,7 @@ impl AsyncSubscriptionBackend for TauriBackend {
                 "plugin:rpstate|rpstate_subscribe",
                 &SubArgs { key: &path },
             )
-            .await;
+                .await;
 
             if let Ok(stream) = tauri_sys::event::listen::<serde_json::Value>(&event_channel).await
             {
@@ -178,6 +207,7 @@ enum MapChangeHelper<K, V> {
     Insert {
         key: K,
         value: V,
+        source: Option<Uuid>,
     },
     Update {
         key: K,
@@ -185,30 +215,36 @@ enum MapChangeHelper<K, V> {
         old_value: V,
         #[serde(rename = "newValue")]
         new_value: V,
+        source: Option<Uuid>,
     },
     Remove {
         key: K,
         #[serde(rename = "oldValue")]
         old_value: V,
+        source: Option<Uuid>,
     },
-    Clear,
+    Clear {
+        source: Option<Uuid>,
+    },
 }
 
 impl<K, V> MapChangeHelper<K, V> {
     fn into_core(self) -> MapChange<K, V> {
         match self {
-            MapChangeHelper::Insert { key, value } => MapChange::Insert { key, value },
+            MapChangeHelper::Insert { key, value, source } => MapChange::Insert { key, value, source },
             MapChangeHelper::Update {
                 key,
                 old_value,
                 new_value,
+                source,
             } => MapChange::Update {
                 key,
                 old_value,
                 new_value,
+                source,
             },
-            MapChangeHelper::Remove { key, old_value } => MapChange::Remove { key, old_value },
-            MapChangeHelper::Clear => MapChange::Clear,
+            MapChangeHelper::Remove { key, old_value, source } => MapChange::Remove { key, old_value, source },
+            MapChangeHelper::Clear { source } => MapChange::Clear { source },
         }
     }
 }

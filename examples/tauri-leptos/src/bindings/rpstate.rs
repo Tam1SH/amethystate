@@ -7,7 +7,7 @@ pub struct Theme {
     pub mode: String,
     pub background: String,
     pub foreground: String,
-} 
+}
 
 #[rpstate_framework_arena]
 #[::rpstate::rpstate(prefix = "settings", target = "tauri-wasm")]

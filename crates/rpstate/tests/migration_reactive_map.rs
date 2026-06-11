@@ -1,7 +1,7 @@
 use rpstate::store::builder::StoreBuilder;
-use rpstate::{migrate, ReactiveMap, RpData, Store};
+use rpstate::{ReactiveMap, RpData, Store, migrate};
 use rpstate_core::test_utils::unique_path;
-use rpstate_macros::{rpstate, RpType};
+use rpstate_macros::{RpType, rpstate};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, RpType)]
@@ -32,7 +32,6 @@ fn migrate_proxy_config_v1_to_v2(
     old: RpData<v1::ProxyConfig>,
     ctx: &mut rpstate::migration::MigrationContext,
 ) -> rpstate::Result<RpData<ProxyConfig>> {
-
     for key in old.routes.keys() {
         ctx.delete(&format!("routes.{}", key))?;
     }
@@ -61,7 +60,6 @@ fn migrate_proxy_config_v1_to_v2(
 #[test]
 fn test_embedded_map_migration() {
     let path = unique_path("rpstate_embedded_map.redb");
-
 
     {
         let store = StoreBuilder::new(&path).build().unwrap();
@@ -96,5 +94,4 @@ fn test_embedded_map_migration() {
 
     let old_keys = store.scan_prefix("network.routes.").unwrap();
     assert!(old_keys.is_empty());
-
 }

@@ -6,8 +6,10 @@ use crate::store::{Store, StoreCallback, SubscriptionId, SubscriptionKind};
 use crate::{MigrationReport, Result};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::sync::Arc;
+use uuid::Uuid;
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct TomlStore(pub TextStore<TomlDocument>);
 
 impl TomlStore {
@@ -29,12 +31,24 @@ impl Store for TomlStore {
         self.0.set(path, value)
     }
 
+    fn set_with_source<T: Serialize>(&self, path: &str, value: &T, source: Option<Uuid>) -> Result<()> {
+        self.0.set_with_source(path, value, source)
+    }
+
+    fn set_owned_with_source<T: Serialize>(&self, path: Arc<str>, value: &T, source: Option<Uuid>) -> Result<()> {
+        self.0.set_owned_with_source(path, value, source)
+    }
+
     fn save_now(&self) -> Result<()> {
         self.0.save_now()
     }
 
     fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
         self.0.scan_prefix(prefix)
+    }
+
+    fn delete_with_source(&self, path: &str, source: Option<Uuid>) -> Result<()> {
+        self.0.delete_with_source(path, source)
     }
 
     fn delete(&self, path: &str) -> Result<()> {

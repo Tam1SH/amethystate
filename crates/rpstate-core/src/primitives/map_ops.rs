@@ -1,11 +1,12 @@
-use crate::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
 use crate::RpBackend;
+use crate::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
 use crate::{MapChange, ReactiveMapCore};
 
 use serde::de::DeserializeOwned;
 use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub fn map_get<B, K, V>(backend: &B, path: &str, key: &K) -> Result<Option<V>, B::Error>
 where
@@ -64,6 +65,7 @@ pub fn map_set_existing<B, K, V>(
     key: K,
     value: &V,
     notify_after_commit: bool,
+    source: Option<Uuid>,
 ) -> Result<(), B::Error>
 where
     B: RpBackend,
@@ -80,6 +82,7 @@ where
         key,
         old_value,
         new_value: value.clone(),
+        source,
     };
 
     map_apply_change(backend, core, path, change, notify_after_commit)
@@ -92,6 +95,7 @@ pub fn map_set_or_create<B, K, V>(
     key: K,
     value: &V,
     notify_after_commit: bool,
+    source: Option<Uuid>,
 ) -> Result<(), B::Error>
 where
     B: RpBackend,
@@ -105,11 +109,13 @@ where
             key,
             old_value,
             new_value: value.clone(),
+            source,
         }
     } else {
         MapChange::Insert {
             key,
             value: value.clone(),
+            source,
         }
     };
 
@@ -122,6 +128,7 @@ pub fn map_remove<B, K, V>(
     path: Arc<str>,
     key: K,
     notify_after_commit: bool,
+    source: Option<Uuid>,
 ) -> Result<Option<V>, B::Error>
 where
     B: RpBackend,
@@ -139,6 +146,7 @@ where
         let change = MapChange::Remove {
             key,
             old_value: old_value.clone(),
+            source,
         };
         map_apply_change(backend, core, path, change, notify_after_commit)?;
         Ok(Some(old_value))
@@ -153,13 +161,20 @@ pub fn map_clear<B, K, V>(
     core: &ReactiveMapCore<K, V>,
     path: Arc<str>,
     notify_after_commit: bool,
+    source: Option<Uuid>,
 ) -> Result<(), B::Error>
 where
     B: RpBackend,
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
-    map_apply_change(backend, core, path, MapChange::Clear, notify_after_commit)
+    map_apply_change(
+        backend,
+        core,
+        path,
+        MapChange::Clear { source },
+        notify_after_commit,
+    )
 }
 
 pub fn map_apply_change<B, K, V>(
@@ -184,22 +199,22 @@ where
         .map_err(|_| backend.intercepted())?;
 
     match &processed {
-        MapChange::Insert { key, value }
+        MapChange::Insert { key, value, .. }
         | MapChange::Update {
             key,
             new_value: value,
             ..
         } => {
-            backend.set(&format!("{}.{}", path, key), value)?;
+            backend.set_with_source(&format!("{}.{}", path, key), value, processed.source())?;
         }
         MapChange::Remove { key, .. } => {
-            backend.delete(&format!("{}.{}", path, key))?;
+            backend.delete_with_source(&format!("{}.{}", path, key), processed.source())?;
         }
-        MapChange::Clear => {
+        MapChange::Clear { .. } => {
             let prefix = format!("{}.", path);
             let kvs = backend.scan_prefix(&prefix)?;
             for (full_path, _) in kvs {
-                backend.delete(&full_path)?;
+                backend.delete_with_source(&full_path, processed.source())?;
             }
         }
     }
@@ -219,7 +234,7 @@ where
 {
     let mut keys = core.cache.lock().unwrap();
     match change {
-        MapChange::Insert { key, value }
+        MapChange::Insert { key, value, .. }
         | MapChange::Update {
             key,
             new_value: value,
@@ -230,7 +245,7 @@ where
         MapChange::Remove { key, .. } => {
             keys.remove(key);
         }
-        MapChange::Clear => {
+        MapChange::Clear { .. } => {
             keys.clear();
         }
     }

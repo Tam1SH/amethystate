@@ -12,6 +12,7 @@ pub type RpData<T> = <T as RpState>::Data;
 
 pub use inventory;
 pub use serde;
+pub use uuid;
 
 pub use error::Error;
 pub use error::Result;

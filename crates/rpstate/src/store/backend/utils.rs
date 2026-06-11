@@ -1,4 +1,4 @@
-use crate::store::{matches_kind, StoreEvent, SubscriptionEntry};
+use crate::store::{StoreEvent, SubscriptionEntry, matches_kind};
 use parking_lot::RwLock;
 
 pub fn emit_events(subs_lock: &RwLock<Vec<SubscriptionEntry>>, event: StoreEvent) {
@@ -22,7 +22,7 @@ pub fn drain_pending_prefix(
 ) -> std::collections::HashMap<std::sync::Arc<str>, Option<Vec<u8>>> {
     use std::collections::HashMap;
     use std::sync::Arc;
-    
+
     if pending.is_empty() {
         return HashMap::new();
     }

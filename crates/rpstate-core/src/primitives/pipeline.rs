@@ -1,14 +1,23 @@
 use crate::primitives::signal::{Signal, SignalSubscription};
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 pub trait Reactive<T>: Clone + Send + Sync + 'static
 where
     T: Clone + Send + Sync + 'static,
 {
     fn get(&self) -> T;
+
+    fn subscribe_with_source<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(T, Option<Uuid>) + Send + Sync + 'static;
+
     fn subscribe<F>(&self, callback: F) -> SignalSubscription
     where
-        F: Fn(T) + Send + Sync + 'static;
+        F: Fn(T) + Send + Sync + 'static,
+    {
+        self.subscribe_with_source(move |v, _src| callback(v))
+    }
 
     fn keepalive(&self) -> Option<Arc<dyn Send + Sync>> {
         None
@@ -62,13 +71,20 @@ where
         self.inner.signal.get()
     }
 
+    pub fn subscribe_with_source<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(T, Option<Uuid>) + Send + Sync + 'static,
+    {
+        self.inner
+            .signal
+            .subscribe_with_source(move |val, src| callback(val.clone(), src))
+    }
+
     pub fn subscribe<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(T) + Send + Sync + 'static,
     {
-        self.inner
-            .signal
-            .subscribe(move |val| callback(val.clone()))
+        self.subscribe_with_source(move |val, _src| callback(val))
     }
 
     pub fn map<U, F>(self, f: F) -> Pipeline<U>
@@ -82,8 +98,8 @@ where
         let target = Arc::clone(&signal);
         let mapper = Arc::clone(&f);
 
-        let sub = self.subscribe(move |value| {
-            target.set(mapper(value));
+        let sub = self.subscribe_with_source(move |value, source| {
+            target.set(mapper(value), source);
         });
 
         Pipeline {
@@ -106,9 +122,9 @@ where
         let target = Arc::clone(&signal);
         let mapper = Arc::clone(&f);
 
-        let sub = self.subscribe(move |value| {
+        let sub = self.subscribe_with_source(move |value, source| {
             if let Some(mapped) = mapper(value) {
-                target.set(mapped);
+                target.set(mapped, source);
             }
         });
 
@@ -133,9 +149,9 @@ where
         let target = Arc::clone(&signal);
         let inspector = Arc::clone(&f);
 
-        let sub = self.subscribe(move |value| {
+        let sub = self.subscribe_with_source(move |value, source| {
             inspector(&value);
-            target.set(value);
+            target.set(value, source);
         });
 
         Pipeline {
@@ -157,11 +173,11 @@ where
         let target = Arc::clone(&signal);
         let last_seen = Arc::clone(&last);
 
-        let sub = self.subscribe(move |value| {
+        let sub = self.subscribe_with_source(move |value, source| {
             let mut last = last_seen.lock().unwrap();
             if *last != value {
                 *last = value.clone();
-                target.set(value);
+                target.set(value, source);
             }
         });
 
@@ -180,14 +196,14 @@ where
     T: Clone + Send + Sync + 'static,
 {
     fn get(&self) -> T {
-        Pipeline::get(self)
+        self.get()
     }
 
-    fn subscribe<F>(&self, callback: F) -> SignalSubscription
+    fn subscribe_with_source<F>(&self, callback: F) -> SignalSubscription
     where
-        F: Fn(T) + Send + Sync + 'static,
+        F: Fn(T, Option<Uuid>) + Send + Sync + 'static,
     {
-        Pipeline::subscribe(self, callback)
+        self.subscribe_with_source(callback)
     }
 
     fn keepalive(&self) -> Option<Arc<dyn Send + Sync>> {
@@ -195,7 +211,7 @@ where
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ReactiveScope {
     subs: Vec<SignalSubscription>,
 }
@@ -207,6 +223,10 @@ impl ReactiveScope {
 
     pub fn watch(&mut self, sub: SignalSubscription) {
         self.subs.push(sub);
+    }
+
+    pub fn watch_scope(&mut self, mut other: Self) {
+        self.subs.append(&mut other.subs);
     }
 
     pub fn clear(&mut self) {
@@ -231,8 +251,8 @@ where
         let initial = self.get();
         let signal = Arc::new(Signal::new(initial));
         let target = Arc::clone(&signal);
-        let sub = self.subscribe(move |value| {
-            target.set(value);
+        let sub = self.subscribe_with_source(move |value, source| {
+            target.set(value, source);
         });
 
         Pipeline {
@@ -274,8 +294,8 @@ macro_rules! impl_tuple_pipeline {
 
                     let target = Arc::clone(&signal);
                     let refresh_cb = Arc::clone(&refresh);
-                    source_subs.push($source.subscribe(move |_| {
-                        target.set(refresh_cb());
+                    source_subs.push($source.subscribe_with_source(move |_, src| {
+                        target.set(refresh_cb(), src);
                     }));
                 )+
 

@@ -1,15 +1,17 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use dioxus::core::NoOpMutations;
 use dioxus::prelude::*;
 use rpstate::store::field_with_path;
 use rpstate::test_utils::unique_store;
-use rpstate::{DefaultStore, MapChange, rpstate};
+use rpstate::{rpstate, DefaultStore, MapChange};
 use rpstate_arena::{
-    DefaultArena, IntoArenaPipeline, PIPELINE_ARENA, PipelineHandle, WritableHandle,
-    WritableMapHandle,
+    DefaultArena, IntoArenaPipeline, PipelineHandle, WritableHandle, WritableMapHandle,
+    PIPELINE_ARENA,
 };
 use rpstate_dioxus::{
-    MapSignal, RpStateProvider, use_field, use_map, use_map_subscribe_any, use_map_subscribe_key,
-    use_pipeline, use_rpstate,
+    use_field, use_map, use_map_subscribe_any, use_map_subscribe_key, use_pipeline, use_rpstate,
+    MapSignal, RpStateProvider,
 };
 use rpstate_macros_arena::rpstate_framework_arena;
 use std::collections::HashMap;

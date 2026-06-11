@@ -1,8 +1,10 @@
+use crate::ReactiveScope;
 use arc_swap::ArcSwap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
-type SignalCallback<T> = Arc<dyn Fn(&T) + Send + Sync + 'static>;
+type SignalCallback<T> = Arc<dyn Fn(&T, Option<Uuid>) + Send + Sync + 'static>;
 type SignalSubscribers<T> = Arc<Mutex<Vec<(u64, SignalCallback<T>)>>>;
 
 pub struct Signal<T> {
@@ -27,6 +29,12 @@ pub struct SignalSubscription {
     pub cleanup: Arc<dyn Fn(u64) + Send + Sync + 'static>,
 }
 
+impl SignalSubscription {
+    pub fn watch(self, scope: &mut ReactiveScope) {
+        scope.watch(self);
+    }
+}
+
 impl Drop for SignalSubscription {
     fn drop(&mut self) {
         (self.cleanup)(self.id);
@@ -42,34 +50,32 @@ impl<T: 'static> Signal<T> {
         }
     }
 
-    pub fn get_arc(&self) -> Arc<T> {
-        self.value.load_full()
-    }
-
-    pub fn store_arc(&self, arc: Arc<T>) {
-        self.value.store(arc);
-        self.emit();
-    }
-
-    pub fn set(&self, new_value: T) {
+    pub fn set(&self, new_value: T, source: Option<Uuid>) {
         self.value.store(Arc::new(new_value));
-        self.emit();
+        self.emit(source);
     }
 
-    fn emit(&self) {
+    fn emit(&self, source: Option<Uuid>) {
         let val = self.value.load_full();
         let callbacks: Vec<_> = {
             let subs = self.subscribers.lock().unwrap();
             subs.iter().map(|(_, cb)| cb.clone()).collect()
         };
         for cb in callbacks {
-            cb(&val);
+            cb(&val, source);
         }
     }
 
     pub fn subscribe<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(&T) + Send + Sync + 'static,
+    {
+        self.subscribe_with_source(move |val, _src| callback(val))
+    }
+
+    pub fn subscribe_with_source<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(&T, Option<Uuid>) + Send + Sync + 'static,
     {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let mut subs = self.subscribers.lock().unwrap();
@@ -99,26 +105,6 @@ mod tests {
     use std::sync::Mutex;
 
     #[test]
-    fn signal_basic_set_get_and_subscribe() {
-        let signal = Signal::new(10i32);
-        assert_eq!(signal.get(), 10);
-
-        let received = Arc::new(Mutex::new(0i32));
-        let cap = received.clone();
-        let _sub = signal.subscribe(move |val: &i32| {
-            *cap.lock().unwrap() = *val;
-        });
-
-        signal.set(20);
-        assert_eq!(signal.get(), 20);
-        assert_eq!(*received.lock().unwrap(), 20);
-
-        signal.store_arc(Arc::new(30));
-        assert_eq!(*signal.get_arc(), 30);
-        assert_eq!(*received.lock().unwrap(), 30);
-    }
-
-    #[test]
     fn signal_subscription_cleanup_on_drop() {
         let signal = Signal::new("a".to_string());
         let counter = Arc::new(Mutex::new(0usize));
@@ -128,11 +114,11 @@ mod tests {
             let _sub = signal.subscribe(move |_: &String| {
                 *cap.lock().unwrap() += 1;
             });
-            signal.set("b".to_string());
+            signal.set("b".to_string(), Default::default());
             assert_eq!(*counter.lock().unwrap(), 1);
         }
 
-        signal.set("c".to_string());
+        signal.set("c".to_string(), Default::default());
         assert_eq!(*counter.lock().unwrap(), 1);
     }
 }

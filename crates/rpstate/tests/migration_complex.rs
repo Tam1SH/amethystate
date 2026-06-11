@@ -1,6 +1,6 @@
 use rpstate::migration::ComponentOutcome;
 use rpstate::store::builder::StoreBuilder;
-use rpstate::{migrate, MigrationError, RpData, Store};
+use rpstate::{MigrationError, RpData, Store, migrate};
 use rpstate_core::test_utils::unique_path;
 use rpstate_macros::rpstate;
 use tracing_test::traced_test;

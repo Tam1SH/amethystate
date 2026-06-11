@@ -17,7 +17,7 @@ pub(crate) enum RpMode {
     Both,
 }
 
-pub(crate) fn generate_code(
+pub fn generate_code(
     crate_name: TokenStream2,
     vis: &Visibility,
     name: &Ident,
@@ -65,16 +65,135 @@ pub(crate) fn generate_code(
 
     let schema_export = generate_schema_export(&crate_name, name, &prefix, entries);
 
+    let inherent_subs = if matches!(rp_mode, RpMode::Reactive | RpMode::Both) {
+        let sub_all_fields = entries.iter().map(|e| {
+            let fname = e.ident.as_ref().unwrap();
+            if e.nested || e.lookup_node.is_some() {
+                quote! {
+                    {
+                        let cb_clone = cb.clone();
+                        scope.watch_scope(self.#fname.subscribe_all(move || cb_clone()));
+                    }
+                }
+            } else if e.get_map_types().is_some() {
+                quote! {
+                    {
+                        let cb_clone = cb.clone();
+                        scope.watch(self.#fname.subscribe_any(move |_| cb_clone()));
+                    }
+                }
+            } else {
+                quote! {
+                    {
+                        let cb_clone = cb.clone();
+                        scope.watch(self.#fname.subscribe(move |_| cb_clone()));
+                    }
+                }
+            }
+        });
+
+        let sub_all_fields_ext = entries.iter().map(|e| {
+            let fname = e.ident.as_ref().unwrap();
+            if e.nested || e.lookup_node.is_some() {
+                quote! {
+                    {
+                        let cb_clone = cb.clone();
+                        scope.watch_scope(self.#fname.subscribe_all_external(move || cb_clone()));
+                    }
+                }
+            } else if e.get_map_types().is_some() {
+                quote! {
+                    {
+                        let cb_clone = cb.clone();
+                        scope.watch(self.#fname.subscribe_any_external(move |_| cb_clone()));
+                    }
+                }
+            } else {
+                quote! {
+                    {
+                        let cb_clone = cb.clone();
+                        scope.watch(self.#fname.subscribe_external(move |_| cb_clone()));
+                    }
+                }
+            }
+        });
+
+        quote! {
+            pub fn subscribe_all<F>(&self, callback: F) -> #crate_name::ReactiveScope
+            where
+                F: Fn() + Send + Sync + 'static,
+            {
+                let cb = ::std::sync::Arc::new(callback);
+                let mut scope = #crate_name::ReactiveScope::new();
+
+                #(#sub_all_fields)*
+
+                scope
+            }
+
+            pub fn subscribe_all_external<F>(&self, callback: F) -> #crate_name::ReactiveScope
+            where
+                F: Fn() + Send + Sync + 'static,
+            {
+                let cb = ::std::sync::Arc::new(callback);
+                let mut scope = #crate_name::ReactiveScope::new();
+
+                #(#sub_all_fields_ext)*
+
+                scope
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     let slice_impl = if is_root {
         let load_fn = match rp_mode {
             RpMode::Persistent => quote! { Self::load_with(store) },
             _ => quote! { Self::new_with(store) },
         };
+
+        let slice_subs = if matches!(rp_mode, RpMode::Reactive | RpMode::Both) {
+            quote! {
+                fn subscribe_all<F>(&self, callback: F) -> #crate_name::ReactiveScope
+                where
+                    F: Fn() + Send + Sync + 'static,
+                {
+                    self.subscribe_all(callback)
+                }
+
+                fn subscribe_all_external<F>(&self, callback: F) -> #crate_name::ReactiveScope
+                where
+                    F: Fn() + Send + Sync + 'static,
+                {
+                    self.subscribe_all_external(callback)
+                }
+            }
+        } else {
+            quote! {
+                fn subscribe_all<F>(&self, _callback: F) -> #crate_name::ReactiveScope
+                where
+                    F: Fn() + Send + Sync + 'static,
+                {
+                    #crate_name::ReactiveScope::new()
+                }
+
+                fn subscribe_all_external<F>(&self, _callback: F) -> #crate_name::ReactiveScope
+                where
+                    F: Fn() + Send + Sync + 'static,
+                {
+                    #crate_name::ReactiveScope::new()
+                }
+            }
+        };
+
         quote! {
             impl<S: #crate_name::Store> #crate_name::RpStateSlice<S> for #name<S> {
                 fn load_slice(store: &S) -> #crate_name::Result<Self> {
                     #load_fn
                 }
+
+                #slice_subs
             }
         }
     } else {
@@ -94,16 +213,46 @@ pub(crate) fn generate_code(
         quote! {}
     };
 
+    let fork_fields = entries.iter().map(|e| {
+        let fname = e.ident.as_ref().unwrap();
+        if e.nested || e.lookup_node.is_some() {
+            quote! { #fname: ::std::sync::Arc::new(self.#fname.fork_with_id(new_id)) }
+        } else {
+            quote! { #fname: self.#fname.fork_with_id(new_id) }
+        }
+    });
+
+    let fork_impl = if matches!(rp_mode, RpMode::Reactive | RpMode::Both) {
+        quote! {
+            pub fn fork(&self) -> Self {
+                self.fork_with_id(#crate_name::uuid::Uuid::new_v4())
+            }
+
+            #[doc(hidden)]
+            pub fn fork_with_id(&self, new_id: #crate_name::uuid::Uuid) -> Self {
+                Self {
+                    __rpstate_instance_id: new_id,
+                    #(#fork_fields,)*
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     match rp_mode {
         RpMode::Reactive | RpMode::Both => {
             quote! {
                 #[derive(Clone)]
                 #(#attrs)* #vis struct #name<S: #crate_name::Store = #crate_name::DefaultStore> {
+                    __rpstate_instance_id: #crate_name::uuid::Uuid,
                     #(#struct_fields,)*
                 }
                 #scope
                 impl<S: #crate_name::Store> #name<S> {
                     #constructor #(#schema_methods)* #(#methods)*
+                    #fork_impl
+                    #inherent_subs
                 }
                 #global_new_impl
                 #node_impl
@@ -138,7 +287,7 @@ fn generate_schema_export(
     let field_metas = entries.iter().map(|e| {
         let fname = e.ident.as_ref().unwrap();
         let fname_str = fname.to_string();
-        let (ts_type, full_ts_type) = map_type_to_ts(&e.ty);
+        let (ts_type, full_ts_type) = map_type_to_ts(e.ty.clone());
 
         let ty = &e.ty;
         let rust_type_str = quote!(#ty).to_string();
@@ -157,8 +306,8 @@ fn generate_schema_export(
             let sname = get_type_ident_str(&e.ty);
             quote! { #crate_name::tauri::FieldKind::LookupNode { target_prefix: #target_str, struct_name: #sname } }
         } else if let Some((k, v)) = e.get_map_types() {
-            let k_ts = map_type_to_ts(k).1;
-            let v_ts = map_type_to_ts(v).1;
+            let k_ts = map_type_to_ts(k.clone()).1;
+            let v_ts = map_type_to_ts(v.clone()).1;
             let k_rust = quote!(#k).to_string();
             let v_rust = quote!(#v).to_string();
             quote! {
@@ -202,7 +351,7 @@ fn generate_schema_export(
     }
 }
 
-fn map_type_to_ts(ty: &syn::Type) -> (String, String) {
+fn map_type_to_ts(ty: syn::Type) -> (String, String) {
     match ty {
         syn::Type::Path(type_path) => {
             if let Some(segment) = type_path.path.segments.last() {
@@ -218,7 +367,7 @@ fn map_type_to_ts(ty: &syn::Type) -> (String, String) {
                         if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
                             && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
                         {
-                            let (inner_base, inner_full) = map_type_to_ts(inner_ty);
+                            let (inner_base, inner_full) = map_type_to_ts(inner_ty.clone());
                             return (inner_base, format!("{}[]", inner_full));
                         }
                         ("any".to_string(), "any[]".to_string())
@@ -227,7 +376,7 @@ fn map_type_to_ts(ty: &syn::Type) -> (String, String) {
                         if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
                             && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
                         {
-                            let (inner_base, inner_full) = map_type_to_ts(inner_ty);
+                            let (inner_base, inner_full) = map_type_to_ts(inner_ty.clone());
                             return (inner_base, format!("{} | null", inner_full));
                         }
                         ("any".to_string(), "any | null".to_string())

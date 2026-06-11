@@ -1,8 +1,8 @@
+use crate::SignalSubscription;
 use crate::change::MapChange;
 use crate::primitives::intercept::{InterceptDisposer, InterceptGuard};
-use crate::SignalSubscription;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
@@ -233,7 +233,6 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
     }
 
     pub fn notify(&self, change: &MapChange<K, V>) {
-
         if let Some(k) = change.key()
             && let Ok(lock) = self.subscribers_key.lock()
             && let Some(cbs) = lock.get(k)

@@ -1,6 +1,6 @@
+use crate::MigrationContext;
 use crate::migration::fields::FieldDescriptor;
 use crate::store::StateScope;
-use crate::MigrationContext;
 use std::collections::BTreeSet;
 
 #[derive(Clone)]

@@ -5,6 +5,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 pub trait FieldValue: DeserializeOwned + Serialize + Clone + Send + Sync + 'static {}
 impl<T: DeserializeOwned + Serialize + Clone + Send + Sync + 'static> FieldValue for T {}
@@ -57,16 +58,21 @@ impl<T: Clone + 'static> FieldCore<T> {
         self.signal.get()
     }
 
-    pub fn get_arc(&self) -> Arc<T> {
-        self.signal.get_arc()
-    }
-
     pub fn subscribe<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(T) + Send + Sync + 'static,
     {
         self.signal.subscribe(move |val: &T| {
             callback(val.clone());
+        })
+    }
+
+    pub fn subscribe_with_source<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(T, Option<Uuid>) + Send + Sync + 'static,
+    {
+        self.signal.subscribe_with_source(move |val: &T, src| {
+            callback(val.clone(), src);
         })
     }
 
@@ -92,8 +98,14 @@ impl<T: Clone + 'static> FieldCore<T> {
         }
     }
 
-    pub fn run_interceptors(&self, path: Arc<str>, value: T) -> Result<Change<T>, String> {
+    pub fn run_interceptors(
+        &self,
+        path: Arc<str>,
+        value: T,
+        source: Option<Uuid>,
+    ) -> Result<Change<T>, String> {
         let mut change = Change {
+            source,
             old_value: self.get(),
             new_value: value,
         };

@@ -1,8 +1,9 @@
 use crate::{DefaultArena, FieldHandle};
 use rpstate::{AccessMode, Pipeline, Signal, SignalSubscription};
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Serialize};
 use std::cell::RefCell;
 use std::sync::Arc;
+use uuid::Uuid;
 
 thread_local! {
     pub static PIPELINE_ARENA: RefCell<Option<DefaultArena>> = const { RefCell::new(None) };
@@ -22,9 +23,16 @@ where
         self.get_with(&pipeline_arena())
     }
 
+    fn subscribe_with_source<F>(&self, arena: &DefaultArena, callback: F) -> SignalSubscription
+    where
+        F: Fn(T, Option<Uuid>) + Send + Sync + 'static;
+
     fn subscribe<F>(&self, arena: &DefaultArena, callback: F) -> SignalSubscription
     where
-        F: Fn(T) + Send + Sync + 'static;
+        F: Fn(T) + Send + Sync + 'static,
+    {
+        self.subscribe_with_source(arena, move |v, _src| callback(v))
+    }
 }
 
 impl<T, M> ArenaReactive<T> for FieldHandle<T, M>
@@ -36,11 +44,11 @@ where
         arena.get_field(*self)
     }
 
-    fn subscribe<F>(&self, arena: &DefaultArena, callback: F) -> SignalSubscription
+    fn subscribe_with_source<F>(&self, arena: &DefaultArena, callback: F) -> SignalSubscription
     where
-        F: Fn(T) + Send + Sync + 'static,
+        F: Fn(T, Option<Uuid>) + Send + Sync + 'static,
     {
-        arena.subscribe_field(*self, callback)
+        arena.subscribe_field_with_source(*self, callback)
     }
 }
 
@@ -60,7 +68,9 @@ where
         let initial = self.get();
         let signal = Arc::new(Signal::new(initial));
         let target = Arc::clone(&signal);
-        let sub = self.subscribe(&pipeline_arena(), move |val| target.set(val));
+        let sub = self.subscribe_with_source(&pipeline_arena(), move |val, source| {
+            target.set(val, source);
+        });
         Pipeline::from_signal(signal, vec![sub], vec![])
     }
 }
@@ -90,8 +100,8 @@ macro_rules! impl_tuple_pipeline {
                 $(
                     let target = Arc::clone(&signal);
                     let refresh_cb = Arc::clone(&refresh);
-                    source_subs.push($source.subscribe(&pipeline_arena(), move |_| {
-                        target.set(refresh_cb());
+                    source_subs.push($source.subscribe_with_source(&pipeline_arena(), move |_, src| {
+                        target.set(refresh_cb(), src);
                     }));
                 )+
 

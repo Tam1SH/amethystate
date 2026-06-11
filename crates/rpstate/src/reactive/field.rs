@@ -3,6 +3,9 @@ use crate::store::{Store, SubscriptionId};
 use crate::{AccessMode, ReadOnlyMode, Result, WritableMode};
 use rpstate_core::{Change, FieldCore, InterceptDisposer, Signal, SignalSubscription};
 use std::sync::Arc;
+use uuid::Uuid;
+
+pub use rpstate_core::primitives::field_core::FieldValue;
 
 pub struct StoreSubscription<S: Store> {
     pub store: S,
@@ -14,11 +17,11 @@ impl<S: Store> Drop for StoreSubscription<S> {
         self.store.unsubscribe(self.id);
     }
 }
-pub use rpstate_core::primitives::field_core::FieldValue;
 
 pub struct Field<TValue, S: Store, M: AccessMode = ReadOnlyMode> {
     pub(crate) core: FieldCore<TValue>,
     pub path: Arc<str>,
+    pub instance_id: Uuid,
     pub(crate) store_sub: Option<Arc<StoreSubscription<S>>>,
     pub(crate) _mode: std::marker::PhantomData<M>,
 }
@@ -31,6 +34,7 @@ impl<TValue, S: Store, M: AccessMode> Clone for Field<TValue, S, M> {
         Self {
             core: self.core.clone(),
             path: Arc::clone(&self.path),
+            instance_id: self.instance_id,
             store_sub: self.store_sub.clone(),
             _mode: std::marker::PhantomData,
         }
@@ -43,12 +47,22 @@ where
     S: Store,
     M: AccessMode,
 {
-    pub fn get(&self) -> TValue {
-        self.core.get()
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(Uuid::new_v4())
     }
 
-    pub fn get_arc(&self) -> Arc<TValue> {
-        self.core.get_arc()
+    pub fn fork_with_id(&self, new_instance_id: Uuid) -> Self {
+        Self {
+            core: self.core.clone(),
+            path: Arc::clone(&self.path),
+            instance_id: new_instance_id,
+            store_sub: self.store_sub.clone(),
+            _mode: std::marker::PhantomData,
+        }
+    }
+
+    pub fn get(&self) -> TValue {
+        self.core.get()
     }
 
     pub fn path(&self) -> Arc<str> {
@@ -57,6 +71,18 @@ where
 
     pub fn as_signal(&self) -> Signal<TValue> {
         self.core.signal.clone()
+    }
+
+    pub fn subscribe_external<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(TValue) + Send + Sync + 'static,
+    {
+        let my_id = self.instance_id;
+        self.core.subscribe_with_source(move |val, src| {
+            if src != Some(my_id) {
+                callback(val);
+            }
+        })
     }
 
     pub fn subscribe<F>(&self, callback: F) -> SignalSubscription
@@ -72,16 +98,41 @@ where
     TValue: FieldValue,
     S: Store,
 {
+    pub fn update<F>(&self, f: F) -> Result<TValue>
+    where
+        F: FnOnce(TValue) -> TValue,
+    {
+        let val = self.get();
+        let new_val = f(val);
+        self.set(new_val.clone())?;
+        Ok(new_val)
+    }
+
+    pub fn modify<F>(&self, f: F) -> Result<()>
+    where
+        F: FnOnce(&mut TValue),
+    {
+        let mut val = self.get();
+        f(&mut val);
+        self.set(val)
+    }
+
     pub fn set(&self, value: TValue) -> Result<()> {
         if let Some(sub) = &self.store_sub {
             let backend = StoreBackend::new(sub.store.clone());
-            rpstate_core::field_set(&backend, &self.core, self.path.clone(), value, false)?;
+            rpstate_core::field_set(
+                &backend,
+                &self.core,
+                self.path.clone(),
+                value,
+                Some(self.instance_id),
+            )?;
         } else {
             let change = self
                 .core
-                .run_interceptors(self.path.clone(), value)
+                .run_interceptors(self.path.clone(), value, Some(self.instance_id))
                 .map_err(|_| crate::error::Error::Intercepted)?;
-            self.core.signal.set(change.new_value);
+            self.core.signal.set(change.new_value, change.source);
         }
         Ok(())
     }
@@ -94,9 +145,14 @@ where
     }
 
     pub fn new_volatile(path: Arc<str>, default: TValue) -> Self {
+        Self::new_volatile_with_id(path, default, Uuid::new_v4())
+    }
+
+    pub fn new_volatile_with_id(path: Arc<str>, default: TValue, instance_id: Uuid) -> Self {
         Self {
             core: FieldCore::new(default),
             path,
+            instance_id,
             store_sub: None,
             _mode: std::marker::PhantomData,
         }
@@ -118,14 +174,21 @@ where
     M: AccessMode,
 {
     fn get(&self) -> TValue {
-        Field::get(self)
+        self.get()
+    }
+
+    fn subscribe_with_source<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(TValue, Option<Uuid>) + Send + Sync + 'static,
+    {
+        self.core.subscribe_with_source(callback)
     }
 
     fn subscribe<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(TValue) + Send + Sync + 'static,
     {
-        Field::subscribe(self, callback)
+        self.subscribe(callback)
     }
 }
 
@@ -135,8 +198,8 @@ mod tests {
     use crate::store::{StateScope, Store};
     use crate::test_utils::unique_store;
     use crate::{DefaultStore, SubscriptionKind};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
-    use std::sync::atomic::Ordering;
     use tracing_test::traced_test;
 
     struct UiScope;
@@ -147,8 +210,13 @@ mod tests {
     #[test]
     fn field_get_set_and_subscribe() {
         let store = unique_store("field-int");
-        let field = crate::store::field::<UiScope, i32, DefaultStore>(&store, "font_size", 14)
-            .expect("field should be created");
+        let field = crate::store::field::<UiScope, i32, DefaultStore>(
+            &store,
+            "font_size",
+            14,
+            Uuid::new_v4(),
+        )
+        .expect("field should be created");
 
         assert_eq!(field.get(), 14);
         assert_eq!(field.path().as_ref(), "ui.font_size");
@@ -162,7 +230,7 @@ mod tests {
             *cap.lock().unwrap() = v;
         });
 
-        field.core.signal.set(22);
+        field.core.signal.set(22, Default::default());
         assert_eq!(*callback_val.lock().unwrap(), 22);
     }
 
@@ -189,6 +257,7 @@ mod tests {
                     store: store.clone(),
                     id: sub_id,
                 })),
+                instance_id: Default::default(),
                 _mode: Default::default(),
             };
 
@@ -218,6 +287,7 @@ mod tests {
                 store: store.clone(),
                 id: sub_id,
             })),
+            instance_id: Default::default(),
             _mode: Default::default(),
         };
 
@@ -325,4 +395,88 @@ mod tests {
         assert!(logs_contain("maximum intercept depth reached"));
         assert!(logs_contain("path=test.recursive_field"));
     }
+
+    #[test]
+    fn test_field_subscribe_external() {
+        let field =
+            Field::<i32, DefaultStore, WritableMode>::new_volatile(Arc::from("test.ext"), 0);
+        let fork = field.fork();
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let c_clone = calls.clone();
+
+        let _sub = field.subscribe_external(move |_| {
+            c_clone.fetch_add(1, Ordering::SeqCst);
+        });
+
+        field.set(1).unwrap();
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "Own updates should be ignored"
+        );
+
+        fork.set(2).unwrap();
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "Updates from fork should trigger"
+        );
+
+        field.core.signal.set(3, None);
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            2,
+            "Updates without source should trigger"
+        );
+    }
+
+    #[test]
+    fn test_field_subscribe_external_persistent() {
+        let store = unique_store("field_external_persistent");
+
+        let field = crate::store::field::<UiScope, i32, DefaultStore>(
+            &store,
+            "persistent_val",
+            100,
+            Uuid::new_v4(),
+        )
+        .expect("field should be created");
+
+        let fork = field.fork();
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let c_clone = calls.clone();
+
+        let _sub = field.subscribe_external(move |_| {
+            c_clone.fetch_add(1, Ordering::SeqCst);
+        });
+
+        field.set(200).unwrap();
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "Own writes must be ignored, but without last_write_source they trigger subscribe_external!"
+        );
+
+        fork.set(300).unwrap();
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "Fork updates should trigger"
+        );
+    }
+    #[test]
+    fn test_field_update_and_modify() {
+        let field = Field::<i32, DefaultStore, WritableMode>::new_volatile(Arc::from("test.update_modify"), 10);
+
+        let updated = field.update(|val| val + 5).unwrap();
+        assert_eq!(updated, 15);
+
+        field.modify(|val| *val += 10).unwrap();
+        assert_eq!(field.get(), 25);
+    }
+
 }

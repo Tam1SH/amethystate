@@ -16,7 +16,7 @@ impl ReactiveBackend for LeptosBackend {
     type Storage = DefaultStore;
 
     #[cfg(target_arch = "wasm32")]
-    type Storage = rpstate_tauri::TauriBackend;
+    type Storage = rpstate::tauri::TauriBackend;
 
     fn cb_call<T: Send + Sync + 'static>(cb: &Self::Callback<T>, val: T) {
         cb.run(val);
@@ -34,10 +34,87 @@ compile_error!(
 
 pub type MapSignal<K, V> = rpstate_arena::MapSignal<LeptosBackend, K, V>;
 
+#[cfg(not(target_arch = "wasm32"))]
 #[component]
 pub fn RpStateProvider(store: DefaultStore, children: Children) -> impl IntoView {
     provide_context(DefaultArena::new());
     provide_context(store);
 
     children()
+}
+
+#[cfg(target_arch = "wasm32")]
+#[component]
+pub fn RpStateProvider(
+    backend: rpstate::tauri::TauriBackend,
+    init: Box<dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output =
+    std::sync::Arc<std::sync::Mutex<Vec<Box<dyn FnOnce() + Send>>>>>>>>,
+    #[prop(into)] fallback: ViewFnOnce,
+    children: ChildrenFn,
+) -> impl IntoView {
+    provide_context(DefaultArena::new());
+    provide_context(backend);
+
+    let resource = LocalResource::new(move || (init)());
+
+    let children = std::sync::Arc::new(children);
+    let owner = Owner::current().expect("rpstate: RpStateProvider must have an active Owner");
+
+    view! {
+        <Suspense fallback=fallback>
+            {move || {
+                let children_clone = children.clone();
+                let owner = owner.clone();
+                Suspend::new(async move {
+                    let providers = resource.await;
+                    owner.with(move || {
+                        for provide in providers.lock().unwrap().drain(..) {
+                            provide();
+                        }
+                        children_clone()
+                    })
+                })
+            }}
+        </Suspense>
+    }
+}
+
+
+#[macro_export]
+macro_rules! preload_slices {
+    ($($S:ty),+ $(,)?) => {{
+        Box::new(move || {
+            Box::pin(async move {
+                use ::rpstate_arena::RpStateFrameworkNested;
+                use ::rpstate::client::RpStateSliceAsync;
+
+                let backend = ::leptos::prelude::use_context::<::rpstate::tauri::TauriBackend>()
+                    .expect("rpstate: TauriBackend not in context");
+                let arena = ::leptos::prelude::use_context::<::rpstate_arena::DefaultArena>()
+                    .expect("rpstate: Arena not in context");
+
+                let providers: ::std::sync::Arc<::std::sync::Mutex<Vec<Box<dyn FnOnce() + Send>>>> =
+                    ::std::sync::Arc::new(::std::sync::Mutex::new(Vec::new()));
+
+                $(
+                    {
+                        let state = <$S as RpStateSliceAsync<::rpstate::tauri::TauriBackend>>
+                            ::load_async(&backend)
+                            .await
+                            .unwrap_or_else(|e| panic!(
+                                "rpstate: failed to load {}: {e:?}",
+                                ::std::any::type_name::<$S>()
+                            ));
+                        let handle = state.register(&arena);
+                        providers.lock().unwrap().push(Box::new(move || {
+                            ::leptos::prelude::provide_context(handle);
+                        }));
+                    }
+                )+
+
+                providers
+            }) as ::std::pin::Pin<Box<dyn ::std::future::Future<Output =
+                ::std::sync::Arc<::std::sync::Mutex<Vec<Box<dyn FnOnce() + Send>>>>>>>
+        })
+    }};
 }

@@ -157,6 +157,14 @@ pub struct TextStore<D: TextDocument> {
     inner: Arc<TextStoreInner<D>>,
 }
 
+impl<D: TextDocument> PartialEq for TextStore<D> {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+impl<D: TextDocument> Eq for TextStore<D> {}
+
+
 impl<D: TextDocument> Debug for TextStore<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TextStore")
@@ -233,10 +241,7 @@ impl<D: TextDocument + Send + 'static> TextStore<D> {
         let watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
             let Ok(event) = res else { return };
 
-            let is_modify = matches!(
-                event.kind,
-                EventKind::Modify(_) | EventKind::Create(_)
-            );
+            let is_modify = matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_));
             if !is_modify {
                 return;
             }
@@ -247,10 +252,13 @@ impl<D: TextDocument + Send + 'static> TextStore<D> {
 
             for path in &event.paths {
                 if *path == data_path {
+                    let Ok(content) = std::fs::read_to_string(path) else {
+                        continue;
+                    };
 
-                    let Ok(content) = std::fs::read_to_string(path) else { continue };
-
-                    let Ok(on_disk) = D::parse(&content) else { continue };
+                    let Ok(on_disk) = D::parse(&content) else {
+                        continue;
+                    };
 
                     let events = {
                         let mut guard = files_watch.data.doc.write();
@@ -270,8 +278,12 @@ impl<D: TextDocument + Send + 'static> TextStore<D> {
                         utils::emit_events(&watch_subs, event);
                     }
                 } else if *path == meta_path {
-                    let Ok(content) = std::fs::read_to_string(path) else { continue };
-                    let Ok(on_disk) = D::parse(&content) else { continue };
+                    let Ok(content) = std::fs::read_to_string(path) else {
+                        continue;
+                    };
+                    let Ok(on_disk) = D::parse(&content) else {
+                        continue;
+                    };
                     let guard = files_watch.meta.doc.read();
                     let current_str = guard.serialize().unwrap_or_default();
                     let on_disk_str = on_disk.serialize().unwrap_or_default();
@@ -359,7 +371,7 @@ impl<D: TextDocument> TextStoreInner<D> {
         }
     }
 
-    fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
+    fn set<T: Serialize>(&self, path: &str, value: &T, source: Option<uuid::Uuid>) -> Result<()> {
         self.check_debouncer()?;
 
         let path_str = normalize_path(path)?;
@@ -368,10 +380,7 @@ impl<D: TextDocument> TextStoreInner<D> {
 
         let (old_bytes, new_bytes) = {
             let mut guard = self.files.data.doc.write();
-            let old = guard
-                .get(&parts)
-                .map(|n| D::node_to_bytes(n))
-                .transpose()?;
+            let old = guard.get(&parts).map(|n| D::node_to_bytes(n)).transpose()?;
             guard.set(&parts, node)?;
             let new_node = guard.get(&parts).unwrap();
             let new_bytes = D::node_to_bytes(new_node)?;
@@ -387,6 +396,7 @@ impl<D: TextDocument> TextStoreInner<D> {
                 op: StoreOp::Set,
                 old: old_bytes,
                 new: Some(new_bytes),
+                source,
             },
         );
 
@@ -405,7 +415,7 @@ impl<D: TextDocument> TextStoreInner<D> {
         scan_prefix_impl(&*guard, prefix)
     }
 
-    fn delete(&self, path: &str) -> Result<()> {
+    fn delete(&self, path: &str, source: Option<uuid::Uuid>) -> Result<()> {
         self.check_debouncer()?;
 
         let path_str = normalize_path(path)?;
@@ -413,10 +423,7 @@ impl<D: TextDocument> TextStoreInner<D> {
 
         let old_bytes = {
             let mut guard = self.files.data.doc.write();
-            let old = guard
-                .get(&parts)
-                .map(|n| D::node_to_bytes(n))
-                .transpose()?;
+            let old = guard.get(&parts).map(|n| D::node_to_bytes(n)).transpose()?;
             guard.delete(&parts)?;
             old
         };
@@ -430,6 +437,7 @@ impl<D: TextDocument> TextStoreInner<D> {
                 op: StoreOp::Delete,
                 old: old_bytes,
                 new: None,
+                source,
             },
         );
 
@@ -488,7 +496,29 @@ impl<D: TextDocument + Send + 'static> Store for TextStore<D> {
     }
 
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
-        self.inner.set(path, value)
+        self.set_with_source(path, value, None)
+    }
+
+    fn set_with_source<T: Serialize>(
+        &self,
+        path: &str,
+        value: &T,
+        source: Option<uuid::Uuid>,
+    ) -> Result<()> {
+        self.inner.set(path, value, source)
+    }
+
+    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
+        self.set_owned_with_source(path, value, None)
+    }
+
+    fn set_owned_with_source<T: Serialize>(
+        &self,
+        path: Arc<str>,
+        value: &T,
+        source: Option<uuid::Uuid>,
+    ) -> Result<()> {
+        self.set_with_source(&path, value, source)
     }
 
     fn save_now(&self) -> Result<()> {
@@ -500,7 +530,11 @@ impl<D: TextDocument + Send + 'static> Store for TextStore<D> {
     }
 
     fn delete(&self, path: &str) -> Result<()> {
-        self.inner.delete(path)
+        self.delete_with_source(path, None)
+    }
+
+    fn delete_with_source(&self, path: &str, source: Option<uuid::Uuid>) -> Result<()> {
+        self.inner.delete(path, source)
     }
 
     fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId {
@@ -630,7 +664,9 @@ pub(super) fn scan_prefix_recursive<D: TextDocument>(
 ) {
     let current_depth = parts.len();
 
-    if let Some(target_depth) = target_depth && current_depth >= target_depth {
+    if let Some(target_depth) = target_depth
+        && current_depth >= target_depth
+    {
         if !prefix_str.is_empty()
             && !prefix_str.ends_with('.')
             && let Some(node) = doc.get(parts)
@@ -695,6 +731,7 @@ fn diff_documents<D: TextDocument>(old: &D, new: &D) -> Vec<StoreEvent> {
                         op: StoreOp::Set,
                         old: old_bytes,
                         new: new_bytes,
+                        source: None,
                     });
                 }
             }
@@ -705,6 +742,7 @@ fn diff_documents<D: TextDocument>(old: &D, new: &D) -> Vec<StoreEvent> {
                     op: StoreOp::Delete,
                     old: old_bytes,
                     new: None,
+                    source: None,
                 });
             }
             (None, Some(n)) => {
@@ -714,6 +752,7 @@ fn diff_documents<D: TextDocument>(old: &D, new: &D) -> Vec<StoreEvent> {
                     op: StoreOp::Set,
                     old: None,
                     new: new_bytes,
+                    source: None,
                 });
             }
             (None, None) => {}

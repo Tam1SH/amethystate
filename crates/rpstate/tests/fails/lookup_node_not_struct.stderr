@@ -39,3 +39,48 @@ error[E0277]: the trait bound `u16: RpStateNode<S>` is not satisfied
    = help: the following other types implement trait `RpStateNode<S>`:
              NetworkState<S>
              UiState<S>
+
+error[E0283]: type annotations needed
+ --> tests/fails/lookup_node_not_struct.rs:9:1
+  |
+9 | #[rpstate(prefix = "ui")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+  |
+  = note: cannot satisfy `_: Store`
+  = help: the trait `Store` is implemented for `rpstate::store::default::RedbStore`
+note: required by a bound in `UiState::<S>::fork_with_id`
+ --> tests/fails/lookup_node_not_struct.rs:9:1
+  |
+9 | #[rpstate(prefix = "ui")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `UiState::<S>::fork_with_id`
+  = note: this error originates in the attribute macro `rpstate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0283]: type annotations needed
+ --> tests/fails/lookup_node_not_struct.rs:9:1
+  |
+9 | #[rpstate(prefix = "ui")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+  |
+  = note: cannot satisfy `_: Store`
+  = help: the trait `Store` is implemented for `rpstate::store::default::RedbStore`
+note: required by a bound in `UiState::<S>::subscribe_all`
+ --> tests/fails/lookup_node_not_struct.rs:9:1
+  |
+9 | #[rpstate(prefix = "ui")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `UiState::<S>::subscribe_all`
+  = note: this error originates in the attribute macro `rpstate` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0283]: type annotations needed
+ --> tests/fails/lookup_node_not_struct.rs:9:1
+  |
+9 | #[rpstate(prefix = "ui")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+  |
+  = note: cannot satisfy `_: Store`
+  = help: the trait `Store` is implemented for `rpstate::store::default::RedbStore`
+note: required by a bound in `UiState::<S>::subscribe_all_external`
+ --> tests/fails/lookup_node_not_struct.rs:9:1
+  |
+9 | #[rpstate(prefix = "ui")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `UiState::<S>::subscribe_all_external`
+  = note: this error originates in the attribute macro `rpstate` (in Nightly builds, run with -Z macro-backtrace for more info)

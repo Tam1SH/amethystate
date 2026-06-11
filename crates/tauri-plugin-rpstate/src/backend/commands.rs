@@ -83,7 +83,7 @@ pub async fn rpstate_subscribe<R: Runtime>(
                     .and_then(|b| store_c.decode::<serde_json::Value>(b).ok());
 
                 let payload = match event.op {
-                    rpstate::StoreOp::Set | rpstate::StoreOp::Patch => {
+                    rpstate::StoreOp::Set => {
                         if let Some(old) = old_val {
                             serde_json::json!({
                                 "type": "Update",

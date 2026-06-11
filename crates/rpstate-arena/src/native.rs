@@ -1,14 +1,12 @@
 use crate::primitives::*;
 use parking_lot::RwLock;
-use rpstate::{
-    AccessMode, Field, MapChange, Pipeline, ReactiveMap, ReactiveMapKey, ReactiveMapValue,
-    Result as RpResult, SignalSubscription, Store, WritableMode,
-};
-use serde::{Serialize, de::DeserializeOwned};
+use rpstate::{AccessMode, Field, MapChange, Pipeline, Reactive, ReactiveMap, ReactiveMapKey, ReactiveMapValue, Result as RpResult, SignalSubscription, Store, WritableMode};
+use serde::{de::DeserializeOwned, Serialize};
 use slotmap::{DefaultKey, SlotMap};
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use uuid::Uuid;
 
 type ErasedItem = Box<dyn Any + Send + Sync>;
 
@@ -90,6 +88,21 @@ impl<S: Store> Arena<S> {
             field.subscribe(callback)
         })
     }
+    pub fn subscribe_field_with_source<T, M, F>(
+        &self,
+        handle: FieldHandle<T, M>,
+        callback: F,
+    ) -> SignalSubscription
+    where
+        T: DeserializeOwned + Serialize + Clone + Send + Sync + 'static,
+        M: AccessMode,
+        F: Fn(T, Option<Uuid>) + Send + Sync + 'static,
+    {
+        self.with_item::<Field<T, S, M>, _, _>(handle.key, "Field", |field| {
+            field.subscribe_with_source(callback)
+        })
+    }
+
 
     pub fn register_pipeline<T>(&self, pipeline: Pipeline<T>) -> PipelineHandle<T>
     where

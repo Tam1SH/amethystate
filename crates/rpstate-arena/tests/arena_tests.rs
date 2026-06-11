@@ -1,8 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 use rpstate::test_utils::unique_store;
 use rpstate::{
-    DefaultStore, Field, IntoPipeline, MapChange, ReactiveMap, Result as RpResult, Store,
-    WritableMode, rpstate,
+    rpstate, DefaultStore, Field, IntoPipeline, MapChange, ReactiveMap, Result as RpResult,
+    Store, WritableMode,
 };
 use rpstate_arena::Arena;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -146,6 +146,7 @@ fn test_arena_cleanup_drops_fields_and_unsubscribes() {
         &store,
         Arc::from("test.field"),
         "initial_value".to_string(),
+        uuid::Uuid::new_v4()
     )
     .expect("Failed to initialize field");
 
@@ -257,7 +258,7 @@ fn test_arena_clear_map_fires_subscription() -> RpResult<()> {
     let clear_count_clone = clear_count.clone();
 
     let _sub = arena.subscribe_map_any(map_handle, move |change| {
-        if let MapChange::Clear = change {
+        if let MapChange::Clear { .. } = change {
             clear_count_clone.fetch_add(1, Ordering::SeqCst);
         }
     });

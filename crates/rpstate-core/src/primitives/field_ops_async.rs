@@ -1,27 +1,28 @@
 use crate::primitives::field_core::FieldValue;
 use crate::{FieldCore, RpBackendAsync};
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub async fn field_set_async<B, T>(
     backend: &B,
     core: &FieldCore<T>,
     path: Arc<str>,
     value: T,
-    update_local_after_commit: bool,
+    source: Option<Uuid>,
 ) -> Result<(), B::Error>
 where
     B: RpBackendAsync,
     T: FieldValue,
 {
     let change = core
-        .run_interceptors(path.clone(), value)
+        .run_interceptors(path.clone(), value, source)
         .map_err(|_| backend.intercepted())?;
 
-    backend.set(&path, &change.new_value).await?;
+    core.signal.set(change.new_value.clone(), change.source);
 
-    if update_local_after_commit {
-        core.signal.set(change.new_value);
-    }
+    backend
+        .set_owned_with_source(path, &change.new_value, change.source)
+        .await?;
 
     Ok(())
 }

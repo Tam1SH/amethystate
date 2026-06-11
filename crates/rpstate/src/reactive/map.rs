@@ -7,10 +7,12 @@ use rpstate_core::{InterceptDisposer, MapChange, ReactiveMapCore, SignalSubscrip
 use std::marker::PhantomData;
 
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct ReactiveMap<K, V, S: Store = DefaultStore, M: AccessMode = ReadOnlyMode> {
     pub core: ReactiveMapCore<K, V>,
     pub path: Arc<str>,
+    pub instance_id: Uuid,
     pub store: S,
     pub(crate) store_sub: Arc<StoreSubscription<S>>,
     pub(crate) _mode: PhantomData<M>,
@@ -26,6 +28,7 @@ impl<K, V, S: Store, M: AccessMode> Clone for ReactiveMap<K, V, S, M> {
         Self {
             core: self.core.clone(),
             path: self.path.clone(),
+            instance_id: self.instance_id,
             store: self.store.clone(),
             store_sub: self.store_sub.clone(),
             _mode: PhantomData,
@@ -61,6 +64,21 @@ where
     S: Store,
     M: AccessMode,
 {
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(Uuid::new_v4())
+    }
+
+    pub fn fork_with_id(&self, new_instance_id: Uuid) -> Self {
+        Self {
+            core: self.core.clone(),
+            path: self.path.clone(),
+            instance_id: new_instance_id,
+            store: self.store.clone(),
+            store_sub: self.store_sub.clone(),
+            _mode: PhantomData,
+        }
+    }
+
     pub fn get(&self, key: &K) -> Result<Option<V>> {
         let backend = StoreBackend::new(self.store.clone());
         rpstate_core::map_get(&backend, &self.path, key)
@@ -92,6 +110,36 @@ where
         self.core.subscribe_any(callback)
     }
 
+    pub fn subscribe_any_external<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
+    {
+        let my_id = self.instance_id;
+        self.core.subscribe_any(move |change| match change {
+            MapChange::Update { source, .. } => {
+                if *source != Some(my_id) {
+                    callback(change);
+                }
+            }
+            _ => callback(change),
+        })
+    }
+
+    pub fn subscribe_key_external<F>(&self, key: K, callback: F) -> SignalSubscription
+    where
+        F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
+    {
+        let my_id = self.instance_id;
+        self.core.subscribe_key(key, move |change| match change {
+            MapChange::Update { source, .. } => {
+                if *source != Some(my_id) {
+                    callback(change);
+                }
+            }
+            _ => callback(change),
+        })
+    }
+
     pub fn subscribe_key<F>(&self, key: K, callback: F) -> SignalSubscription
     where
         F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
@@ -106,24 +154,78 @@ where
     V: ReactiveMapValue,
     S: Store,
 {
+    pub fn update<F>(&self, key: K, f: F) -> Result<Option<V>>
+    where
+        F: FnOnce(V) -> V,
+    {
+        if let Some(val) = self.get(&key)? {
+            let new_val = f(val);
+            self.set(key, &new_val)?;
+            Ok(Some(new_val))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn modify<F>(&self, key: K, f: F) -> Result<()>
+    where
+        F: FnOnce(&mut V),
+    {
+        if let Some(mut val) = self.get(&key)? {
+            f(&mut val);
+            self.set(key, &val)
+        } else {
+            Err(crate::error::Error::KeyNotFound(key.to_string()))
+        }
+    }
+
     pub fn set(&self, key: K, value: &V) -> Result<()> {
         let backend = StoreBackend::new(self.store.clone());
-        rpstate_core::map_set_existing(&backend, &self.core, self.path.clone(), key, value, false)
+        rpstate_core::map_set_existing(
+            &backend,
+            &self.core,
+            self.path.clone(),
+            key,
+            value,
+            false,
+            Some(self.instance_id),
+        )
     }
 
     pub fn set_or_create(&self, key: K, value: &V) -> Result<()> {
         let backend = StoreBackend::new(self.store.clone());
-        rpstate_core::map_set_or_create(&backend, &self.core, self.path.clone(), key, value, false)
+        rpstate_core::map_set_or_create(
+            &backend,
+            &self.core,
+            self.path.clone(),
+            key,
+            value,
+            false,
+            Some(self.instance_id),
+        )
     }
 
     pub fn remove(&self, key: K) -> Result<Option<V>> {
         let backend = StoreBackend::new(self.store.clone());
-        rpstate_core::map_remove(&backend, &self.core, self.path.clone(), key, false)
+        rpstate_core::map_remove(
+            &backend,
+            &self.core,
+            self.path.clone(),
+            key,
+            false,
+            Some(self.instance_id),
+        )
     }
 
     pub fn clear(&self) -> Result<()> {
         let backend = StoreBackend::new(self.store.clone());
-        rpstate_core::map_clear(&backend, &self.core, self.path.clone(), true)
+        rpstate_core::map_clear(
+            &backend,
+            &self.core,
+            self.path.clone(),
+            true,
+            Some(self.instance_id),
+        )
     }
 
     pub fn intercept<F>(&self, callback: F) -> InterceptDisposer
@@ -157,13 +259,13 @@ mod tests {
     }
 
     use super::*;
+    use crate::DefaultStore;
     use crate::error::Error;
     use crate::test_utils::unique_store;
-    use crate::DefaultStore;
     use rpstate_core::WritableMode;
     use std::collections::HashMap;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
     use tracing_test::traced_test;
 
@@ -177,6 +279,7 @@ mod tests {
                 &store,
                 path,
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
@@ -210,6 +313,7 @@ mod tests {
                 &store,
                 Arc::from("test.intercept"),
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
@@ -239,22 +343,26 @@ mod tests {
                 &store,
                 Arc::from("test.transform"),
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
         map.intercept(|change| match change {
-            MapChange::Insert { key, value } => Some(MapChange::Insert {
+            MapChange::Insert { key, value, source } => Some(MapChange::Insert {
                 key,
                 value: value * 2,
+                source,
             }),
             MapChange::Update {
                 key,
                 old_value,
                 new_value,
+                source,
             } => Some(MapChange::Update {
                 key,
                 old_value,
                 new_value: new_value * 2,
+                source,
             }),
             _ => Some(change),
         });
@@ -271,6 +379,7 @@ mod tests {
                 &store,
                 Arc::from("test.subs"),
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
@@ -303,6 +412,7 @@ mod tests {
                 &store,
                 Arc::from("test.reentrancy"),
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
@@ -330,6 +440,7 @@ mod tests {
                 &store,
                 Arc::from("test.clear"),
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
@@ -342,7 +453,7 @@ mod tests {
         let clear_events_count_clone = clear_events_count.clone();
 
         let _sub = map.subscribe_any(move |change| {
-            if let MapChange::Clear = change {
+            if let MapChange::Clear { .. } = change {
                 clear_events_count_clone.fetch_add(1, Ordering::SeqCst);
             }
         });
@@ -364,6 +475,7 @@ mod tests {
                 &store,
                 Arc::from("test.contains"),
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
@@ -394,6 +506,7 @@ mod tests {
                 &store,
                 Arc::from("test.keyspec"),
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
@@ -437,6 +550,7 @@ mod tests {
                     &store,
                     path.clone(),
                     HashMap::new(),
+                    Uuid::new_v4(),
                 )
                 .unwrap();
 
@@ -453,6 +567,7 @@ mod tests {
                 &store,
                 path,
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
@@ -471,6 +586,7 @@ mod tests {
                 &store,
                 Arc::from("test.remove"),
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
@@ -494,6 +610,7 @@ mod tests {
                 &store,
                 Arc::from("test.recursive_map"),
                 HashMap::new(),
+                Uuid::new_v4(),
             )
             .unwrap();
 
@@ -510,5 +627,50 @@ mod tests {
 
         assert!(logs_contain("maximum intercept depth reached"));
         assert!(logs_contain("test.recursive_map.key_a"));
+    }
+    #[test]
+    fn test_map_subscribe_external() {
+        let store = unique_store("map_external");
+        let map = crate::store::reactive_map_with_path::<
+            TestScope,
+            String,
+            i32,
+            DefaultStore,
+            WritableMode,
+        >(
+            &store,
+            Arc::from("test.external"),
+            HashMap::new(),
+            Uuid::new_v4(),
+        )
+        .unwrap();
+
+        let fork = map.fork();
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let c_clone = calls.clone();
+
+        let _sub = map.subscribe_any_external(move |_| {
+            c_clone.fetch_add(1, Ordering::SeqCst);
+        });
+
+        map.set_or_create("a".into(), &1).unwrap();
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "Creation (Insert) is NOT ignored"
+        );
+
+        map.set("a".into(), &10).unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "Own updates are ignored");
+
+        fork.set("a".into(), &20).unwrap();
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            2,
+            "Fork updates are processed"
+        );
     }
 }

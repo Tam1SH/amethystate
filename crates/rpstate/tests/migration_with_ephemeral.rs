@@ -1,5 +1,5 @@
 use rpstate::store::builder::StoreBuilder;
-use rpstate::{migrate, migrate_field, RpData, Store};
+use rpstate::{RpData, Store, migrate, migrate_field};
 use rpstate_core::test_utils::unique_path;
 use rpstate_macros::rpstate;
 

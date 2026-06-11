@@ -4,10 +4,12 @@ use crate::{InterceptDisposer, MapChange, ReactiveMapCore, SignalSubscription};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 pub struct ReactiveMap<K, V, B> {
     pub core: ReactiveMapCore<K, V>,
     pub prefix: Arc<str>,
+    pub instance_id: Uuid,
     _subscription: Arc<Mutex<Option<SubscriptionHandle>>>,
     backend: B,
 }
@@ -20,6 +22,7 @@ where
         Self {
             core: self.core.clone(),
             prefix: self.prefix.clone(),
+            instance_id: self.instance_id,
             _subscription: self._subscription.clone(),
             backend: self.backend.clone(),
         }
@@ -33,7 +36,6 @@ impl<K, V, B> PartialEq for ReactiveMap<K, V, B> {
 }
 
 impl<K, V, B> Eq for ReactiveMap<K, V, B> {}
-
 
 impl<K, V, B> std::fmt::Debug for ReactiveMap<K, V, B>
 where
@@ -60,6 +62,20 @@ where
     V: ReactiveMapValue,
     B: AsyncSubscriptionBackend,
 {
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(Uuid::new_v4())
+    }
+
+    pub fn fork_with_id(&self, new_instance_id: Uuid) -> Self {
+        Self {
+            core: self.core.clone(),
+            prefix: self.prefix.clone(),
+            instance_id: new_instance_id,
+            _subscription: self._subscription.clone(),
+            backend: self.backend.clone(),
+        }
+    }
+
     pub fn new(prefix: impl Into<Arc<str>>, initial_values: HashMap<K, V>) -> Self
     where
         B: Default,
@@ -71,6 +87,15 @@ where
         prefix: impl Into<Arc<str>>,
         initial_values: HashMap<K, V>,
         backend: B,
+    ) -> Self {
+        Self::new_with_backend_and_id(prefix, initial_values, backend, Uuid::new_v4())
+    }
+
+    pub fn new_with_backend_and_id(
+        prefix: impl Into<Arc<str>>,
+        initial_values: HashMap<K, V>,
+        backend: B,
+        instance_id: Uuid,
     ) -> Self {
         let prefix = prefix.into();
         let core = ReactiveMapCore::new();
@@ -85,9 +110,14 @@ where
         Self {
             core,
             prefix,
+            instance_id,
             _subscription: Arc::new(Mutex::new(subscription)),
             backend,
         }
+    }
+
+    pub fn get_sync(&self, key: &K) -> Result<Option<V>, B::Error> {
+        Ok(self.core.cache.lock().unwrap().get(key).cloned())
     }
 
     pub async fn get(&self, key: &K) -> Result<Option<V>, B::Error> {
@@ -95,14 +125,51 @@ where
     }
 
     pub async fn remove(&self, key: K) -> Result<Option<V>, B::Error> {
-        crate::map_remove_async(&self.backend, &self.core, self.prefix.clone(), key, true).await
+        crate::map_remove_async(
+            &self.backend,
+            &self.core,
+            self.prefix.clone(),
+            key,
+            Some(self.instance_id),
+        )
+        .await
     }
+
+    pub fn values(&self) -> Result<HashMap<K, V>, B::Error> {
+        Ok(self.core.cache.lock().unwrap().clone())
+    }
+
 
     pub async fn entries(&self) -> Result<HashMap<K, V>, B::Error> {
         Ok(crate::map_entries_async(&self.backend, &self.prefix)
             .await?
             .into_iter()
             .collect())
+    }
+
+    pub async fn update<F>(&self, key: K, f: F) -> Result<Option<V>, B::Error>
+    where
+        F: FnOnce(V) -> V,
+    {
+        if let Some(val) = self.get(&key).await? {
+            let new_val = f(val);
+            self.set(key, &new_val).await?;
+            Ok(Some(new_val))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn modify<F>(&self, key: K, f: F) -> Result<(), B::Error>
+    where
+        F: FnOnce(&mut V),
+    {
+        if let Some(mut val) = self.get(&key).await? {
+            f(&mut val);
+            self.set(key, &val).await
+        } else {
+            Err(self.backend.key_not_found(key.to_string()))
+        }
     }
 
     pub async fn set(&self, key: K, value: &V) -> Result<(), B::Error> {
@@ -112,13 +179,49 @@ where
             self.prefix.clone(),
             key,
             value,
-            true,
+            Some(self.instance_id),
         )
-            .await
+        .await
+    }
+
+    pub fn subscribe_any_external<F>(&self, callback: F) -> SignalSubscription
+    where
+        F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
+    {
+        let my_id = self.instance_id;
+        self.core.subscribe_any(move |change| match change {
+            MapChange::Update { source, .. } => {
+                if *source != Some(my_id) {
+                    callback(change);
+                }
+            }
+            _ => callback(change),
+        })
+    }
+
+    pub fn subscribe_key_external<F>(&self, key: K, callback: F) -> SignalSubscription
+    where
+        F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
+    {
+        let my_id = self.instance_id;
+        self.core.subscribe_key(key, move |change| match change {
+            MapChange::Update { source, .. } => {
+                if *source != Some(my_id) {
+                    callback(change);
+                }
+            }
+            _ => callback(change),
+        })
     }
 
     pub async fn clear(&self) -> Result<(), B::Error> {
-        crate::map_clear_async(&self.backend, &self.core, self.prefix.clone(), true).await
+        crate::map_clear_async(
+            &self.backend,
+            &self.core,
+            self.prefix.clone(),
+            Some(self.instance_id),
+        )
+        .await
     }
 
     pub fn subscribe_any<F>(&self, callback: F) -> SignalSubscription

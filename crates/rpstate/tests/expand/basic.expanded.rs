@@ -1,5 +1,6 @@
 use rpstate_macros::rpstate;
 pub struct AppConfig<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    __rpstate_instance_id: ::rpstate::uuid::Uuid,
     pub port: ::rpstate::Field<u16, S, ::rpstate::WritableMode>,
     pub session_id: ::rpstate::Field<String, S, ::rpstate::WritableMode>,
 }
@@ -8,6 +9,9 @@ impl<S: ::core::clone::Clone + ::rpstate::Store> ::core::clone::Clone for AppCon
     #[inline]
     fn clone(&self) -> AppConfig<S> {
         AppConfig {
+            __rpstate_instance_id: ::core::clone::Clone::clone(
+                &self.__rpstate_instance_id,
+            ),
             port: ::core::clone::Clone::clone(&self.port),
             session_id: ::core::clone::Clone::clone(&self.session_id),
         }
@@ -18,10 +22,21 @@ impl<S: ::rpstate::Store> ::rpstate::StateScope for AppConfig<S> {
 }
 impl<S: ::rpstate::Store> AppConfig<S> {
     pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, ::rpstate::uuid::Uuid::new_v4())
+    }
+    pub fn new_with_id(
+        store: &S,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
-            port: ::rpstate::store::field::<Self, u16, S>(store, "port", 8080)?,
-            session_id: ::rpstate::Field::new_volatile(
+            __rpstate_instance_id: instance_id,
+            port: ::rpstate::store::field::<
+                Self,
+                u16,
+                S,
+            >(store, "port", 8080, instance_id)?,
+            session_id: ::rpstate::Field::new_volatile_with_id(
                 ::std::sync::Arc::from(
                     ::alloc::__export::must_use({
                         ::alloc::fmt::format(
@@ -33,6 +48,7 @@ impl<S: ::rpstate::Store> AppConfig<S> {
                     }),
                 ),
                 "localhost".to_string(),
+                instance_id,
             ),
         };
         store.mark_initialized(<Self as ::rpstate::StateScope>::PREFIX)?;
@@ -52,6 +68,49 @@ impl<S: ::rpstate::Store> AppConfig<S> {
     pub fn session_id(&self) -> ::rpstate::Field<String, S, ::rpstate::WritableMode> {
         self.session_id.clone()
     }
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(::rpstate::uuid::Uuid::new_v4())
+    }
+    #[doc(hidden)]
+    pub fn fork_with_id(&self, new_id: ::rpstate::uuid::Uuid) -> Self {
+        Self {
+            __rpstate_instance_id: new_id,
+            port: self.port.fork_with_id(new_id),
+            session_id: self.session_id.fork_with_id(new_id),
+        }
+    }
+    pub fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.port.subscribe(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.session_id.subscribe(move |_| cb_clone()));
+        }
+        scope
+    }
+    pub fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.port.subscribe_external(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.session_id.subscribe_external(move |_| cb_clone()));
+        }
+        scope
+    }
 }
 impl AppConfig<::rpstate::DefaultStore> {
     pub fn new() -> ::rpstate::Result<Self> {
@@ -62,6 +121,13 @@ impl AppConfig<::rpstate::DefaultStore> {
 impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for AppConfig<S> {
     fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
         Self::new_with(store)
+    }
+    fn new_node_with_id(
+        store: &S,
+        _path: &str,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, instance_id)
     }
 }
 #[serde(crate = "::rpstate::serde")]
@@ -319,7 +385,7 @@ impl ::core::fmt::Debug for AppConfig_Data {
 }
 impl AppConfig_Data {}
 impl ::rpstate::migration::types::RpType for AppConfig_Data {
-    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
+    const TYPE_HASH: u32 = ::rpstate::migration::types::fnv1a(
         "AppConfig_Data".as_bytes(),
     );
     const TYPE_NAME: &'static str = "AppConfig_Data";
@@ -333,7 +399,7 @@ impl ::rpstate::migration::fields::RpStateFields for AppConfig_Data {
         },
     ];
     const VERSION: u32 = 0u32;
-    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
+    const SCHEMA_HASH: u32 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "app";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
@@ -355,6 +421,18 @@ impl<S: ::rpstate::Store> ::rpstate::RpState for AppConfig<S> {
 impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for AppConfig<S> {
     fn load_slice(store: &S) -> ::rpstate::Result<Self> {
         Self::new_with(store)
+    }
+    fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all(callback)
+    }
+    fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all_external(callback)
     }
 }
 fn main() {}

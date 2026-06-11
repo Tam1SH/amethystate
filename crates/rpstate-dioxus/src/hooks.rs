@@ -1,108 +1,72 @@
-use crate::{DioxusBackend, MapSignal};
-use dioxus::core::{Callback, spawn, use_hook};
+use crate::MapSignal;
+use dioxus::core::{spawn, use_hook, Callback};
 use dioxus::hooks::{try_use_context, use_callback, use_context};
 use dioxus::prelude::*;
-use rpstate::{AccessMode, DefaultStore, MapChange, Pipeline, ReactiveMapKey, ReactiveMapValue};
+use rpstate::{AccessMode, MapChange, Pipeline, ReactiveMapKey, ReactiveMapValue};
+use rpstate_arena::PIPELINE_ARENA;
 use rpstate_arena::{
     DefaultArena, FieldHandle, MapHandle, PipelineHandle, RpStateFrameworkNested, WritableHandle,
     WritableMapHandle,
 };
-use rpstate_arena::{PIPELINE_ARENA, RpStateFramework};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
 pub type Handle<S> = <S as RpStateFrameworkNested>::Handle;
 
+#[cfg(target_arch = "wasm32")]
 pub fn use_rpstate<S>() -> S::Handle
 where
-    S: RpStateFramework<DioxusBackend> + 'static,
+    S: RpStateFrameworkNested + 'static,
 {
     if let Some(handle) = try_use_context::<S::Handle>() {
         return handle;
     }
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        panic!(
-            "rpstate-dioxus: State slice '{}' was not initialized! \
-             Make sure to call `use_init_rpstate` at the root/parent component before accessing it.",
-            std::any::type_name::<S>()
-        );
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let store = use_context::<DefaultStore>();
-        let arena = use_context::<DefaultArena>();
-
-        let handle = use_hook(|| {
-            let state = S::load_slice(&store).unwrap_or_else(|err| {
-                panic!("rpstate-dioxus: Failed to load state slice: {err}");
-            });
-            state.register(&arena)
-        });
-
-        use_context_provider(|| handle);
-        handle
-    }
+    panic!(
+        "rpstate-dioxus: State slice '{}' was not initialized! \
+         Make sure to include it in preload_slices!(...) at the root RpStateProvider.",
+        std::any::type_name::<S>()
+    );
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn use_init_rpstate<S>() -> Option<S::Handle>
+pub fn use_rpstate<S>() -> S::Handle
 where
-    S: RpStateFramework<DioxusBackend> + 'static,
+    S: rpstate_arena::RpStateFramework<crate::DioxusBackend> + 'static,
 {
     if let Some(handle) = try_use_context::<S::Handle>() {
-        return Some(handle);
+        return handle;
     }
 
-    let store = use_context::<DefaultStore>();
-    let arena = use_context::<DefaultArena>();
+    let store = try_use_context::<rpstate::DefaultStore>().unwrap_or_else(|| {
+        panic!(
+            "rpstate-dioxus: DefaultStore not found in context while trying to initialize '{}'. \
+             Make sure RpStateProvider is rendered at the root of your application.",
+            std::any::type_name::<S>()
+        );
+    });
+    let arena = try_use_context::<DefaultArena>().unwrap_or_else(|| {
+        panic!(
+            "rpstate-dioxus: DefaultArena not found in context while trying to initialize '{}'. \
+             Make sure RpStateProvider is rendered at the root of your application.",
+            std::any::type_name::<S>()
+        );
+    });
 
     let handle = use_hook(|| {
         let state = S::load_slice(&store).unwrap_or_else(|err| {
-            panic!("rpstate-dioxus: Failed to load state slice: {err}");
+            panic!(
+                "rpstate-dioxus: Failed to load state slice '{}': {err}",
+                std::any::type_name::<S>()
+            );
         });
         state.register(&arena)
     });
 
     use_context_provider(|| handle);
-    Some(handle)
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn use_init_rpstate<S>() -> Option<S::Handle>
-where
-    S: RpStateFramework<DioxusBackend> + 'static,
-    <S as rpstate_core::RpStateSliceAsync<
-        <DioxusBackend as rpstate_arena::ReactiveBackend>::Storage,
-    >>::Error: std::fmt::Debug,
-{
-    if let Some(handle) = try_use_context::<S::Handle>() {
-        return Some(handle);
-    }
-
-    let store = use_context::<DefaultStore>();
-    let arena = use_context::<DefaultArena>();
-
-    let resource = use_resource(move || {
-        let store = store.clone();
-        let arena = arena.clone();
-        async move {
-            let state = S::load_async(&store).await.unwrap_or_else(|err| {
-                panic!("rpstate-dioxus: Failed to load state slice asynchronously: {err:?}");
-            });
-            state.register(&arena)
-        }
-    });
-
-    let handle = resource();
-    if let Some(h) = handle {
-        provide_context(h);
-    }
     handle
 }
 
@@ -316,7 +280,7 @@ where
             } => {
                 let _ = tx.send(Some(value.clone()));
             }
-            MapChange::Remove { .. } | MapChange::Clear => {
+            MapChange::Remove { .. } | MapChange::Clear { .. } => {
                 let _ = tx.send(None);
             }
         });

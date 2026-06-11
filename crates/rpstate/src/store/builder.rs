@@ -26,8 +26,6 @@ const FILE_EXTENSION: &str = "ron";
 #[cfg(backend = "sqlite")]
 const FILE_EXTENSION: &str = "db";
 
-
-
 pub struct StoreBuilder<M = NoMigrations> {
     config: StoreConfig,
     migration_set: MigrationSet,
@@ -73,7 +71,7 @@ impl StoreBuilder<NoMigrations> {
         app_name: impl AsRef<str>,
         config_name: impl AsRef<str>,
     ) -> std::io::Result<Self> {
-        use etcetera::{choose_app_strategy, AppStrategy, AppStrategyArgs};
+        use etcetera::{AppStrategy, AppStrategyArgs, choose_app_strategy};
 
         let project = choose_app_strategy(AppStrategyArgs {
             top_level_domain: "rs".to_string(),

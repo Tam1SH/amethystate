@@ -29,6 +29,8 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-macros-arena/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-codegen/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-codegen/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/rpstate-gpui/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/examples/gpui-settings/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/examples/tauri-leptos/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>

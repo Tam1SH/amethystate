@@ -1,8 +1,10 @@
-use crate::error::Error;
 use crate::Store;
+use crate::error::Error;
 use rpstate_core::RpBackend;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
+use std::sync::Arc;
+use uuid::Uuid;
 
 pub(crate) struct StoreBackend<S> {
     pub(crate) store: S,
@@ -28,6 +30,24 @@ where
         self.store.get(path)
     }
 
+    fn set_with_source<T: Serialize>(
+        &self,
+        path: &str,
+        value: &T,
+        source: Option<Uuid>,
+    ) -> Result<(), Self::Error> {
+        self.store.set_with_source(path, value, source)
+    }
+
+    fn set_owned_with_source<T: Serialize>(
+        &self,
+        path: Arc<str>,
+        value: &T,
+        source: Option<Uuid>,
+    ) -> Result<(), Self::Error> {
+        self.store.set_owned_with_source(path, value, source)
+    }
+
     fn set<T>(&self, path: &str, value: &T) -> Result<(), Self::Error>
     where
         T: Serialize,
@@ -37,6 +57,10 @@ where
 
     fn delete(&self, path: &str) -> Result<(), Self::Error> {
         self.store.delete(path)
+    }
+
+    fn delete_with_source(&self, path: &str, source: Option<Uuid>) -> Result<(), Self::Error> {
+        self.store.delete_with_source(path, source)
     }
 
     fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Self::Raw)>, Self::Error> {

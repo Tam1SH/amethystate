@@ -25,6 +25,7 @@ use rmp_serde::Serializer;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 pub mod error;
 mod migration;
@@ -43,7 +44,7 @@ thread_local! {
 
 struct RedbStoreInner {
     db: Arc<Database>,
-        pending: Arc<Mutex<HashMap<Arc<str>, Option<Vec<u8>>>>>,
+    pending: Arc<Mutex<HashMap<Arc<str>, Option<Vec<u8>>>>>,
     debouncer: Arc<Debouncer>,
     subscriptions: Arc<RwLock<Vec<SubscriptionEntry>>>,
     next_sub_id: Arc<AtomicU64>,
@@ -104,6 +105,14 @@ impl Drop for RedbStoreInner {
 pub struct RedbStore {
     inner: Arc<RedbStoreInner>,
 }
+
+impl PartialEq for RedbStore {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+impl Eq for RedbStore {}
+
 
 impl RedbStore {
     pub fn open(
@@ -268,10 +277,28 @@ impl Store for RedbStore {
     }
 
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
-        self.set_owned(Arc::from(path), value)
+        self.set_with_source(path, value, None)
     }
 
     fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
+        self.set_owned_with_source(path, value, None)
+    }
+
+    fn set_with_source<T: Serialize>(
+        &self,
+        path: &str,
+        value: &T,
+        source: Option<uuid::Uuid>,
+    ) -> Result<()> {
+        self.set_owned_with_source(Arc::from(path), value, source)
+    }
+
+    fn set_owned_with_source<T: Serialize>(
+        &self,
+        path: Arc<str>,
+        value: &T,
+        source: Option<uuid::Uuid>,
+    ) -> Result<()> {
         self.inner.check_debouncer();
         let bytes = SERIALIZATION_BUFFER.with(|buf| {
             let mut b = buf.borrow_mut();
@@ -299,6 +326,7 @@ impl Store for RedbStore {
                 op: StoreOp::Set,
                 old: old_bytes,
                 new: Some(bytes),
+                source,
             },
         );
 
@@ -350,11 +378,11 @@ impl Store for RedbStore {
                 results.retain(|(rk, _)| *rk != k);
             }
         }
-        
+
         Ok(results)
     }
 
-    fn delete(&self, path: &str) -> Result<()> {
+    fn delete_with_source(&self, path: &str, source: Option<Uuid>) -> Result<()> {
         self.inner.check_debouncer();
         let path_arc: Arc<str> = Arc::from(path);
 
@@ -386,11 +414,16 @@ impl Store for RedbStore {
                 op: StoreOp::Delete,
                 old: old_bytes,
                 new: None,
+                source,
             },
         );
 
         self.inner.debouncer.schedule();
         Ok(())
+    }
+
+    fn delete(&self, path: &str) -> Result<()> {
+        self.delete_with_source(path, None)
     }
 
     fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId {

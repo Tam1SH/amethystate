@@ -1,5 +1,6 @@
 use rpstate_macros::rpstate;
 pub struct ConnectionPool<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    __rpstate_instance_id: ::rpstate::uuid::Uuid,
     pub max_connections: ::rpstate::Field<u32, S, ::rpstate::WritableMode>,
     pub timeout_secs: ::rpstate::Field<u32, S, ::rpstate::WritableMode>,
 }
@@ -9,6 +10,9 @@ for ConnectionPool<S> {
     #[inline]
     fn clone(&self) -> ConnectionPool<S> {
         ConnectionPool {
+            __rpstate_instance_id: ::core::clone::Clone::clone(
+                &self.__rpstate_instance_id,
+            ),
             max_connections: ::core::clone::Clone::clone(&self.max_connections),
             timeout_secs: ::core::clone::Clone::clone(&self.timeout_secs),
         }
@@ -16,8 +20,16 @@ for ConnectionPool<S> {
 }
 impl<S: ::rpstate::Store> ConnectionPool<S> {
     pub fn new(store: &S, namespace: &str) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, namespace, ::rpstate::uuid::Uuid::new_v4())
+    }
+    pub fn new_with_id(
+        store: &S,
+        namespace: &str,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
+            __rpstate_instance_id: instance_id,
             max_connections: ::rpstate::store::field_with_path(
                 store,
                 ::std::sync::Arc::from(
@@ -28,6 +40,7 @@ impl<S: ::rpstate::Store> ConnectionPool<S> {
                     }),
                 ),
                 10,
+                instance_id,
             )?,
             timeout_secs: ::rpstate::store::field_with_path(
                 store,
@@ -39,6 +52,7 @@ impl<S: ::rpstate::Store> ConnectionPool<S> {
                     }),
                 ),
                 30,
+                instance_id,
             )?,
         };
         store.mark_initialized(namespace)?;
@@ -58,10 +72,60 @@ impl<S: ::rpstate::Store> ConnectionPool<S> {
     pub fn timeout_secs(&self) -> ::rpstate::Field<u32, S, ::rpstate::WritableMode> {
         self.timeout_secs.clone()
     }
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(::rpstate::uuid::Uuid::new_v4())
+    }
+    #[doc(hidden)]
+    pub fn fork_with_id(&self, new_id: ::rpstate::uuid::Uuid) -> Self {
+        Self {
+            __rpstate_instance_id: new_id,
+            max_connections: self.max_connections.fork_with_id(new_id),
+            timeout_secs: self.timeout_secs.fork_with_id(new_id),
+        }
+    }
+    pub fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.max_connections.subscribe(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.timeout_secs.subscribe(move |_| cb_clone()));
+        }
+        scope
+    }
+    pub fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.max_connections.subscribe_external(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.timeout_secs.subscribe_external(move |_| cb_clone()));
+        }
+        scope
+    }
 }
 impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for ConnectionPool<S> {
     fn new_node(store: &S, path: &str) -> ::rpstate::Result<Self> {
         Self::new(store, path)
+    }
+    fn new_node_with_id(
+        store: &S,
+        path: &str,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, path, instance_id)
     }
 }
 #[serde(crate = "::rpstate::serde")]
@@ -408,7 +472,7 @@ impl ConnectionPool_Data {
     }
 }
 impl ::rpstate::migration::types::RpType for ConnectionPool_Data {
-    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
+    const TYPE_HASH: u32 = ::rpstate::migration::types::fnv1a(
         "ConnectionPool_Data".as_bytes(),
     );
     const TYPE_NAME: &'static str = "ConnectionPool_Data";
@@ -427,7 +491,7 @@ impl ::rpstate::migration::fields::RpStateFields for ConnectionPool_Data {
         },
     ];
     const VERSION: u32 = 0u32;
-    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
+    const SCHEMA_HASH: u32 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
@@ -449,6 +513,7 @@ impl<S: ::rpstate::Store> ::rpstate::RpState for ConnectionPool<S> {
     type Data = ConnectionPool_Data;
 }
 pub struct DatabaseState<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    __rpstate_instance_id: ::rpstate::uuid::Uuid,
     pub pool: ::std::sync::Arc<ConnectionPool<S>>,
 }
 #[automatically_derived]
@@ -457,6 +522,9 @@ for DatabaseState<S> {
     #[inline]
     fn clone(&self) -> DatabaseState<S> {
         DatabaseState {
+            __rpstate_instance_id: ::core::clone::Clone::clone(
+                &self.__rpstate_instance_id,
+            ),
             pool: ::core::clone::Clone::clone(&self.pool),
         }
     }
@@ -466,12 +534,19 @@ impl<S: ::rpstate::Store> ::rpstate::StateScope for DatabaseState<S> {
 }
 impl<S: ::rpstate::Store> DatabaseState<S> {
     pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, ::rpstate::uuid::Uuid::new_v4())
+    }
+    pub fn new_with_id(
+        store: &S,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
+            __rpstate_instance_id: instance_id,
             pool: ::std::sync::Arc::new(
                 ConnectionPool::<
                     S,
-                >::new(
+                >::new_with_id(
                     store,
                     &::alloc::__export::must_use({
                         ::alloc::fmt::format(
@@ -481,6 +556,7 @@ impl<S: ::rpstate::Store> DatabaseState<S> {
                             ),
                         )
                     }),
+                    instance_id,
                 )?,
             ),
         };
@@ -494,6 +570,40 @@ impl<S: ::rpstate::Store> DatabaseState<S> {
     pub fn pool(&self) -> ::std::sync::Arc<ConnectionPool<S>> {
         self.pool.clone()
     }
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(::rpstate::uuid::Uuid::new_v4())
+    }
+    #[doc(hidden)]
+    pub fn fork_with_id(&self, new_id: ::rpstate::uuid::Uuid) -> Self {
+        Self {
+            __rpstate_instance_id: new_id,
+            pool: ::std::sync::Arc::new(self.pool.fork_with_id(new_id)),
+        }
+    }
+    pub fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch_scope(self.pool.subscribe_all(move || cb_clone()));
+        }
+        scope
+    }
+    pub fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch_scope(self.pool.subscribe_all_external(move || cb_clone()));
+        }
+        scope
+    }
 }
 impl DatabaseState<::rpstate::DefaultStore> {
     pub fn new() -> ::rpstate::Result<Self> {
@@ -504,6 +614,13 @@ impl DatabaseState<::rpstate::DefaultStore> {
 impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for DatabaseState<S> {
     fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
         Self::new_with(store)
+    }
+    fn new_node_with_id(
+        store: &S,
+        _path: &str,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, instance_id)
     }
 }
 #[serde(crate = "::rpstate::serde")]
@@ -775,7 +892,7 @@ impl ::core::fmt::Debug for DatabaseState_Data {
 }
 impl DatabaseState_Data {}
 impl ::rpstate::migration::types::RpType for DatabaseState_Data {
-    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
+    const TYPE_HASH: u32 = ::rpstate::migration::types::fnv1a(
         "DatabaseState_Data".as_bytes(),
     );
     const TYPE_NAME: &'static str = "DatabaseState_Data";
@@ -792,7 +909,7 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseState_Data {
         },
     ];
     const VERSION: u32 = 0u32;
-    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
+    const SCHEMA_HASH: u32 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "sys.database";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
@@ -823,8 +940,21 @@ impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for DatabaseState<S> {
     fn load_slice(store: &S) -> ::rpstate::Result<Self> {
         Self::new_with(store)
     }
+    fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all(callback)
+    }
+    fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all_external(callback)
+    }
 }
 pub struct InspectorState<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    __rpstate_instance_id: ::rpstate::uuid::Uuid,
     pub db_pool_view: ::std::sync::Arc<ConnectionPool<S>>,
 }
 #[automatically_derived]
@@ -833,6 +963,9 @@ for InspectorState<S> {
     #[inline]
     fn clone(&self) -> InspectorState<S> {
         InspectorState {
+            __rpstate_instance_id: ::core::clone::Clone::clone(
+                &self.__rpstate_instance_id,
+            ),
             db_pool_view: ::core::clone::Clone::clone(&self.db_pool_view),
         }
     }
@@ -842,8 +975,15 @@ impl<S: ::rpstate::Store> ::rpstate::StateScope for InspectorState<S> {
 }
 impl<S: ::rpstate::Store> InspectorState<S> {
     pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, ::rpstate::uuid::Uuid::new_v4())
+    }
+    pub fn new_with_id(
+        store: &S,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
+            __rpstate_instance_id: instance_id,
             db_pool_view: {
                 const _: fn() = || {
                     fn assert_node_type<T>(_: ::rpstate::ReadOnly<T>) {}
@@ -865,7 +1005,9 @@ impl<S: ::rpstate::Store> InspectorState<S> {
                 ::std::sync::Arc::new(
                     <ConnectionPool<
                         S,
-                    > as ::rpstate::RpStateNode<S>>::new_node(store, &path)?,
+                    > as ::rpstate::RpStateNode<
+                        S,
+                    >>::new_node_with_id(store, &path, instance_id)?,
                 )
             },
         };
@@ -879,6 +1021,43 @@ impl<S: ::rpstate::Store> InspectorState<S> {
     pub fn db_pool_view(&self) -> ::std::sync::Arc<ConnectionPool<S>> {
         self.db_pool_view.clone()
     }
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(::rpstate::uuid::Uuid::new_v4())
+    }
+    #[doc(hidden)]
+    pub fn fork_with_id(&self, new_id: ::rpstate::uuid::Uuid) -> Self {
+        Self {
+            __rpstate_instance_id: new_id,
+            db_pool_view: ::std::sync::Arc::new(self.db_pool_view.fork_with_id(new_id)),
+        }
+    }
+    pub fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch_scope(self.db_pool_view.subscribe_all(move || cb_clone()));
+        }
+        scope
+    }
+    pub fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope
+                .watch_scope(
+                    self.db_pool_view.subscribe_all_external(move || cb_clone()),
+                );
+        }
+        scope
+    }
 }
 impl InspectorState<::rpstate::DefaultStore> {
     pub fn new() -> ::rpstate::Result<Self> {
@@ -889,6 +1068,13 @@ impl InspectorState<::rpstate::DefaultStore> {
 impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for InspectorState<S> {
     fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
         Self::new_with(store)
+    }
+    fn new_node_with_id(
+        store: &S,
+        _path: &str,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, instance_id)
     }
 }
 #[serde(crate = "::rpstate::serde")]
@@ -1096,7 +1282,7 @@ impl ::core::fmt::Debug for InspectorState_Data {
 }
 impl InspectorState_Data {}
 impl ::rpstate::migration::types::RpType for InspectorState_Data {
-    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
+    const TYPE_HASH: u32 = ::rpstate::migration::types::fnv1a(
         "InspectorState_Data".as_bytes(),
     );
     const TYPE_NAME: &'static str = "InspectorState_Data";
@@ -1104,7 +1290,7 @@ impl ::rpstate::migration::types::RpType for InspectorState_Data {
 impl ::rpstate::migration::fields::RpStateFields for InspectorState_Data {
     const FIELDS: &'static [::rpstate::migration::fields::FieldDescriptor] = &[];
     const VERSION: u32 = 0u32;
-    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
+    const SCHEMA_HASH: u32 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "ui.inspector";
     const MIGRATION_DEPS: &'static [&'static str] = &[
         <DatabaseState as ::rpstate::StateScope>::PREFIX,
@@ -1125,6 +1311,18 @@ impl<S: ::rpstate::Store> ::rpstate::RpState for InspectorState<S> {
 impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for InspectorState<S> {
     fn load_slice(store: &S) -> ::rpstate::Result<Self> {
         Self::new_with(store)
+    }
+    fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all(callback)
+    }
+    fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all_external(callback)
     }
 }
 fn main() {}

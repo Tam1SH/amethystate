@@ -1,6 +1,7 @@
 use crate::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
 use crate::RpBackendAsync as RpBackend;
 use crate::{map_apply_remote_change, MapChange, ReactiveMapCore};
+use uuid::Uuid;
 
 use serde::de::DeserializeOwned;
 use std::fmt::Display;
@@ -69,7 +70,7 @@ pub async fn map_set_existing_async<B, K, V>(
     path: Arc<str>,
     key: K,
     value: &V,
-    notify_after_commit: bool,
+    source: Option<Uuid>,
 ) -> Result<(), B::Error>
 where
     B: RpBackend,
@@ -86,9 +87,10 @@ where
         key,
         old_value,
         new_value: value.clone(),
+        source,
     };
 
-    map_apply_change_async(backend, core, path, change, notify_after_commit).await
+    map_apply_change_async(backend, core, path, change).await
 }
 
 pub async fn map_set_or_create_async<B, K, V>(
@@ -97,7 +99,7 @@ pub async fn map_set_or_create_async<B, K, V>(
     path: Arc<str>,
     key: K,
     value: &V,
-    notify_after_commit: bool,
+    source: Option<Uuid>,
 ) -> Result<(), B::Error>
 where
     B: RpBackend,
@@ -111,15 +113,17 @@ where
             key,
             old_value,
             new_value: value.clone(),
+            source,
         }
     } else {
         MapChange::Insert {
             key,
             value: value.clone(),
+            source,
         }
     };
 
-    map_apply_change_async(backend, core, path, change, notify_after_commit).await
+    map_apply_change_async(backend, core, path, change).await
 }
 
 pub async fn map_remove_async<B, K, V>(
@@ -127,7 +131,7 @@ pub async fn map_remove_async<B, K, V>(
     core: &ReactiveMapCore<K, V>,
     path: Arc<str>,
     key: K,
-    notify_after_commit: bool,
+    source: Option<Uuid>,
 ) -> Result<Option<V>, B::Error>
 where
     B: RpBackend,
@@ -145,8 +149,9 @@ where
         let change = MapChange::Remove {
             key,
             old_value: old_value.clone(),
+            source,
         };
-        map_apply_change_async(backend, core, path, change, notify_after_commit).await?;
+        map_apply_change_async(backend, core, path, change).await?;
         Ok(Some(old_value))
     } else {
         core.cache.lock().unwrap().remove(&key);
@@ -158,14 +163,20 @@ pub async fn map_clear_async<B, K, V>(
     backend: &B,
     core: &ReactiveMapCore<K, V>,
     path: Arc<str>,
-    notify_after_commit: bool,
+    source: Option<Uuid>,
 ) -> Result<(), B::Error>
 where
     B: RpBackend,
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
-    map_apply_change_async(backend, core, path, MapChange::Clear, notify_after_commit).await
+    map_apply_change_async(
+        backend,
+        core,
+        path,
+        MapChange::Clear { source }
+    )
+    .await
 }
 
 pub async fn map_apply_change_async<B, K, V>(
@@ -173,7 +184,6 @@ pub async fn map_apply_change_async<B, K, V>(
     core: &ReactiveMapCore<K, V>,
     path: Arc<str>,
     change: MapChange<K, V>,
-    notify_after_commit: bool,
 ) -> Result<(), B::Error>
 where
     B: RpBackend,
@@ -189,8 +199,11 @@ where
         .run_interceptors(context_path, change)
         .map_err(|_| backend.intercepted())?;
 
+    core.notify(&processed);
+    map_apply_remote_change(core, &processed);
+
     match &processed {
-        MapChange::Insert { key, value }
+        MapChange::Insert { key, value, .. }
         | MapChange::Update {
             key,
             new_value: value,
@@ -201,18 +214,13 @@ where
         MapChange::Remove { key, .. } => {
             backend.delete(&format!("{}.{}", path, key)).await?;
         }
-        MapChange::Clear => {
+        MapChange::Clear { .. } => {
             let prefix = format!("{}.", path);
             let kvs = backend.scan_prefix(&prefix).await?;
             for (full_path, _) in kvs {
                 backend.delete(&full_path).await?;
             }
         }
-    }
-
-    map_apply_remote_change(core, &processed);
-    if notify_after_commit {
-        core.notify(&processed);
     }
 
     Ok(())

@@ -1,81 +1,46 @@
 use crate::bindings::{AppSettings, Theme};
 use leptos::prelude::*;
-use leptos::task::spawn_local;
-use rpstate_arena::FieldHandle;
-use rpstate_leptos::{use_field, use_init_rpstate, use_pipeline, Handle, IntoPipeline, MapChange, MapSignal};
+use rpstate::tauri::TauriBackend;
+use rpstate_arena::IntoArenaPipeline;
+use rpstate_arena::{WritableHandle, WritableMapHandle};
+use rpstate_leptos::{preload_slices, use_field, use_map, use_pipeline, use_rpstate, Handle, RpStateProvider};
 use shared::ProxyProfile;
 
 #[component]
-fn EnvMapEditor(env: MapSignal<String, String>) -> impl IntoView {
-    let (entries, set_entries) = signal(Vec::<(String, String)>::new());
-    let (new_key, set_new_key) = signal(String::new());
-    let (new_val, set_new_val) = signal(String::new());
+fn EnvMapEditor(env: WritableMapHandle<String, String>) -> impl IntoView {
+    let map = use_map(env);
+    let (new_key, set_key) = signal(String::new());
+    let (new_val, set_val) = signal(String::new());
 
-    let sub = env.subscribe_any(move |change| {
-        log::debug!("[env] change: {change:?}");
-        match change {
-            MapChange::Insert { key, value } | MapChange::Update { key, new_value: value, .. } => {
-                set_entries.update(|e| {
-                    if let Some(entry) = e.iter_mut().find(|(k, _)| k == key) {
-                        entry.1 = value.clone();
-                    } else {
-                        e.push((key.clone(), value.clone()));
-                    }
-                });
-            }
-            MapChange::Remove { key, .. } => {
-                set_entries.update(|e| e.retain(|(k, _)| k != key));
-            }
-            MapChange::Clear => set_entries.set(vec![]),
-        }
-    });
-    on_cleanup(move || drop(sub));
-
-    let env_add = env.clone();
     let on_add = move |_| {
-        let key = new_key.get_untracked();
-        let val = new_val.get_untracked();
-        if key.is_empty() { return; }
-        let env = env_add.clone();
-        spawn_local(async move {
-            let _ = env.set(key, &val).await;
-        });
-        set_new_key.set(String::new());
-        set_new_val.set(String::new());
-    };
-
-    
-    let env_init = env.clone();
-    spawn_local(async move {
-        if let Ok(map) = env_init.entries().await {
-            set_entries.set(map.into_iter().collect());
+        let key = new_key.get();
+        let val = new_val.get();
+        if key.is_empty() {
+            return;
         }
-    });
-
-    let env_remove = env.clone();
-    let on_remove = move |key: String| {
-        let env = env_remove.clone();
-        spawn_local(async move {
-            let _ = env.remove(key).await;
-        });
+        map.set_or_create(key, val);
+        set_key.set(String::new());
+        set_val.set(String::new());
     };
 
+    let on_remove = Callback::new(move |key: String| {
+        map.remove(key);
+    });
 
     view! {
         <div class="section">
             <h3>"Environment Variables"</h3>
             <For
-                each=move || entries.get()
+                each=move || map.entries.get()
                 key=|(k, _)| k.clone()
                 children=move |(k, v)| {
                     let key = k.clone();
-                    let on_rm = on_remove.clone();
                     view! {
                         <div class="env-row">
                             <code>{k}</code>
                             <span>" = "</span>
                             <code>{v}</code>
-                            <button on:click=move |_| on_rm(key.clone())>"✕"</button>
+                            <button on:click=move |_| on_remove.run(key.clone())>"✕"</button>
                         </div>
                     }
                 }
@@ -84,12 +49,12 @@ fn EnvMapEditor(env: MapSignal<String, String>) -> impl IntoView {
                 <input
                     placeholder="KEY"
                     prop:value=new_key
-                    on:input=move |e| set_new_key.set(event_target_value(&e))
+                    on:input=move |e| set_key.set(event_target_value(&e))
                 />
                 <input
                     placeholder="value"
                     prop:value=new_val
-                    on:input=move |e| set_new_val.set(event_target_value(&e))
+                    on:input=move |e| set_val.set(event_target_value(&e))
                 />
                 <button on:click=on_add>"Add"</button>
             </div>
@@ -114,7 +79,7 @@ fn ThemeEditor(theme: Handle<Theme>) -> impl IntoView {
                         log::debug!("[view] mode read: {v}");
                         v
                     }
-                    on:change=move |e| set_mode(event_target_value(&e))
+                    on:change=move |e| set_mode.set(event_target_value(&e))
                 >
                     <option value="light">"light"</option>
                     <option value="dark">"dark"</option>
@@ -125,7 +90,7 @@ fn ThemeEditor(theme: Handle<Theme>) -> impl IntoView {
                 <input
                     type="color"
                     prop:value=bg
-                    on:input=move |e| set_bg(event_target_value(&e))
+                    on:input=move |e| set_bg.set(event_target_value(&e))
                 />
             </div>
             <div class="field">
@@ -133,7 +98,7 @@ fn ThemeEditor(theme: Handle<Theme>) -> impl IntoView {
                 <input
                     type="color"
                     prop:value=fg
-                    on:input=move |e| set_fg(event_target_value(&e))
+                    on:input=move |e| set_fg.set(event_target_value(&e))
                 />
             </div>
         </div>
@@ -141,18 +106,9 @@ fn ThemeEditor(theme: Handle<Theme>) -> impl IntoView {
 }
 
 #[component]
-fn ProxyEditor(proxy: FieldHandle<ProxyProfile>) -> impl IntoView {
-    let _intercept = proxy.intercept(|change| {
-        if change.new_value.port == 0 { None } else { Some(change) }
-    });
-    on_cleanup(move || drop(_intercept));
+fn ProxyEditor(proxy: WritableHandle<ProxyProfile>) -> impl IntoView {
 
     let (prof, set_prof) = use_field(proxy);
-
-    let set_name = set_prof.clone();
-    let set_addr = set_prof.clone();
-    let set_port = set_prof.clone();
-    let set_enabled = set_prof.clone();
 
     view! {
         <div class="section">
@@ -164,7 +120,7 @@ fn ProxyEditor(proxy: FieldHandle<ProxyProfile>) -> impl IntoView {
                     on:input=move |e| {
                         let mut p = prof.get_untracked();
                         p.name = event_target_value(&e);
-                        set_name(p);
+                        set_prof.set(p);
                     }
                 />
             </div>
@@ -175,7 +131,7 @@ fn ProxyEditor(proxy: FieldHandle<ProxyProfile>) -> impl IntoView {
                     on:input=move |e| {
                         let mut p = prof.get_untracked();
                         p.address = event_target_value(&e);
-                        set_addr(p);
+                        set_prof.set(p);
                     }
                 />
             </div>
@@ -188,7 +144,7 @@ fn ProxyEditor(proxy: FieldHandle<ProxyProfile>) -> impl IntoView {
                         if let Ok(port) = event_target_value(&e).parse::<u16>() {
                             let mut p = prof.get_untracked();
                             p.port = port;
-                            set_port(p);
+                            set_prof.set(p);
                         }
                     }
                 />
@@ -201,7 +157,7 @@ fn ProxyEditor(proxy: FieldHandle<ProxyProfile>) -> impl IntoView {
                         on:change=move |e| {
                             let mut p = prof.get_untracked();
                             p.enabled = event_target_checked(&e);
-                            set_enabled(p);
+                            set_prof.set(p);
                         }
                     />
                     " Enabled"
@@ -226,7 +182,7 @@ pub fn Settings(state: Handle<AppSettings>) -> impl IntoView {
     let (username, set_username) = use_field(state.username);
     let (counter, set_counter) = use_field(state.counter);
 
-    let address = use_pipeline(|| {
+    let address = use_pipeline(move || {
         (state.username, state.counter).pipe()
             .map(|(u, c)| format!("{u}:{c}"))
             .dedupe()
@@ -242,7 +198,7 @@ pub fn Settings(state: Handle<AppSettings>) -> impl IntoView {
                     <label>"Username"</label>
                     <input
                         prop:value=username
-                        on:input=move |e| set_username(event_target_value(&e))
+                        on:input=move |e| set_username.set(event_target_value(&e))
                     />
                 </div>
                 <div class="field">
@@ -252,7 +208,7 @@ pub fn Settings(state: Handle<AppSettings>) -> impl IntoView {
                         prop:value=move || counter.get().to_string()
                         on:input=move |e| {
                             if let Ok(n) = event_target_value(&e).parse::<i32>() {
-                                set_counter(n);
+                                set_counter.set(n);
                             }
                         }
                     />
@@ -269,14 +225,24 @@ pub fn Settings(state: Handle<AppSettings>) -> impl IntoView {
 
 #[component]
 pub fn App() -> impl IntoView {
-
-    let state = use_init_rpstate::<AppSettings>();
-
+    let backend = TauriBackend::new();
 
     view! {
-        {move || match state.get() {
-            Some(s) => view! { <Settings state=s /> }.into_any(),
-            None => view! { <p>"Loading..."</p> }.into_any(),
-        }}
+        <RpStateProvider
+            backend=backend
+            init=preload_slices!(AppSettings)
+            fallback=|| view! { <p>"Loading..."</p> }
+        >
+            <MainLayout />
+        </RpStateProvider>
+    }
+}
+
+#[component]
+fn MainLayout() -> impl IntoView {
+    let state = use_rpstate::<AppSettings>();
+
+    view! {
+        <Settings state=state />
     }
 }

@@ -1,17 +1,19 @@
 use crate::{Field, ReactiveMap, StateScope, Store, StoreOp, StoreSubscription, SubscriptionKind};
 use rpstate_core::{AccessMode, FieldCore, MapChange, ReactiveMapCore, Signal, WritableMode};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub fn field<TScope, TValue, S>(
     store: &S,
     key: &str,
     default: TValue,
+    instance_id: Uuid,
 ) -> crate::Result<Field<TValue, S, WritableMode>>
 where
     TScope: StateScope,
@@ -19,13 +21,14 @@ where
     TValue: Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
 {
     let path: Arc<str> = scoped_path::<TScope>(key).into();
-    field_with_path(store, path, default)
+    field_with_path(store, path, default, instance_id)
 }
 
 pub fn field_with_path<TValue, S, M>(
     store: &S,
     path: Arc<str>,
     default: TValue,
+    instance_id: Uuid,
 ) -> crate::Result<Field<TValue, S, M>>
 where
     S: Store,
@@ -50,7 +53,7 @@ where
         Arc::new(move |event| {
             if let Some(raw) = &event.new {
                 match store_clone.decode::<TValue>(raw) {
-                    Ok(parsed) => sig_clone.set(parsed),
+                    Ok(parsed) => sig_clone.set(parsed, event.source),
                     Err(e) => tracing::error!(path = %path_log, error = %e, "decode failed"),
                 }
             }
@@ -60,6 +63,7 @@ where
     Ok(Field {
         core: FieldCore::new_with_signal(signal),
         path,
+        instance_id,
         store_sub: Some(Arc::new(StoreSubscription {
             store: store.clone(),
             id,
@@ -72,6 +76,7 @@ pub fn reactive_map<TScope, K, V, S>(
     store: &S,
     key: &str,
     default: HashMap<K, V>,
+    instance_id: Uuid,
 ) -> crate::Result<ReactiveMap<K, V, S, WritableMode>>
 where
     TScope: StateScope,
@@ -80,13 +85,14 @@ where
     V: Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
 {
     let path: Arc<str> = scoped_path::<TScope>(key).into();
-    reactive_map_with_path::<TScope, _, _, _, _>(store, path, default)
+    reactive_map_with_path::<TScope, _, _, _, _>(store, path, default, instance_id)
 }
 
 pub fn reactive_map_with_path<TScope, K, V, S, M>(
     store: &S,
     path: Arc<str>,
     defaults: HashMap<K, V>,
+    instance_id: Uuid,
 ) -> crate::Result<ReactiveMap<K, V, S, M>>
 where
     TScope: StateScope,
@@ -133,6 +139,8 @@ where
             if let Some(key_str) = event.path.strip_prefix(&prefix_for_strip)
                 && let Ok(k) = K::from_str(key_str)
             {
+                let source = event.source;
+
                 let new_val = event
                     .new
                     .as_ref()
@@ -146,21 +154,34 @@ where
                     let mut keys = core_clone.cache.lock().unwrap();
 
                     match event.op {
-                        StoreOp::Set | StoreOp::Patch => {
+                        StoreOp::Set => {
                             if keys.contains_key(&k) {
                                 let old_value = old_val.unwrap_or_default();
                                 let new_value = new_val.unwrap_or_default();
                                 keys.insert(k.clone(), new_value.clone());
-                                MapChange::Update { key: k.clone(), old_value, new_value }
+                                MapChange::Update {
+                                    key: k.clone(),
+                                    old_value,
+                                    new_value,
+                                    source,
+                                }
                             } else {
                                 let val = new_val.unwrap_or_default();
                                 keys.insert(k.clone(), val.clone());
-                                MapChange::Insert { key: k.clone(), value: val }
+                                MapChange::Insert {
+                                    key: k.clone(),
+                                    value: val,
+                                    source,
+                                }
                             }
                         }
                         StoreOp::Delete => {
                             keys.remove(&k);
-                            MapChange::Remove { key: k.clone(), old_value: old_val.unwrap_or_default() }
+                            MapChange::Remove {
+                                key: k.clone(),
+                                old_value: old_val.unwrap_or_default(),
+                                source,
+                            }
                         }
                     }
                 };
@@ -173,6 +194,7 @@ where
     Ok(ReactiveMap {
         core,
         path,
+        instance_id,
         store: store.clone(),
         store_sub: Arc::new(StoreSubscription {
             store: store.clone(),

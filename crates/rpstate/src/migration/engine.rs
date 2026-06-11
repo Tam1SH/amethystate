@@ -58,7 +58,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
                 }
             }
         }
-        Ok(dbg!(report))
+        Ok(report)
     }
 
     fn component_needs_work(
@@ -211,14 +211,8 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
         if let Some(plan) = mset.get_migration_plan(prefix) {
             let mut history = storage.get_migration_log(prefix)?.unwrap_or_default();
 
-            applied_steps = self.run_migrator_steps(
-                storage,
-                prefix,
-                plan,
-                &mut meta,
-                target_v,
-                &mut history,
-            )?;
+            applied_steps =
+                self.run_migrator_steps(storage, prefix, plan, &mut meta, target_v, &mut history)?;
 
             if !applied_steps.is_empty() {
                 meta.hash = target_hash;
@@ -306,8 +300,8 @@ mod tests {
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::ops::Deref;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use tracing_test::traced_test;
 
     const EMPTY_FIELDS: &[FieldDescriptor] = &[];

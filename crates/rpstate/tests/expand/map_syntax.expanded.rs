@@ -305,7 +305,7 @@ impl ::core::default::Default for AlertThresholds {
     }
 }
 impl ::rpstate::migration::types::RpType for AlertThresholds {
-    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
+    const TYPE_HASH: u32 = ::rpstate::migration::types::fnv1a(
         "AlertThresholds".as_bytes(),
     );
     const TYPE_NAME: &'static str = "AlertThresholds";
@@ -616,12 +616,13 @@ impl ::core::default::Default for MonitoringConfig {
     }
 }
 impl ::rpstate::migration::types::RpType for MonitoringConfig {
-    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
+    const TYPE_HASH: u32 = ::rpstate::migration::types::fnv1a(
         "MonitoringConfig".as_bytes(),
     );
     const TYPE_NAME: &'static str = "MonitoringConfig";
 }
 pub struct DatabaseConfig<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    __rpstate_instance_id: ::rpstate::uuid::Uuid,
     pub host: ::rpstate::Field<String, S, ::rpstate::WritableMode>,
 }
 #[automatically_derived]
@@ -630,14 +631,25 @@ for DatabaseConfig<S> {
     #[inline]
     fn clone(&self) -> DatabaseConfig<S> {
         DatabaseConfig {
+            __rpstate_instance_id: ::core::clone::Clone::clone(
+                &self.__rpstate_instance_id,
+            ),
             host: ::core::clone::Clone::clone(&self.host),
         }
     }
 }
 impl<S: ::rpstate::Store> DatabaseConfig<S> {
     pub fn new(store: &S, namespace: &str) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, namespace, ::rpstate::uuid::Uuid::new_v4())
+    }
+    pub fn new_with_id(
+        store: &S,
+        namespace: &str,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
+            __rpstate_instance_id: instance_id,
             host: ::rpstate::store::field_with_path(
                 store,
                 ::std::sync::Arc::from(
@@ -646,6 +658,7 @@ impl<S: ::rpstate::Store> DatabaseConfig<S> {
                     }),
                 ),
                 "localhost".to_string(),
+                instance_id,
             )?,
         };
         store.mark_initialized(namespace)?;
@@ -658,10 +671,51 @@ impl<S: ::rpstate::Store> DatabaseConfig<S> {
     pub fn host(&self) -> ::rpstate::Field<String, S, ::rpstate::WritableMode> {
         self.host.clone()
     }
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(::rpstate::uuid::Uuid::new_v4())
+    }
+    #[doc(hidden)]
+    pub fn fork_with_id(&self, new_id: ::rpstate::uuid::Uuid) -> Self {
+        Self {
+            __rpstate_instance_id: new_id,
+            host: self.host.fork_with_id(new_id),
+        }
+    }
+    pub fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.host.subscribe(move |_| cb_clone()));
+        }
+        scope
+    }
+    pub fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.host.subscribe_external(move |_| cb_clone()));
+        }
+        scope
+    }
 }
 impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for DatabaseConfig<S> {
     fn new_node(store: &S, path: &str) -> ::rpstate::Result<Self> {
         Self::new(store, path)
+    }
+    fn new_node_with_id(
+        store: &S,
+        path: &str,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, path, instance_id)
     }
 }
 #[serde(crate = "::rpstate::serde")]
@@ -949,7 +1003,7 @@ impl DatabaseConfig_Data {
     }
 }
 impl ::rpstate::migration::types::RpType for DatabaseConfig_Data {
-    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
+    const TYPE_HASH: u32 = ::rpstate::migration::types::fnv1a(
         "DatabaseConfig_Data".as_bytes(),
     );
     const TYPE_NAME: &'static str = "DatabaseConfig_Data";
@@ -963,7 +1017,7 @@ impl ::rpstate::migration::fields::RpStateFields for DatabaseConfig_Data {
         },
     ];
     const VERSION: u32 = 0u32;
-    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
+    const SCHEMA_HASH: u32 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
@@ -983,6 +1037,7 @@ impl<S: ::rpstate::Store> ::rpstate::RpState for DatabaseConfig<S> {
     type Data = DatabaseConfig_Data;
 }
 pub struct SystemSettings<S: ::rpstate::Store = ::rpstate::DefaultStore> {
+    __rpstate_instance_id: ::rpstate::uuid::Uuid,
     pub db: ::std::sync::Arc<DatabaseConfig<S>>,
     pub monitoring: ::rpstate::Field<MonitoringConfig, S, ::rpstate::WritableMode>,
     pub limits: ::rpstate::ReactiveMap<
@@ -999,6 +1054,9 @@ for SystemSettings<S> {
     #[inline]
     fn clone(&self) -> SystemSettings<S> {
         SystemSettings {
+            __rpstate_instance_id: ::core::clone::Clone::clone(
+                &self.__rpstate_instance_id,
+            ),
             db: ::core::clone::Clone::clone(&self.db),
             monitoring: ::core::clone::Clone::clone(&self.monitoring),
             limits: ::core::clone::Clone::clone(&self.limits),
@@ -1011,12 +1069,19 @@ impl<S: ::rpstate::Store> ::rpstate::StateScope for SystemSettings<S> {
 }
 impl<S: ::rpstate::Store> SystemSettings<S> {
     pub fn new_with(store: &S) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, ::rpstate::uuid::Uuid::new_v4())
+    }
+    pub fn new_with_id(
+        store: &S,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
         use ::rpstate::Store;
         let result = Self {
+            __rpstate_instance_id: instance_id,
             db: ::std::sync::Arc::new(
                 DatabaseConfig::<
                     S,
-                >::new(
+                >::new_with_id(
                     store,
                     &::alloc::__export::must_use({
                         ::alloc::fmt::format(
@@ -1025,6 +1090,7 @@ impl<S: ::rpstate::Store> SystemSettings<S> {
                             ),
                         )
                     }),
+                    instance_id,
                 )?,
             ),
             monitoring: ::rpstate::store::field::<
@@ -1041,6 +1107,7 @@ impl<S: ::rpstate::Store> SystemSettings<S> {
                         critical: 80,
                     },
                 },
+                instance_id,
             )?,
             limits: ::rpstate::store::reactive_map::<
                 Self,
@@ -1070,6 +1137,7 @@ impl<S: ::rpstate::Store> SystemSettings<S> {
                         );
                     __map
                 },
+                instance_id,
             )?,
             presets: ::rpstate::store::field::<
                 Self,
@@ -1090,6 +1158,7 @@ impl<S: ::rpstate::Store> SystemSettings<S> {
                         },
                     ]),
                 ),
+                instance_id,
             )?,
         };
         store.mark_initialized(<Self as ::rpstate::StateScope>::PREFIX)?;
@@ -1131,6 +1200,67 @@ impl<S: ::rpstate::Store> SystemSettings<S> {
     ) -> ::rpstate::Field<Vec<AlertThresholds>, S, ::rpstate::WritableMode> {
         self.presets.clone()
     }
+    pub fn fork(&self) -> Self {
+        self.fork_with_id(::rpstate::uuid::Uuid::new_v4())
+    }
+    #[doc(hidden)]
+    pub fn fork_with_id(&self, new_id: ::rpstate::uuid::Uuid) -> Self {
+        Self {
+            __rpstate_instance_id: new_id,
+            db: ::std::sync::Arc::new(self.db.fork_with_id(new_id)),
+            monitoring: self.monitoring.fork_with_id(new_id),
+            limits: self.limits.fork_with_id(new_id),
+            presets: self.presets.fork_with_id(new_id),
+        }
+    }
+    pub fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch_scope(self.db.subscribe_all(move || cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.monitoring.subscribe(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.limits.subscribe_any(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.presets.subscribe(move |_| cb_clone()));
+        }
+        scope
+    }
+    pub fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        let cb = ::std::sync::Arc::new(callback);
+        let mut scope = ::rpstate::ReactiveScope::new();
+        {
+            let cb_clone = cb.clone();
+            scope.watch_scope(self.db.subscribe_all_external(move || cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.monitoring.subscribe_external(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.limits.subscribe_any_external(move |_| cb_clone()));
+        }
+        {
+            let cb_clone = cb.clone();
+            scope.watch(self.presets.subscribe_external(move |_| cb_clone()));
+        }
+        scope
+    }
 }
 impl SystemSettings<::rpstate::DefaultStore> {
     pub fn new() -> ::rpstate::Result<Self> {
@@ -1141,6 +1271,13 @@ impl SystemSettings<::rpstate::DefaultStore> {
 impl<S: ::rpstate::Store> ::rpstate::RpStateNode<S> for SystemSettings<S> {
     fn new_node(store: &S, _path: &str) -> ::rpstate::Result<Self> {
         Self::new_with(store)
+    }
+    fn new_node_with_id(
+        store: &S,
+        _path: &str,
+        instance_id: ::rpstate::uuid::Uuid,
+    ) -> ::rpstate::Result<Self> {
+        Self::new_with_id(store, instance_id)
     }
 }
 #[serde(crate = "::rpstate::serde")]
@@ -1569,7 +1706,7 @@ impl ::core::fmt::Debug for SystemSettings_Data {
 }
 impl SystemSettings_Data {}
 impl ::rpstate::migration::types::RpType for SystemSettings_Data {
-    const TYPE_HASH: u64 = ::rpstate::migration::types::fnv1a(
+    const TYPE_HASH: u32 = ::rpstate::migration::types::fnv1a(
         "SystemSettings_Data".as_bytes(),
     );
     const TYPE_NAME: &'static str = "SystemSettings_Data";
@@ -1606,7 +1743,7 @@ impl ::rpstate::migration::fields::RpStateFields for SystemSettings_Data {
         },
     ];
     const VERSION: u32 = 0u32;
-    const SCHEMA_HASH: u64 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
+    const SCHEMA_HASH: u32 = ::rpstate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "sys";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
     fn load_struct(ctx: &mut ::rpstate::MigrationContext) -> ::rpstate::Result<Self> {
@@ -1668,6 +1805,18 @@ impl<S: ::rpstate::Store> ::rpstate::RpState for SystemSettings<S> {
 impl<S: ::rpstate::Store> ::rpstate::RpStateSlice<S> for SystemSettings<S> {
     fn load_slice(store: &S) -> ::rpstate::Result<Self> {
         Self::new_with(store)
+    }
+    fn subscribe_all<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all(callback)
+    }
+    fn subscribe_all_external<F>(&self, callback: F) -> ::rpstate::ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.subscribe_all_external(callback)
     }
 }
 fn main() {}

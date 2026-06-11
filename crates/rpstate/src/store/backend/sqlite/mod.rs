@@ -141,11 +141,16 @@ impl SqliteStoreInner {
         }
     }
 
-    fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
-        self.set_owned(Arc::from(path), value)
+    fn set<T: Serialize>(&self, path: &str, value: &T, source: Option<uuid::Uuid>) -> Result<()> {
+        self.set_owned_with_source(Arc::from(path), value, source)
     }
 
-    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
+    fn set_owned_with_source<T: Serialize>(
+        &self,
+        path: Arc<str>,
+        value: &T,
+        source: Option<uuid::Uuid>,
+    ) -> Result<()> {
         self.check_debouncer();
         let vec = sonic_rs::to_vec(value)
             .map_err(CodecError::from)
@@ -168,6 +173,7 @@ impl SqliteStoreInner {
                 op: StoreOp::Set,
                 old: old_bytes,
                 new: Some(vec),
+                source,
             },
         );
 
@@ -225,7 +231,7 @@ impl SqliteStoreInner {
         Ok(results)
     }
 
-    fn delete(&self, path: &str) -> Result<()> {
+    fn delete(&self, path: &str, source: Option<uuid::Uuid>) -> Result<()> {
         self.check_debouncer();
         let path_arc: Arc<str> = Arc::from(path);
 
@@ -256,6 +262,7 @@ impl SqliteStoreInner {
                 op: StoreOp::Delete,
                 old: old_bytes,
                 new: None,
+                source,
             },
         );
 
@@ -316,6 +323,14 @@ impl Drop for SqliteStoreInner {
 pub struct SqliteStore {
     inner: Arc<SqliteStoreInner>,
 }
+
+impl PartialEq for SqliteStore {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+impl Eq for SqliteStore {}
 
 impl SqliteStore {
     pub fn open(
@@ -431,11 +446,29 @@ impl Store for SqliteStore {
     }
 
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
-        self.inner.set(path, value)
+        self.set_with_source(path, value, None)
+    }
+
+    fn set_with_source<T: Serialize>(
+        &self,
+        path: &str,
+        value: &T,
+        source: Option<uuid::Uuid>,
+    ) -> Result<()> {
+        self.inner.set(path, value, source)
     }
 
     fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
-        self.inner.set_owned(path, value)
+        self.set_owned_with_source(path, value, None)
+    }
+
+    fn set_owned_with_source<T: Serialize>(
+        &self,
+        path: Arc<str>,
+        value: &T,
+        source: Option<uuid::Uuid>,
+    ) -> Result<()> {
+        self.inner.set_owned_with_source(path, value, source)
     }
 
     fn save_now(&self) -> Result<()> {
@@ -447,7 +480,11 @@ impl Store for SqliteStore {
     }
 
     fn delete(&self, path: &str) -> Result<()> {
-        self.inner.delete(path)
+        self.delete_with_source(path, None)
+    }
+
+    fn delete_with_source(&self, path: &str, source: Option<uuid::Uuid>) -> Result<()> {
+        self.inner.delete(path, source)
     }
 
     fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId {
