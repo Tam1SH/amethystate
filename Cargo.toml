@@ -1,6 +1,20 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "examples/gpui-settings"]
+members = [
+    "crates/tauri/rpstate-codegen",
+    "crates/tauri/tauri-plugin-rpstate",
+    "crates/core/rpstate-core",
+    "crates/core/rpstate-macros-core",
+    "crates/main/rpstate",
+    "crates/main/rpstate-arena",
+    "crates/main/rpstate-macros",
+    "crates/main/rpstate-macros-arena",
+    "crates/adapters/rpstate-tauri",
+    "crates/adapters/rpstate-gpui",
+    "crates/adapters/rpstate-leptos",
+    "crates/adapters/rpstate-dioxus",
+    "crates/adapters/rpstate-yew"
+]
 
 [workspace.package]
 version = "0.6.0"
@@ -18,13 +32,13 @@ rust-version = "1.89.0"
 [workspace.dependencies]
 # internal
 rpstate = { path = "crates/rpstate" }
-rpstate-core = { path = "crates/rpstate-core" }
-rpstate-macros = { path = "crates/rpstate-macros" }
-rpstate-arena = { path = "crates/rpstate-arena" }
-rpstate-tauri = { path = "crates/rpstate-tauri" }
-rpstate-codegen = { path = "crates/rpstate-codegen" }
-rpstate-macros-core = { path = "crates/rpstate-macros-core" }
-rpstate-macros-arena = { path = "crates/rpstate-macros-arena" }
+rpstate-core = { path = "crates/core/rpstate-core" }
+rpstate-macros = { path = "crates/main/rpstate-macros" }
+rpstate-arena = { path = "crates/main/rpstate-arena" }
+rpstate-tauri = { path = "crates/adapters/rpstate-tauri" }
+rpstate-codegen = { path = "crates/tauri/rpstate-codegen" }
+rpstate-macros-core = { path = "crates/core/rpstate-macros-core" }
+rpstate-macros-arena = { path = "crates/main/rpstate-macros-arena" }
 
 # external
 anyhow = "1.0"

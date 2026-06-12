@@ -9,9 +9,10 @@ leptos = { version = "0.8", features = ["csr"] }
 console_error_panic_hook = "0.1.7"
 
 rpstate = { path = "../../crates/rpstate", features = ["tauri"] }
-rpstate-arena = { path = "../../crates/rpstate-arena" }
-rpstate-leptos = { path = "../../crates/rpstate-leptos" }
+rpstate-arena = { path = "../../crates/main/rpstate-arena" }
+rpstate-leptos = { path = "../../crates/adapters/rpstate-leptos" }
 shared = { path = "./shared" }
+
 tokio = "1.52.3"
 web-sys = "0.3.99"
 futures = "0.3.32"

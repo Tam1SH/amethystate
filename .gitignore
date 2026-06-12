@@ -2,11 +2,7 @@
 examples/*/target
 examples/*/Cargo.lock
 examples/*/.idea
-examples/*/egui-settings.redb
-examples/*/iced-settings.redb
-examples/*/slint-settings.redb
-examples/*/dioxus-settings.redb
-/examples/*/app_data.redb
+examples/*/*.redb
 
 
 /profile.json.gz

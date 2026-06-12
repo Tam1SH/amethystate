@@ -1,0 +1,26 @@
+[package]
+name = "tauri-yew-ui"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+yew = { version = "0.23.0", features = ["csr"] }
+console_error_panic_hook = "0.1.7"
+
+rpstate = { path = "../../crates/rpstate", features = ["tauri"] }
+rpstate-yew = { path = "../../crates/adapters/rpstate-yew" }
+shared = { path = "./shared" }
+
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = "0.3"
+js-sys = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+
+
+
+
+[workspace]
+members = [ "shared", "src-tauri" ]

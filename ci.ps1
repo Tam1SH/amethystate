@@ -25,3 +25,10 @@ Exec { cargo test --workspace --no-default-features --features ron,confy-compat 
 Exec { cargo test --workspace --no-default-features --features sqlite }
 Exec { cargo test --workspace --all-features }
 
+$examples = Get-ChildItem -Path "examples" -Directory
+foreach ($example in $examples) {
+    Push-Location $example.FullName
+    Exec { cargo build }
+    Pop-Location
+}
+

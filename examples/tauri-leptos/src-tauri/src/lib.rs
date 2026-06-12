@@ -49,16 +49,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn export_bindings() {
-        use tauri_plugin_rpstate::backend::codegen::CodegenRegistry;
-        let reg = CodegenRegistry::new();
-
-        reg.export_rust("../src/bindings/rpstate.rs")
-            .expect("Rust codegen failed");
-
-    }
-}
