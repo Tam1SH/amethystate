@@ -1,14 +1,14 @@
-use rpstate::{IntoPipeline, ReactiveScope, StoreBuilder, rpstate};
+use amethystate::{IntoPipeline, ReactiveScope, StoreBuilder, amethystate};
 use slint::ComponentHandle;
 
 slint::include_modules!();
 
-#[rpstate(prefix = "slint_settings")]
+#[amethystate(prefix = "slint_settings")]
 pub struct SettingsState {
-    #[state(default = "127.0.0.1".to_string())]
+    #[amestate(default = "127.0.0.1".to_string())]
     pub host: String,
 
-    #[state(default = 8080)]
+    #[amestate(default = 8080)]
     pub port: u16,
 }
 

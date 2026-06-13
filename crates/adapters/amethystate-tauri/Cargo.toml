@@ -1,0 +1,23 @@
+[package]
+name = "amethystate-tauri"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+futures.workspace = true
+uuid = { workspace = true, features = ["v4", "serde"] }
+wasm-bindgen-futures = "0.4.72"
+amethystate-core = { workspace = true, features = ["async"] }
+tauri-sys = { git = "https://github.com/JonasKruckenberg/tauri-sys", features = ["all"] }
+

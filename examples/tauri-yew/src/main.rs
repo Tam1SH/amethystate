@@ -1,5 +1,5 @@
-use rpstate::{Field, IntoPipeline, Pipeline, ReactiveMap};
-// FILE: C:\Users\ignat\projects\rpstate\examples\tauri-yew\src\main.rs
+use amethystate::{Field, IntoPipeline, Pipeline, ReactiveMap};
+// FILE: C:\Users\ignat\projects\amethystate\examples\tauri-yew\src\main.rs
 use std::collections::HashMap;
 use yew::prelude::*;
 
@@ -7,14 +7,14 @@ use yew::prelude::*;
 use shared::{AlertThresholds, NetworkState, SystemSettings};
 
 // =========================================================================
-// Реактивные хуки для rpstate & Yew (написаны на месте)
+// Реактивные хуки для amethystate & Yew (написаны на месте)
 // =========================================================================
 
 /// Хук для связывания поля `Field<T>` с локальным состоянием Yew.
 /// Автоматически подписывается на изменения и обновляет компонент,
 /// отменяя подписку при размонтировании.
 #[hook]
-pub fn use_rpstate_field<T>(field: Field<T>) -> (T, Callback<T>)
+pub fn use_amethystate_field<T>(field: Field<T>) -> (T, Callback<T>)
 where
     T: Clone + 'static,
 {
@@ -38,7 +38,7 @@ where
         let field = field.clone();
         Callback::from(move |val: T| {
             if let Err(err) = field.set(val) {
-                log::error!("Failed to set rpstate field: {:?}", err);
+                log::error!("Failed to set amethystate field: {:?}", err);
             }
         })
     };
@@ -49,7 +49,7 @@ where
 /// Хук для подписки компонента на реактивный конвейер (derived pipeline).
 /// Возвращает текущее вычисленное значение.
 #[hook]
-pub fn use_rpstate_pipeline<T>(pipeline: Pipeline<T>) -> T
+pub fn use_amethystate_pipeline<T>(pipeline: Pipeline<T>) -> T
 where
     T: Clone + 'static,
 {
@@ -74,7 +74,7 @@ where
 /// Хук для работы с динамическими коллекциями `ReactiveMap<K, V>`.
 /// Подписывается на любые изменения в карте и синхронизирует HashMap для рендеринга.
 #[hook]
-pub fn use_rpstate_map<K, V>(map: ReactiveMap<K, V>) -> HashMap<K, V>
+pub fn use_amethystate_map<K, V>(map: ReactiveMap<K, V>) -> HashMap<K, V>
 where
     K: Clone + std::hash::Hash + Eq + 'static,
     V: Clone + 'static,
@@ -117,17 +117,17 @@ pub struct SettingsPanelProps {
 #[function_component(SettingsPanel)]
 pub fn settings_panel(props: &SettingsPanelProps) -> Html {
     // 1. Использование хука для простых реактивных полей
-    let (host, set_host) = use_rpstate_field(props.network_state.host());
-    let (port, set_port) = use_rpstate_field(props.network_state.port());
+    let (host, set_host) = use_amethystate_field(props.network_state.host());
+    let (port, set_port) = use_amethystate_field(props.network_state.port());
 
     // 2. Использование хука для вычисляемого конвейера (derived pipeline)
     let address_pipeline = (props.network_state.host(), props.network_state.port())
         .pipe()
         .map(|(h, p)| format!("{h}:{p}"));
-    let address = use_rpstate_pipeline(address_pipeline);
+    let address = use_amethystate_pipeline(address_pipeline);
 
     // 3. Использование хука для динамической карты ReactiveMap
-    let limits = use_rpstate_map(props.system_settings.limits());
+    let limits = use_amethystate_map(props.system_settings.limits());
 
     // Обработчики ввода пользователя
     let on_host_input = {
@@ -161,7 +161,7 @@ pub fn settings_panel(props: &SettingsPanelProps) -> Html {
 
     html! {
         <div class="container">
-            <h1>{"Tauri + Yew + rpstate"}</h1>
+            <h1>{"Tauri + Yew + amethystate"}</h1>
             
             <div class="row">
                 <!-- Сетевые настройки -->
@@ -211,16 +211,16 @@ pub fn app() -> Html {
         let state = state.clone();
         use_effect_with((), move |_| {
             wasm_bindgen_futures::spawn_local(async move {
-                // Инициализация клиентского хранилища rpstate, 
+                // Инициализация клиентского хранилища amethystate, 
                 // работающего поверх Tauri IPC.
-                match rpstate_tauri::ClientStore::new().await {
+                match amethystate_tauri::ClientStore::new().await {
                     Ok(client_store) => {
                         let net_state = NetworkState::new(&client_store).unwrap();
                         let sys_settings = SystemSettings::new(&client_store).unwrap();
                         state.set(Some((net_state, sys_settings)));
                     }
                     Err(err) => {
-                        log::error!("Failed to connect to tauri rpstate store: {:?}", err);
+                        log::error!("Failed to connect to tauri amethystate store: {:?}", err);
                     }
                 }
             });
@@ -240,7 +240,7 @@ pub fn app() -> Html {
         None => {
             html! {
                 <div class="container">
-                    <p>{"Connecting to Tauri rpstate backend..."}</p>
+                    <p>{"Connecting to Tauri amethystate backend..."}</p>
                 </div>
             }
         }

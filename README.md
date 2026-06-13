@@ -1,10 +1,10 @@
 <div align="center">
 
-# rpstate
+# amethystate
 
-[![Crates.io](https://img.shields.io/crates/v/rpstate.svg)](https://crates.io/crates/rpstate)
-[![Docs.rs](https://docs.rs/rpstate/badge.svg)](https://docs.rs/rpstate)
-[![CI](https://github.com/Tam1SH/rpstate/actions/workflows/ci.yml/badge.svg)](https://github.com/Tam1SH/rpstate/actions)
+[![Crates.io](https://img.shields.io/crates/v/amethystate.svg)](https://crates.io/crates/amethystate)
+[![Docs.rs](https://docs.rs/amethystate/badge.svg)](https://docs.rs/amethystate)
+[![CI](https://github.com/Tam1SH/amethystate/actions/workflows/ci.yml/badge.svg)](https://github.com/Tam1SH/amethystate/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 *Type-safe reactive persistence with automated migrations, schema drift detection, persistent-only data access, and
@@ -15,7 +15,7 @@ and compile-time verified relations.*
 
 ## Features
 
-`rpstate` is built around feature-local state slices:
+`amethystate` is built around feature-local state slices:
 
 - persistent reactive fields with `.get()`, `.set()`, and `.subscribe()`;
 - persistent-only loading with plain mutable data for frameworks that own their state model;
@@ -26,12 +26,12 @@ Use `State::new(&store)` for reactive fields and `State::load(&store)` when you 
 
 ## Status
 
-`rpstate` is pre-1.0, but the current API is meant to be usable as-is. I do not plan to break it without a strong
+`amethystate` is pre-1.0, but the current API is meant to be usable as-is. I do not plan to break it without a strong
 reason, though minor releases may still contain breaking changes if real usage exposes a design issue.
 
 ## Examples
 
-| Example            | GUI model                         | rpstate usage                                                                                                                             |
+| Example            | GUI model                         | amethystate usage                                                                                                                             |
 |--------------------|-----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
 | `egui-settings`    | immediate-mode UI                 | reactive fields read during `update`, writes from widgets, derived pipeline                                                               |
 | `iced-settings`    | TEA/MVU                           | persistent-only `State::load`, plain data mutation in `update`                                                                            |
@@ -39,28 +39,28 @@ reason, though minor releases may still contain breaking changes if real usage e
 | `dioxus-settings`  | components + fine-grained signals | custom hooks bridging reactive fields and pipelines to Dioxus signals via async channels                                                  |
 | `ratatui-settings` | TUI poll loop                     | persistent-only `State::load`, direct struct reads in loop, `mutate_lazy()` for deferred writes                                           |
 | `tauri-settings`   | Tauri v2 + vanilla TS frontend    | `AppSettings.load()`, sync `.value` reads/writes, `.subscribe()`, generated bindings                                                      |
-| `tauri-leptos`     | Tauri v2 + Leptos frontend        | `use_rpstate_field` hooks bridging `Field<T>` to Leptos signals, nested state, `ReactiveMap`, pipelines via `.pipe()`, generated bindings |
+| `tauri-leptos`     | Tauri v2 + Leptos frontend        | `use_amethystate_field` hooks bridging `Field<T>` to Leptos signals, nested state, `ReactiveMap`, pipelines via `.pipe()`, generated bindings |
 
 ## Quick start
 
-By default, `rpstate` structures are compiled in **`reactive`** mode. This exposes reactive `Field<T>` handles with automatic change propagation.
+By default, `amethystate` structures are compiled in **`reactive`** mode. This exposes reactive `Field<T>` handles with automatic change propagation.
 
 ```rust
-use rpstate::{StoreBuilder, IntoPipeline, ReactiveScope, rpstate};
+use amethystate::{StoreBuilder, IntoPipeline, ReactiveScope, amethystate};
 
-#[rpstate(prefix = "network")]
+#[amethystate(prefix = "network")]
 pub struct NetworkState {
-    #[state(default = "127.0.0.1".to_string())]
+    #[amestate(default = "127.0.0.1".to_string())]
     pub host: String,
 
-    #[state(default = 8080)]
+    #[amestate(default = 8080)]
     pub port: u16,
 }
 
-fn main() -> rpstate::Result<()> {
+fn main() -> amethystate::Result<()> {
     let store = StoreBuilder::new("./app").build()?;
 
-    let state = NetworkState::new(&store)?;
+    let state = NetworkState::new_with(&store)?;
 
     // Read
     println!("{}", state.host().get()); // "127.0.0.1"
@@ -96,12 +96,12 @@ Some frameworks already own the render/update loop and have no use for reactive 
 For those cases, you can declare your struct with `mode = "persistent"`. This removes the overhead of reactive `Field` wrappers. Fields are exposed as plain Rust types and are accessed and mutated directly.
 
 ```rust
-#[rpstate(prefix = "network", mode = "persistent")]
+#[amethystate(prefix = "network", mode = "persistent")]
 pub struct NetworkState {
-    #[state(default = "127.0.0.1".to_string())]
+    #[amestate(default = "127.0.0.1".to_string())]
     pub host: String,
 
-    #[state(default = 8080)]
+    #[amestate(default = 8080)]
     pub port: u16,
 }
 ```
@@ -144,7 +144,7 @@ appears at all, is a fragile enum that guesses at the data's shape rather than t
 
 In other ecosystems this is a solved problem. SwiftUI's @AppStorage, Android's DataStore, Qt's Settings, and Flutter's Hive provide persistent, reactive state with minimal boilerplate. In Rust, there's no established equivalent for native GUI apps.
 
-`rpstate` is my attempt at something different. Each feature declares its own slice of state independently. References
+`amethystate` is my attempt at something different. Each feature declares its own slice of state independently. References
 between slices are explicit and verified by the compiler—mistype a field name or get the type wrong and it's a compile
 error, not a runtime surprise.
 
@@ -156,28 +156,22 @@ Migrations I built because… I can.
 If your data is naturally a collection of records, use SQLite, redb/sled directly, or an ORM. If you need
 human-editable config collected from multiple sources, `confy`, `figment`, or `twelf` are a better fit.
 
-## A note on naming
-
-rpstate stands for Reactive Persistent State. When I was checking for name availability, putting the R first was a very
-conscious and deliberate choice. One search for the alternative anagram was enough to convince me that "managing your
-internal state" should remain a strictly technical endeavor. 🥴
-
 ## Backends
 
-`rpstate` supports two storage backends, selected at compile time via Cargo features.
+`amethystate` supports two storage backends, selected at compile time via Cargo features.
 
 `redb` is the default. It is a fast embedded database and the only backend that supports migrations:
 
 ```toml
 [dependencies]
-rpstate = { version = "*" }  # redb is enabled by default
+amethystate = { version = "*" }  # redb is enabled by default
 ```
 
 `json` is useful for human-readable storage or debugging. To use it, disable the default features:
 
 ```toml
 [dependencies]
-rpstate = { version = "*", default-features = false, features = ["json"] }
+amethystate = { version = "*", default-features = false, features = ["json"] }
 ```
 
 ## Cross-struct references
@@ -185,23 +179,23 @@ rpstate = { version = "*", default-features = false, features = ["json"] }
 Fields can share storage with another struct via `lookup`.
 
 ```rust
-#[rpstate(prefix = "net")]
+#[amethystate(prefix = "net")]
 pub struct NetworkState {
-    #[state(default = 8080, export_mut)]   // export_mut = writable by others
+    #[amestate(default = 8080, export_mut)]   // export_mut = writable by others
     pub port: u16,
 
-    #[state(default = "127.0.0.1".to_string())]
+    #[amestate(default = "127.0.0.1".to_string())]
     pub host: String,
 }
 
-#[rpstate(prefix = "ui")]
+#[amethystate(prefix = "ui")]
 pub struct UiState {
     // Read-write link to a single field
-    #[state(lookup = "port", parent = NetworkState, export_mut)]
+    #[amestate(lookup = "port", parent = NetworkState, export_mut)]
     pub proxy_port: u16,
 
     // Read-only link
-    #[state(lookup = "host", parent = NetworkState)]
+    #[amestate(lookup = "host", parent = NetworkState)]
     pub proxy_host: String,
 }
 ```
@@ -209,21 +203,21 @@ pub struct UiState {
 `lookup_node` links an entire sub-struct, acting as a namespace for the reactive fields inside it:
 
 ```rust
-#[rpstate]
+#[amethystate]
 pub struct ConnectionPool {
-    #[state(default = 10)]
+    #[amestate(default = 10)]
     pub max_connections: u32,
 }
 
-#[rpstate(prefix = "sys.database")]
+#[amethystate(prefix = "sys.database")]
 pub struct DatabaseState {
-    #[state(nested)]
+    #[amestate(nested)]
     pub pool: ConnectionPool,
 }
 
-#[rpstate(prefix = "ui.inspector")]
+#[amethystate(prefix = "ui.inspector")]
 pub struct InspectorState {
-    #[state(lookup_node = "pool", parent = DatabaseState)]
+    #[amestate(lookup_node = "pool", parent = DatabaseState)]
     pub db_pool_view: ConnectionPool,
     // Accessed as `state.db_pool_view().max_connections().get()`
 }
@@ -239,12 +233,12 @@ Fields marked `volatile` live in memory only and are never written to the store.
 restart.
 
 ```rust
-#[rpstate(prefix = "app")]
+#[amethystate(prefix = "app")]
 pub struct AppState {
-    #[state(default = 8080)]
+    #[amestate(default = 8080)]
     pub port: u16,
 
-    #[state(default = false, volatile)]
+    #[amestate(default = false, volatile)]
     pub loading: bool,   // always starts as false, never persisted
 }
 ```
@@ -252,15 +246,15 @@ pub struct AppState {
 ## Nested structs
 
 ```rust
-#[rpstate]
+#[amethystate]
 pub struct DatabaseConfig {
-    #[state(default = "localhost".to_string())]
+    #[amestate(default = "localhost".to_string())]
     pub host: String,
 }
 
-#[rpstate(prefix = "sys")]
+#[amethystate(prefix = "sys")]
 pub struct SystemSettings {
-    #[state(nested)]
+    #[amestate(nested)]
     pub db: DatabaseConfig,   // stored at "sys.db.host", etc.
 }
 ```
@@ -271,7 +265,7 @@ Pipelines are synchronous derived reactive values. They are useful when one or m
 value, validation result, log event, or side effect without nesting subscriptions by hand.
 
 ```rust
-use rpstate::IntoPipeline;
+use amethystate::IntoPipeline;
 
 let display_port = state.port().pipe()
 .map(|p| format!(":{p}"))
@@ -312,7 +306,7 @@ let address = (state.host(), display_port).pipe()
 Subscriptions are RAII handles. Store them directly or put them in a `ReactiveScope`:
 
 ```rust
-use rpstate::ReactiveScope;
+use amethystate::ReactiveScope;
 
 let mut scope = ReactiveScope::new();
 
@@ -342,15 +336,15 @@ changed one after another, a tuple pipeline fires once for each change.
 ### Declaration
 
 ```rust
-#[derive(Debug, Clone, Serialize, Deserialize, Default, RpType)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, AmeType)]
 pub struct AlertThresholds {
     pub warning: u64,
     pub critical: u64,
 }
 
-#[rpstate(prefix = "sys")]
+#[amethystate(prefix = "sys")]
 pub struct SystemSettings {
-    #[state(default = {
+    #[amestate(default = {
         "cpu": AlertThresholds { warning: 70, critical: 90 },
         "mem": AlertThresholds { warning: 80, critical: 95 }
     })]
@@ -361,7 +355,7 @@ pub struct SystemSettings {
 ### Usage
 
 ```rust,ignore
-let state = SystemSettings::new(&store)?;
+let state = SystemSettings::new_with(&store)?;
 
 // Upsert (Insert or Update)
 state.limits().set_or_create("gpu".into(), &AlertThresholds { warning: 60, critical: 85 })?;
@@ -418,7 +412,7 @@ state.limits().intercept(|change| {
 
 ### Default values
 
-`#[state(default = ...)]` is applied only on first initialization. To add new default entries in a later version, use a migration step.
+`#[amestate(default = ...)]` is applied only on first initialization. To add new default entries in a later version, use a migration step.
 
 ### Storage
 Data is persisted using the path format `{prefix}.{field_name}.{key}` (e.g., `sys.limits.cpu`).
@@ -431,113 +425,51 @@ are executed in the correct topological order.
 
 ### What migrates and what doesn't
 
-The migrator works exclusively with persistent data (the generated `_Data` types).
+The migrator works exclusively with persistent data (`AmeData<T>` types).
 
 - **Included:** Regular fields and `nested` structures.
-- **Ignored:** `volatile`, `lookup`, and `lookup_node` fields—they are ephemeral or reactive links and don't exist in
+- **Ignored:** `volatile`, `lookup`, and `lookup_node` fields — they are ephemeral or reactive links and don't exist in
   physical storage.
 
-### Automatic steps (`migrate!`)
+### Defining a migration step
 
-Define versioned structs in a `mod v1 { ... }` module, then describe the transformation with the `migrate!` macro.
-It handles field mapping, key renaming in the database, and cleanup of removed keys automatically.
+Define versioned structs in a `mod v1 { ... }` module, then describe the transformation with the `#[migrate]` attribute
+on a plain function. Field renames are declared with `#[rename]` and generate a compile-time check that both fields exist.
 
 ```rust
 mod v1 {
     use super::*;
 
-    #[rpstate(prefix = "app", version = 1)]
+    #[amethystate(prefix = "app", version = 1)]
     pub struct Config {
-        #[state(default = "localhost".to_string())]
+        #[amestate(default = "localhost".to_string())]
         pub host: String,
     }
 }
 
-#[rpstate(prefix = "app", version = 2)]
+#[amethystate(prefix = "app", version = 2)]
 pub struct Config {
-    #[state(default = "localhost".to_string())]
+    #[amestate(default = "localhost".to_string())]
     pub address: String,
 
-    #[state(default = 8080)]
+    #[amestate(default = 8080)]
     pub port: u16,
 }
 
-migrate! {
-    v1::Config_Data => Config_Data,
-    rename: [host => address],
-    |old| {
-        Ok(Self {
-            address: old.host,
-            port: 9090,
-        })
-    }
-}
-```
-
-For nested structs, use `migrate_field!` to delegate migration to a child node's own `migrate!` definition:
-
-```rust
-migrate! {
-    v1::SystemConfig_Data => SystemConfig_Data,
-    rename: [],
-    |old, ctx| {
-        Ok(Self {
-            net: migrate_field!(ctx, old.net),
-        })
-    }
-}
-```
-
-To migrate `ReactiveMap` data, transform the snapshot provided in the `_Data` struct and use the `MigrationContext` to manually delete old physical records from the storage:
-
-```rust
-mod v1 {
-    #[rpstate(prefix = "network", version = 1)]
-    pub struct ProxyConfig {
-        pub routes: ReactiveMap<String, String>,
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, RpType)]
-pub struct ProxyEndpoint {
-    pub url: String,
-    pub timeout_ms: u32,
-}
-
-#[rpstate(prefix = "network", version = 2)]
-pub struct ProxyConfig {
-    pub endpoints: ReactiveMap<String, ProxyEndpoint>,
-}
-
-migrate! {
-    v1::ProxyConfig_Data => ProxyConfig_Data,
-    |old, ctx| {
-        // 1. Manually delete old physical keys from the storage.
-        // ReactiveMap entries are stored as "{field_name}.{key}".
-        for key in old.routes.keys() {
-            ctx.delete(&format!("routes.{}", key))?;
-        }
-
-        // 2. Transform the old HashMap<String, String> into 
-        // the new HashMap<String, ProxyEndpoint>.
-        let endpoints = old.routes.into_iter()
-            .map(|(k, v)| (k, ProxyEndpoint { 
-                url: v, 
-                timeout_ms: 5000 
-            }))
-            .collect();
-
-        Ok(Self {
-            endpoints,
-        })
-    }
+#[migrate]
+#[rename(host => address)]
+fn migrate_config_v1_to_v2(old: AmeData<v1::Config>) -> amethystate::Result<AmeData<Config>> {
+    Ok(AmeData::<Config> {
+        address: old.host,
+        port: 9090,
+    })
 }
 ```
 
 To run all auto-generated migrations on startup without any custom steps:
 
 ```rust
-fn auto_migrations() -> rpstate::Result<()> {
+fn auto_migrations() -> amethystate::Result<()> {
     let store = StoreBuilder::new("./app.redb")
         .collect_migrations()
         .build()?;
@@ -551,7 +483,7 @@ Use `.migrations(|m| { ... })` to mix codegen migrations with custom logic. The 
 topological sort, so you can safely read data from another node that is guaranteed to have already migrated:
 
 ```rust
-fn migrate() -> rpstate::Result<()> {
+fn migrate() -> amethystate::Result<()> {
     let store = StoreBuilder::new("./app.redb")
         .migrations(|m| {
             // 1. Pull in all automatic migrations defined via migrate! macros
@@ -578,9 +510,9 @@ fn migrate() -> rpstate::Result<()> {
 
 ### Schema drift detection
 
-`rpstate` records the schema hash and field types of all persistent fields on every run. If you change a field's type or add/remove fields without bumping the version, no migration runs—but the discrepancy is still noticed.
+`amethystate` records the schema hash and field types of all persistent fields on every run. If you change a field's type or add/remove fields without bumping the version, no migration runs—but the discrepancy is still noticed.
 
-On startup, `rpstate` compares the stored schema against the current code. Any mismatch produces a warning in the log:
+On startup, `amethystate` compares the stored schema against the current code. Any mismatch produces a warning in the log:
 
 ```
 ⚠️  Schema drift detected in prefix 'app_settings'

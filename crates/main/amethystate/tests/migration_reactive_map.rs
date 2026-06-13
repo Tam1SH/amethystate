@@ -1,0 +1,97 @@
+use amethystate::store::builder::StoreBuilder;
+use amethystate::{ReactiveMap, AmeData, Store, migrate};
+use amethystate_core::test_utils::unique_path;
+use amethystate_macros::{AmeType, amethystate};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, AmeType)]
+pub struct ProxyEndpoint {
+    pub url: String,
+    pub timeout_ms: u32,
+}
+
+mod v1 {
+    use super::*;
+    #[amethystate(prefix = "network", version = 1)]
+    pub struct ProxyConfig {
+        #[amestate(default = "default".into())]
+        pub name: String,
+        pub routes: ReactiveMap<String, String>,
+    }
+}
+
+#[amethystate(prefix = "network", version = 2)]
+pub struct ProxyConfig {
+    #[amestate(default = "default".into())]
+    pub name: String,
+    pub endpoints: ReactiveMap<String, ProxyEndpoint>,
+}
+
+#[migrate]
+fn migrate_proxy_config_v1_to_v2(
+    old: AmeData<v1::ProxyConfig>,
+    ctx: &mut amethystate::migration::MigrationContext,
+) -> amethystate::Result<AmeData<ProxyConfig>> {
+    for key in old.routes.keys() {
+        ctx.delete(&format!("routes.{}", key))?;
+    }
+
+    let endpoints = old
+        .routes
+        .into_iter()
+        .filter(|(k, _)| k != "obsolete")
+        .map(|(k, v)| {
+            (
+                k,
+                ProxyEndpoint {
+                    url: v,
+                    timeout_ms: 5000,
+                },
+            )
+        })
+        .collect();
+
+    Ok(AmeData::<ProxyConfig> {
+        name: old.name,
+        endpoints,
+    })
+}
+
+#[test]
+fn test_embedded_map_migration() {
+    let path = unique_path("amethystate_embedded_map.redb");
+
+    {
+        let store = StoreBuilder::new(&path).build().unwrap();
+        let config = v1::ProxyConfig::new_with(&store).unwrap();
+        config.name().set("legacy-proxy".into()).unwrap();
+
+        config
+            .routes()
+            .set_or_create("api".into(), &"http://api.v1".into())
+            .unwrap();
+        config
+            .routes()
+            .set_or_create("obsolete".into(), &"http://drop.me".into())
+            .unwrap();
+        store.save_now().unwrap();
+    }
+
+    let (store, _) = StoreBuilder::new(&path)
+        .collect_migrations()
+        .build()
+        .unwrap();
+
+    let config = ProxyConfig::new_with(&store).unwrap();
+
+    assert_eq!(config.name().get(), "legacy-proxy");
+
+    let entries = config.endpoints().entries().unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].0, "api");
+    assert_eq!(entries[0].1.url, "http://api.v1");
+
+    let old_keys = store.scan_prefix("network.routes.").unwrap();
+    assert!(old_keys.is_empty());
+}

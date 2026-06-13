@@ -1,14 +1,14 @@
 use iced::widget::{button, column, row, text};
 use iced::{Element, Task};
-use rpstate::{rpstate, StoreBuilder};
+use amethystate::{amethystate, StoreBuilder};
 use std::sync::Arc;
 
-#[rpstate(prefix = "iced_settings", mode = "persistent")]
+#[amethystate(prefix = "iced_settings", mode = "persistent")]
 pub struct SettingsState {
-    #[state(default = "127.0.0.1".to_string())]
+    #[amestate(default = "127.0.0.1".to_string())]
     pub host: String,
 
-    #[state(default = 8080)]
+    #[amestate(default = 8080)]
     pub port: u16,
 }
 
@@ -24,7 +24,7 @@ enum Message {
 }
 
 impl App {
-    fn new(store: Arc<rpstate::DefaultStore>) -> (Self, Task<Message>) {
+    fn new(store: Arc<amethystate::DefaultStore>) -> (Self, Task<Message>) {
         let data = SettingsState::load(&store).expect("failed to load settings");
         (Self { data }, Task::none())
     }
@@ -47,7 +47,7 @@ impl App {
 
     fn view(&self) -> Element<'_, Message> {
         column![
-            text("rpstate + iced").size(28),
+            text("amethystate + iced").size(28),
             text(format!("host: {}", self.data.host)),
             text(format!("port: {}", self.data.port)),
             row![
@@ -69,6 +69,6 @@ fn main() -> iced::Result {
         .expect("failed to open store");
 
     iced::application(move || App::new(store.clone()), App::update, App::view)
-        .title("rpstate iced settings")
+        .title("amethystate iced settings")
         .run()
 }

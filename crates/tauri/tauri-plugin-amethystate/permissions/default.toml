@@ -1,0 +1,11 @@
+[default]
+description = "Allows access to the default amethystate commands"
+permissions = [
+    "allow-amethystate-get",
+    "allow-amethystate-set",
+    "allow-amethystate-delete",
+    "allow-amethystate-subscribe",
+    "allow-amethystate-unsubscribe",
+    "allow-amethystate-get-prefix",
+    "allow-amethystate-flush"
+]

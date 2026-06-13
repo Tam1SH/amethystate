@@ -1,13 +1,13 @@
-use rpstate::rpstate;
+use amethystate::amethystate;
 
-#[rpstate(prefix = "settings", version = 1)]
+#[amethystate(prefix = "settings", version = 1)]
 pub struct AppSettings {
-    #[state(default = "Guest".to_string())]
+    #[amestate(default = "Guest".to_string())]
     pub username: String,
 
-    #[state(default = 0)]
+    #[amestate(default = 0)]
     pub counter: u32,
 
-    #[state(default = "light".to_string())]
+    #[amestate(default = "light".to_string())]
     pub theme: String,
 }

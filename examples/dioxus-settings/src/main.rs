@@ -1,16 +1,16 @@
 use dioxus::prelude::*;
 use futures_util::StreamExt;
 
-use rpstate::rpstate;
-use rpstate_dioxus::{
-    rpstate_dioxus, use_field, use_map, use_map_entry, use_pipeline,
-    use_rpstate, DioxusIntoPipeline, Handle, MapChange, MapHandle, ReactiveMap, ReadOnlyMapHandle,
-    RpStateProvider, RpType, StoreBuilder, WritableMapHandle
+use amethystate::amethystate;
+use amethystate_dioxus::{
+    amethystate_dioxus, use_field, use_map, use_map_entry, use_pipeline,
+    use_amethystate, DioxusIntoPipeline, Handle, MapChange, MapHandle, ReactiveMap, ReadOnlyMapHandle,
+    amethystateProvider, AmeType, StoreBuilder, WritableMapHandle
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, RpType)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, AmeType)]
 pub struct ProxyProfile {
     pub name: String,
     pub address: String,
@@ -29,38 +29,38 @@ impl Default for ProxyProfile {
     }
 }
 
-#[rpstate_dioxus]
-#[rpstate(prefix = "settings")]
+#[amethystate_dioxus]
+#[amethystate(prefix = "settings")]
 pub struct AppSettings {
-    #[state(default = "Guest".to_string())]
+    #[amestate(default = "Guest".to_string())]
     pub username: String,
 
-    #[state(default = 0)]
+    #[amestate(default = 0)]
     pub counter: i32,
 
-    #[state(nested)]
+    #[amestate(nested)]
     pub theme: Theme,
 
-    #[state(default = Default::default())]
+    #[amestate(default = Default::default())]
     pub proxy: ProxyProfile,
 
-    #[state(default = {
+    #[amestate(default = {
         "HTTP_PROXY": "http://127.0.0.1:8080".to_string(),
         "NO_PROXY": "localhost".to_string()
     })]
     pub env: ReactiveMap<String, String>,
 }
 
-#[rpstate_dioxus]
-#[rpstate]
+#[amethystate_dioxus]
+#[amethystate]
 pub struct Theme {
-    #[state(default = "light".to_string())]
+    #[amestate(default = "light".to_string())]
     pub mode: String,
 
-    #[state(default = "#ffffff".to_string())]
+    #[amestate(default = "#ffffff".to_string())]
     pub background: String,
 
-    #[state(default = "#000000".to_string())]
+    #[amestate(default = "#000000".to_string())]
     pub foreground: String,
 }
 
@@ -228,7 +228,7 @@ fn ProxyEditor(settings: Handle<AppSettings>) -> Element {
 
 #[component]
 fn Settings() -> Element {
-    let state = use_rpstate::<AppSettings>();
+    let state = use_amethystate::<AppSettings>();
     let (username, set_username) = use_field(state.username);
     let (counter, set_counter) = use_field(state.counter);
 
@@ -241,7 +241,7 @@ fn Settings() -> Element {
 
     rsx! {
         div {
-            h1 { "rpstate + Dioxus" }
+            h1 { "amethystate + Dioxus" }
 
             div { class: "section",
                 h3 { "Basic fields" }
@@ -283,7 +283,7 @@ fn App() -> Element {
     });
 
     rsx! {
-        RpStateProvider {
+        amethystateProvider {
             store,
             Settings {}
         }

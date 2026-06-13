@@ -1,4 +1,4 @@
-use rpstate::{DefaultStore, StoreBuilder};
+use amethystate::{DefaultStore, StoreBuilder};
 use std::sync::Arc;
 
 pub mod state;
@@ -13,20 +13,20 @@ fn greet(name: &str) -> String {
 pub fn run() {
     #[cfg(debug_assertions)]
     {
-        let _ = tauri_plugin_rpstate::codegen::export("../src/bindings/rpstate.ts");
+        let _ = tauri_plugin_amethystate::codegen::export("../src/bindings/amethystate.ts");
     }
 
     let app_dir = std::env::current_dir().unwrap_or_default();
-    let db_path = app_dir.join("rpstate_settings.redb");
+    let db_path = app_dir.join("amethystate_settings.redb");
     let store = StoreBuilder::new(&db_path)
         .build()
-        .expect("Failed to initialize rpstate store");
+        .expect("Failed to initialize amethystate store");
 
     let _settings = AppSettings::new(&store).expect("Failed to load AppSettings");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_rpstate::init())
+        .plugin(tauri_plugin_amethystate::init())
         .manage(store)
         .invoke_handler(tauri::generate_handler![greet])
         .run(tauri::generate_context!())

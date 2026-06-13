@@ -1,5 +1,5 @@
 [package]
-name = "rpstate-iced-settings-example"
+name = "amethystate-iced-settings-example"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -8,5 +8,5 @@ publish = false
 
 [dependencies]
 iced = "0.14.0"
-rpstate = { path = "../../crates/rpstate" }
+amethystate = { path = "../../crates/main/amethystate" }
 serde = { version = "1.0", features = ["derive"] }

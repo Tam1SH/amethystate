@@ -1,13 +1,13 @@
 use gpui::{div, prelude::*, AppContext, ParentElement, Render, Window, WindowOptions};
 use gpui_component::button::Button;
 use gpui_component::Root;
-use rpstate::{rpstate, IntoGlobalStore, StoreBuilder};
-use rpstate_gpui::{RpEntity, RpStateExt};
+use amethystate::{amethystate, IntoGlobalStore, StoreBuilder};
+use amethystate_gpui::{RpEntity, amethystateExt};
 use std::time::Duration;
 
-#[rpstate(prefix = "counter")]
+#[amethystate(prefix = "counter")]
 pub struct CounterState {
-    #[state(default = 0)]
+    #[amestate(default = 0)]
     pub count: i32,
 }
 
@@ -18,7 +18,7 @@ struct CounterView {
 impl CounterView {
     fn new(cx: &mut Context<Self>) -> Self {
 
-        let state = cx.new_rpstate(CounterState::new).unwrap();
+        let state = cx.new_amethystate(CounterState::new).unwrap();
 
         let forked_state = state.read(cx).fork();
         std::thread::spawn(move || {

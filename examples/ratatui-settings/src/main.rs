@@ -11,19 +11,19 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
     Terminal,
 };
-use rpstate::{rpstate, DefaultStore, StoreBuilder};
+use amethystate::{amethystate, DefaultStore, StoreBuilder};
 use std::io::{stdout, Stdout};
 use std::sync::Arc;
 
-#[rpstate(prefix = "tui_settings", mode = "persistent")]
+#[amethystate(prefix = "tui_settings", mode = "persistent")]
 pub struct TuiSettings {
-    #[state(default = "Anonymous".to_string())]
+    #[amestate(default = "Anonymous".to_string())]
     pub username: String,
-    #[state(default = "Dark".to_string())]
+    #[amestate(default = "Dark".to_string())]
     pub theme: String,
-    #[state(default = true)]
+    #[amestate(default = true)]
     pub enable_notifications: bool,
-    #[state(default = 5)]
+    #[amestate(default = 5)]
     pub refresh_interval_secs: u32,
 }
 
@@ -113,7 +113,7 @@ fn run_app(
                 ])
                 .split(size);
 
-            let header = Paragraph::new("rpstate (Persistence-only) + Ratatui Settings Example")
+            let header = Paragraph::new("amethystate (Persistence-only) + Ratatui Settings Example")
                 .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
                 .alignment(ratatui::layout::Alignment::Center)
                 .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));

@@ -1,0 +1,201 @@
+use darling::util::SpannedValue;
+use darling::FromField;
+use proc_macro2::{TokenStream as TokenStream2, TokenTree};
+use syn::{Expr, GenericArgument, Ident, PathArguments, Type, TypePath, Visibility};
+
+#[derive(Debug, darling::FromMeta, Clone)]
+pub struct MacroArgs {
+    #[darling(default)]
+    pub prefix: Option<String>,
+    #[darling(default)]
+    pub version: Option<u32>,
+    #[darling(default)]
+    pub mode: Option<String>,
+    #[darling(default)]
+    pub target: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StoreFieldEntry {
+    pub ident: Option<Ident>,
+    pub vis: Visibility,
+    pub ty: Type,
+    pub key: Option<String>,
+    pub default: Option<TokenStream2>,
+    pub nested: bool,
+    pub lookup: Option<SpannedValue<String>>,
+    pub lookup_node: Option<SpannedValue<String>>,
+    pub parent: Option<Expr>,
+    pub export_mut: bool,
+    pub volatile: bool,
+}
+
+impl FromField for StoreFieldEntry {
+    fn from_field(field: &syn::Field) -> darling::Result<Self> {
+        let ident = field.ident.clone();
+        let vis = field.vis.clone();
+        let ty = field.ty.clone();
+
+        let mut key = None;
+        let mut default = None;
+        let mut nested = false;
+        let mut lookup = None;
+        let mut lookup_node = None;
+        let mut parent = None;
+        let mut export_mut = false;
+        let mut volatile = false;
+
+        for attr in &field.attrs {
+            if attr.path().is_ident("amestate") {
+                let list = attr.meta.require_list().map_err(darling::Error::from)?;
+                parse_state_tokens(
+                    list.tokens.clone(),
+                    &mut key,
+                    &mut default,
+                    &mut nested,
+                    &mut lookup,
+                    &mut lookup_node,
+                    &mut parent,
+                    &mut export_mut,
+                    &mut volatile,
+                )?;
+            }
+        }
+
+        Ok(StoreFieldEntry {
+            ident,
+            vis,
+            ty,
+            key,
+            default,
+            nested,
+            lookup,
+            lookup_node,
+            parent,
+            export_mut,
+            volatile,
+        })
+    }
+}
+
+fn split_top_level_commas(tokens: TokenStream2) -> Vec<TokenStream2> {
+    let mut result: Vec<TokenStream2> = Vec::new();
+    let mut current: Vec<TokenTree> = Vec::new();
+    for tt in tokens {
+        if matches!(&tt, TokenTree::Punct(p) if p.as_char() == ',') {
+            result.push(current.drain(..).collect());
+        } else {
+            current.push(tt);
+        }
+    }
+    if !current.is_empty() {
+        result.push(current.into_iter().collect());
+    }
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn parse_state_tokens(
+    tokens: TokenStream2,
+    key: &mut Option<String>,
+    default: &mut Option<TokenStream2>,
+    nested: &mut bool,
+    lookup: &mut Option<SpannedValue<String>>,
+    lookup_node: &mut Option<SpannedValue<String>>,
+    parent: &mut Option<Expr>,
+    export_mut: &mut bool,
+    volatile: &mut bool,
+) -> darling::Result<()> {
+    for item in split_top_level_commas(tokens) {
+        let mut iter = item.into_iter().peekable();
+
+        let first = match iter.next() {
+            Some(TokenTree::Ident(i)) => i,
+            Some(tt) => {
+                return Err(
+                    darling::Error::custom("expected attribute key identifier").with_span(&tt)
+                );
+            }
+            None => continue,
+        };
+        let name = first.to_string();
+
+        let has_eq = matches!(iter.peek(), Some(TokenTree::Punct(p)) if p.as_char() == '=');
+
+        if has_eq {
+            iter.next();
+            let value: TokenStream2 = iter.collect();
+
+            match name.as_str() {
+                "default" => *default = Some(value),
+                "key" => {
+                    let lit: syn::LitStr = syn::parse2(value).map_err(darling::Error::from)?;
+                    *key = Some(lit.value());
+                }
+                "lookup" => {
+                    let lit: syn::LitStr = syn::parse2(value).map_err(darling::Error::from)?;
+                    *lookup = Some(SpannedValue::new(lit.value(), lit.span()));
+                }
+                "lookup_node" => {
+                    let lit: syn::LitStr = syn::parse2(value).map_err(darling::Error::from)?;
+                    *lookup_node = Some(SpannedValue::new(lit.value(), lit.span()));
+                }
+                "parent" => {
+                    let expr: Expr = syn::parse2(value).map_err(darling::Error::from)?;
+                    *parent = Some(expr);
+                }
+                other => {
+                    return Err(darling::Error::unknown_field_with_alts(
+                        other,
+                        &["default", "key", "lookup", "lookup_node", "parent"],
+                    ));
+                }
+            }
+        } else {
+            match name.as_str() {
+                "volatile" => *volatile = true,
+                "nested" => *nested = true,
+                "export_mut" => *export_mut = true,
+                other => {
+                    return Err(darling::Error::unknown_field_with_alts(
+                        other,
+                        &["volatile", "nested", "export_mut"],
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+impl StoreFieldEntry {
+    pub fn get_map_types(&self) -> Option<(&Type, &Type)> {
+        if let Type::Path(TypePath { path, .. }) = &self.ty {
+            let last_seg = path.segments.last()?;
+            if last_seg.ident == "ReactiveMap"
+                && let PathArguments::AngleBracketed(args) = &last_seg.arguments
+            {
+                let mut generics = args.args.iter().filter_map(|arg| {
+                    if let GenericArgument::Type(t) = arg {
+                        Some(t)
+                    } else {
+                        None
+                    }
+                });
+                let k = generics.next()?;
+                let v = generics.next()?;
+                return Some((k, v));
+            }
+        }
+        None
+    }
+}
+
+pub fn get_type_ident_str(ty: &syn::Type) -> String {
+    if let syn::Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+    {
+        return segment.ident.to_string();
+    }
+    "any".to_string()
+}

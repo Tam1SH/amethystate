@@ -1,16 +1,16 @@
 use eframe::egui;
-use rpstate::store::builder::StoreBuilder;
-use rpstate::{IntoPipeline, Pipeline, rpstate};
+use amethystate::store::builder::StoreBuilder;
+use amethystate::{IntoPipeline, Pipeline, amethystate};
 
-#[rpstate(prefix = "egui_settings")]
+#[amethystate(prefix = "egui_settings")]
 pub struct SettingsState {
-    #[state(default = "127.0.0.1".to_string())]
+    #[amestate(default = "127.0.0.1".to_string())]
     pub host: String,
 
-    #[state(default = 8080)]
+    #[amestate(default = 8080)]
     pub port: u16,
 
-    #[state(default = false)]
+    #[amestate(default = false)]
     pub dark_mode: bool,
 }
 
@@ -27,7 +27,7 @@ impl eframe::App for SettingsApp {
             ui.ctx().set_visuals(egui::Visuals::light());
         }
 
-        ui.heading("rpstate + egui");
+        ui.heading("amethystate + egui");
 
         let mut host = self.state.host().get();
         if ui.text_edit_singleline(&mut host).changed() {
@@ -61,7 +61,7 @@ fn main() -> anyhow::Result<()> {
         .dedupe();
 
     eframe::run_native(
-        "rpstate egui settings",
+        "amethystate egui settings",
         eframe::NativeOptions::default(),
         Box::new(move |_cc| Ok(Box::new(SettingsApp { state, address }))),
     )?;

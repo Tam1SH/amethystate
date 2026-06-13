@@ -1,7 +1,7 @@
-use rpstate::RpType;
+use amethystate::AmeType;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, RpType)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, AmeType)]
 pub struct ProxyProfile {
     pub name: String,
     pub address: String,

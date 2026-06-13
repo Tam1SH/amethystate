@@ -1,0 +1,26 @@
+pub mod commands;
+
+use tauri::{
+    Manager, Runtime,
+    plugin::{Builder, TauriPlugin},
+};
+
+pub fn init<R: Runtime>() -> TauriPlugin<R> {
+    Builder::new("amethystate")
+        .invoke_handler(tauri::generate_handler![
+            commands::amethystate_get,
+            commands::amethystate_set,
+            commands::amethystate_subscribe,
+            commands::amethystate_unsubscribe,
+            commands::amethystate_get_prefix,
+            commands::amethystate_flush,
+            commands::amethystate_delete,
+        ])
+        .setup(|app, _api| {
+            app.manage(commands::PluginState {
+                subscriptions: std::sync::Mutex::new(std::collections::HashMap::new()),
+            });
+            Ok(())
+        })
+        .build()
+}

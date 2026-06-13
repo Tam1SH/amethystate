@@ -22,13 +22,13 @@ tauri-build = { version = "2.6.2", features = [] }
 [dependencies]
 tauri = { version = "2.11.2", features = [] }
 tauri-plugin-opener = "2.5.4"
-tauri-plugin-rpstate = { path = "../../../crates/tauri/tauri-plugin-rpstate" }
+tauri-plugin-amethystate = { path = "../../../crates/tauri/tauri-plugin-amethystate" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-rpstate-codegen = { path = "../../../crates/tauri/rpstate-codegen", features = ["yew"] }
-rpstate = { path = "../../../crates/rpstate" }
+amethystate-codegen = { path = "../../../crates/tauri/amethystate-codegen", features = ["yew"] }
+amethystate = { path = "../../../crates/main/amethystate" }
 
 shared = { path = "../shared" }
 

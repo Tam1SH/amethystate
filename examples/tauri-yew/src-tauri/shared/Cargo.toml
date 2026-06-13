@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-rpstate = { path = "../../../crates/rpstate" }
+amethystate = { path = "../../../crates/amethystate" }

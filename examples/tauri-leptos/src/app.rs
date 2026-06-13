@@ -1,9 +1,9 @@
 use crate::bindings::{AppSettings, Theme};
 use leptos::prelude::*;
-use rpstate::tauri::TauriBackend;
-use rpstate_arena::IntoArenaPipeline;
-use rpstate_arena::{WritableHandle, WritableMapHandle};
-use rpstate_leptos::{preload_slices, use_field, use_map, use_pipeline, use_rpstate, Handle, RpStateProvider};
+use amethystate::tauri::TauriBackend;
+use amethystate_arena::IntoArenaPipeline;
+use amethystate_arena::{WritableHandle, WritableMapHandle};
+use amethystate_leptos::{preload_slices, use_field, use_map, use_pipeline, use_amethystate, Handle, amethystateProvider};
 use shared::ProxyProfile;
 
 #[component]
@@ -190,7 +190,7 @@ pub fn Settings(state: Handle<AppSettings>) -> impl IntoView {
 
     view! {
         <div>
-            <h1>"rpstate + Leptos"</h1>
+            <h1>"amethystate + Leptos"</h1>
 
             <div class="section">
                 <h3>"Basic fields"</h3>
@@ -228,19 +228,19 @@ pub fn App() -> impl IntoView {
     let backend = TauriBackend::new();
 
     view! {
-        <RpStateProvider
+        <amethystateProvider
             backend=backend
             init=preload_slices!(AppSettings)
             fallback=|| view! { <p>"Loading..."</p> }
         >
             <MainLayout />
-        </RpStateProvider>
+        </amethystateProvider>
     }
 }
 
 #[component]
 fn MainLayout() -> impl IntoView {
-    let state = use_rpstate::<AppSettings>();
+    let state = use_amethystate::<AppSettings>();
 
     view! {
         <Settings state=state />
