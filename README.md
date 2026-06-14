@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="logo.svg" alt="amethystate" width="120" />
+<img src="logo.svg" alt="amethystate" width="384" />
 
 # amethystate
 
