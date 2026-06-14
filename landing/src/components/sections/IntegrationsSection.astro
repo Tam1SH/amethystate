@@ -1,5 +1,6 @@
 ---
 import { Code } from 'astro:components';
+import { asset } from '../../utils/asset';
 
 const snippets = {
     egui: `// persistent-only mode\n#[amethystate(prefix = "app", mode = "persistent")]\npub struct AppState { pub theme: String }\n\nlet mut state = AppState::load()?;\nstate.theme = "dark".to_string();\nstate.save_lazy()?;`,
@@ -52,27 +53,27 @@ const langs: Record<string, string> = {
     </p>
     <div class="flex gap-2 flex-wrap mb-6" id="int-tabs">
         <button class="int-tab active" data-fw="egui">
-            <span class="int-tab-icon"><img src="./egui-logo.svg" /></span>
+            <span class="int-tab-icon"><img src={asset('egui-logo.svg')} /></span>
             <span>egui</span>
         </button>
         <button class="int-tab" data-fw="iced">
-            <span class="int-tab-icon"><img src="./iced-logo.svg" /></span>
+            <span class="int-tab-icon"><img src={asset('iced-logo.svg')} /></span>
             <span>iced</span>
         </button>
         <button class="int-tab" data-fw="dioxus">
-            <span class="int-tab-icon"><img src="./dioxus-logo.png" /></span>
+            <span class="int-tab-icon"><img src={asset('dioxus-logo.png')} /></span>
             <span>dioxus</span>
         </button>
         <button class="int-tab" data-fw="leptos">
-            <span class="int-tab-icon"><img src="./leptos-logo.svg" /></span>
+            <span class="int-tab-icon"><img src={asset('leptos-logo.svg')} /></span>
             <span>leptos</span>
         </button>
         <button class="int-tab" data-fw="tauri">
-            <span class="int-tab-icon"><img src="./tauri-logo.svg" /></span>
+            <span class="int-tab-icon"><img src={asset('tauri-logo.svg')} /></span>
             <span>tauri</span>
         </button>
         <button class="int-tab" data-fw="gpui">
-            <span class="int-tab-icon"><img src="./zed-logo.svg" /></span>
+            <span class="int-tab-icon"><img src={asset('zed-logo.svg')} /></span>
             <span>gpui</span>
         </button>
     </div>

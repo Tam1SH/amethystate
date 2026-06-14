@@ -1,4 +1,5 @@
 ---
+import { asset } from '../../utils/asset';
 ---
 
 <section class="min-h-screen flex items-center px-8 relative overflow-hidden">
@@ -21,21 +22,18 @@
                 <text x="0" y="54" font-family="system-ui, sans-serif" font-size="52" font-weight="700" letter-spacing="4" fill="#9270B0">AMETHYSTATE</text>
                 <text x="0" y="54" font-family="system-ui, sans-serif" font-size="52" font-weight="700" letter-spacing="4" fill="none" stroke="url(#g)" stroke-width="1.2">AMETHYSTATE</text>
             </svg>
-            <!--<h1 class="text-4xl font-medium leading-tight tracking-tight text-[#f0ecfc] mb-6">-->
-            <!--    state that <span class="text-[#9270B0]">remembers</span>-->
-            <!--</h1>-->
             <p class="text-lg text-[#b6b0c9] leading-relaxed mb-4">
                 State management for Rust GUI apps — persistence, reactivity, and migrations without the boilerplate.
             </p>
             <div class="flex gap-3">
-                <a href="/docs" class="bg-[#9270B0] text-[#f0ecfc] rounded-lg px-6 py-2.5 text-sm font-medium">Get started</a>
+                <a href={asset('/docs/introduction/')} class="bg-[#9270B0] text-[#f0ecfc] rounded-lg px-6 py-2.5 text-sm font-medium">Get started</a>
                 <a href="https://github.com/Tam1SH/amethystate" class="border border-[rgba(196,184,232,0.3)] text-[#c4b8e8] rounded-lg px-6 py-2.5 text-sm font-medium flex items-center gap-2">
                     <i class="ti ti-brand-github"></i> GitHub
                 </a>
             </div>
         </div>
         <div class="flex items-center justify-center">
-            <img src="/logo.svg" alt="amethystate" class="w-full max-w-[450px]" />
+            <img src={asset('/logo.svg')} alt="amethystate" class="w-full max-w-[450px]" />
         </div>
     </div>
     <div class="absolute pointer-events-none z-[10]" style="width:550px; height:550px; border-radius:50%; background:radial-gradient(circle, rgba(174,133,187,0.8) 0%, transparent 70%); top:-15%; right:0%;"></div>

@@ -6,6 +6,7 @@ import HowItWorksSection from '../components/sections/HowItWorksSection.astro';
 import '../styles/global.css';
 import IntegrationsSection, { initTabs } from '../components/sections/IntegrationsSection.astro';
 import MigrationsSection from '../components/sections/MigrationsSection.astro';
+import { asset } from '../utils/asset';
 ---
 <html lang="en">
 <head>
@@ -45,7 +46,7 @@ import MigrationsSection from '../components/sections/MigrationsSection.astro';
     <span class="text-sm text-[#4a4560]">amethystate · MIT</span>
     <div class="flex gap-5">
       <a href="https://github.com/Tam1SH/amethystate" class="text-sm text-[#6e6890] flex items-center gap-1.5"><i class="ti ti-brand-github"></i> GitHub</a>
-      <a href="/docs" class="text-sm text-[#6e6890]">Docs</a>
+      <a href={asset('/docs/introduction/')} class="text-sm text-[#6e6890]">Docs</a>
     </div>
   </footer>
 
