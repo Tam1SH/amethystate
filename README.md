@@ -47,8 +47,8 @@ fn main() -> amethystate::Result<()> {
 }
 ```
 
-egui, iced, ratatui, and other retain-mode frameworks are supported too — see [Integrations](./book/integrations/overview.md).
+egui, iced, ratatui, and other retain-mode frameworks are supported too — see [Integrations](./landing/src/content/docs/docs/Integrations/overview.md).
 
 ---
 
-See the **[book](./book/)** for full documentation — concepts, migrations, and per-framework integration guides.
+See the **[book](./landing/src/content/docs/docs/)** for full documentation — concepts, migrations, and per-framework integration guides.

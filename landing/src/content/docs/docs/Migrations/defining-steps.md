@@ -1,5 +1,7 @@
 ---
 title: Defining Migration Steps
+sidebar:
+  order: 7
 ---
 
 

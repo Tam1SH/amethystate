@@ -1,5 +1,6 @@
 use crate::amethystate::generate::parse_default;
-use amethystate_macros_core::{MacroArgs, StoreFieldEntry};
+use amethystate_macros_core::StoreFieldEntry;
+use crate::amethystate::MacroArgs;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{Ident, Visibility};
@@ -54,6 +55,7 @@ pub fn generate_wasm_code(
         else { e.key.as_deref().unwrap_or(&fname.to_string()).to_string() };
 
         let full_key = if e.lookup.is_some() || e.lookup_node.is_some() { key_suffix }
+        else if prefix_str == "." { key_suffix }
         else { format!("{}.{}", prefix_str, key_suffix) };
 
         let ty = &e.ty;
@@ -66,7 +68,7 @@ pub fn generate_wasm_code(
             quote! {
                 #fname: {
                     let mut map_init = ::std::collections::HashMap::new();
-                    let map_prefix = format!("{}.", #full_key);
+                    let map_prefix = if #prefix_str == "." { format!("{}.", #full_key) } else { format!("{}.{}.", #prefix_str, #full_key) };
                     for (k, v) in initial {
                         if let Some(sub_key) = k.strip_prefix(&map_prefix) {
                             if let Ok(parsed_k) = <#k as ::std::str::FromStr>::from_str(sub_key) {
@@ -98,7 +100,8 @@ pub fn generate_wasm_code(
 
                 async fn load_async(store: &#backend_ty) -> ::std::result::Result<Self, Self::Error> {
                     use #crate_name::client::AmeBackendAsync;
-                    let raw_entries = store.scan_prefix(#prefix_str).await?;
+                    let scan_prefix = if #prefix_str == "." { "" } else { #prefix_str };
+                    let raw_entries = store.scan_prefix(scan_prefix).await?;
                     let mut initial = ::std::collections::HashMap::new();
                     for (k, v) in raw_entries {
                         initial.insert(k, v);
@@ -132,7 +135,7 @@ pub fn generate_wasm_code(
                 quote! {
                     #fname: {
                         let mut map_init = ::std::collections::HashMap::new();
-                        let map_prefix = format!("{}.", prefix, #key_str);
+                        let map_prefix = if prefix == "." { format!("{}.", #key_str) } else { format!("{}.{}.", prefix, #key_str) };
                         for (k, v) in initial {
                             if let Some(sub_key) = k.strip_prefix(&map_prefix) {
                                 if let Ok(parsed_k) = <#k as ::std::str::FromStr>::from_str(sub_key) {
@@ -142,13 +145,14 @@ pub fn generate_wasm_code(
                                 }
                             }
                         }
-                        #crate_name::client::ReactiveMap::new_with_backend_and_id(format!("{}.{}", prefix, #key_str), map_init, store.clone(), instance_id)
+                        let map_key = if prefix == "." { #key_str.to_string() } else { format!("{}.{}", prefix, #key_str) };
+                        #crate_name::client::ReactiveMap::new_with_backend_and_id(map_key, map_init, store.clone(), instance_id)
                     }
                 }
             } else {
                 quote! {
                     #fname: {
-                        let full_key = format!("{}.{}", prefix, #key_str);
+                        let full_key = if prefix == "." { #key_str.to_string() } else { format!("{}.{}", prefix, #key_str) };
                         let val = initial.get(&full_key)
                             .and_then(|v| store.decode::<#ty>(v).ok())
                             .unwrap_or_else(|| #fallback);

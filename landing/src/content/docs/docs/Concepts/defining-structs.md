@@ -1,5 +1,7 @@
 ---
 title: Defining Structs
+sidebar:
+  order: 4
 ---
 
 ## The `#[amethystate]` macro

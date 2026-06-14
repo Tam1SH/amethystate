@@ -13,6 +13,8 @@ pub struct MacroArgs {
     pub mode: Option<String>,
     #[darling(default)]
     pub target: Option<String>,
+    #[darling(default)]
+    pub as_root: bool,
 }
 
 #[derive(Debug, Clone)]

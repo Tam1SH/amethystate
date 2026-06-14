@@ -1,5 +1,7 @@
 ---
 title: Migrations
+sidebar:
+  order: 6
 ---
 
 ## What migrations are for

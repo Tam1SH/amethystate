@@ -32,7 +32,12 @@ fn init_field(crate_name: &TokenStream2, e: &StoreFieldEntry, is_root: bool) -> 
                     let _ = || assert_node_type(#chain);
                     let _ = #chain;
                 };
-                let path = format!("{}.{}", <#parent<S> as #crate_name::StateScope>::PREFIX, #target_str);
+                let parent_prefix = <#parent<S> as #crate_name::StateScope>::PREFIX;
+                let path = if parent_prefix == "." {
+                    #target_str.to_string()
+                } else {
+                    format!("{}.{}", parent_prefix, #target_str)
+                };
                 ::std::sync::Arc::new(<#ty<S> as #crate_name::AmeStateNode<S>>::new_node_with_id(store, &path, instance_id)?)
             }
         }
@@ -67,18 +72,31 @@ fn init_field(crate_name: &TokenStream2, e: &StoreFieldEntry, is_root: bool) -> 
                     fn assert_field_type_matches_lookup<T, M: TypeCheck<T>>(_: M) {}
                     assert_field_type_matches_lookup::<#ty, _>(#chain);
                 };
-                let path = format!("{}.{}", <#parent as #crate_name::StateScope>::PREFIX, #target_str);
+                let parent_prefix = <#parent as #crate_name::StateScope>::PREFIX;
+                let path = if parent_prefix == "." {
+                    #target_str.to_string()
+                } else {
+                    format!("{}.{}", parent_prefix, #target_str)
+                };
                 #crate_name::store::field_with_path::<#ty, _, #mode>(store, ::std::sync::Arc::from(path), #def, instance_id)?
             }
         }
     } else if e.nested {
         if is_root {
             quote! {
-                #fname: ::std::sync::Arc::new(#ty::<S>::new_with_id(
-                    store,
-                    &format!("{}.{}", <Self as #crate_name::StateScope>::PREFIX, #key),
-                    instance_id
-                )?)
+                #fname: {
+                    let prefix = <Self as #crate_name::StateScope>::PREFIX;
+                    let path = if prefix == "." {
+                        #key.to_string()
+                    } else {
+                        format!("{}.{}", prefix, #key)
+                    };
+                    ::std::sync::Arc::new(#ty::<S>::new_with_id(
+                        store,
+                        &path,
+                        instance_id
+                    )?)
+                }
             }
         } else {
             quote! { #fname: ::std::sync::Arc::new(#ty::<S>::new_with_id(store, &format!("{}.{}", namespace, #key), instance_id)?) }
@@ -119,7 +137,16 @@ fn init_field(crate_name: &TokenStream2, e: &StoreFieldEntry, is_root: bool) -> 
 
         if e.volatile {
             let path_expr = if is_root {
-                quote! { format!("{}.{}", <Self as #crate_name::StateScope>::PREFIX, #key) }
+                quote! {
+                    {
+                        let prefix = <Self as #crate_name::StateScope>::PREFIX;
+                        if prefix == "." {
+                            #key.to_string()
+                        } else {
+                            format!("{}.{}", prefix, #key)
+                        }
+                    }
+                }
             } else {
                 quote! { format!("{}.{}", namespace, #key) }
             };

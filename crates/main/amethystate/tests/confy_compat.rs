@@ -120,13 +120,13 @@ fn test_confy_amethystate_coexistence() {
 
     let contents = fs::read_to_string(&file_path).expect("read failed");
 
-    #[cfg(feature = "json")]
+    #[cfg(backend = "json")]
     insta::assert_snapshot!("coexistence_json", contents);
 
-    #[cfg(feature = "toml")]
+    #[cfg(backend = "toml")]
     insta::assert_snapshot!("coexistence_toml", contents);
 
-    #[cfg(feature = "ron")]
+    #[cfg(backend = "ron")]
     insta::assert_snapshot!("coexistence_ron", contents);
 
     if let Some(parent) = file_path.parent()
@@ -143,7 +143,14 @@ fn test_confy_amethystate_coexistence() {
 }
 
 #[test]
-#[cfg(feature = "toml")]
+#[cfg(all(
+    feature = "toml",
+    not(feature = "redb"),
+    not(feature = "json"),
+    not(feature = "ron"),
+    not(feature = "sqlite"),
+    not(feature = "sqlite-bundled")
+))]
 fn test_compare_real_confy_and_amethystate() {
     let dir = tempfile::tempdir().expect("Failed to create temp dir");
 

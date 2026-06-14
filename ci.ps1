@@ -22,7 +22,7 @@ Exec { cargo test --workspace --no-default-features --features redb }
 Exec { cargo test --workspace --no-default-features --features json }
 Exec { cargo test --workspace --no-default-features --features toml,confy-compat }
 Exec { cargo test --workspace --no-default-features --features ron,confy-compat }
-Exec { cargo test --workspace --no-default-features --features sqlite }
+Exec { cargo test --workspace --no-default-features --features sqlite-bundled }
 Exec { cargo test --workspace --all-features }
 
 $examples = Get-ChildItem -Path "examples" -Directory
@@ -32,3 +32,16 @@ foreach ($example in $examples) {
     Pop-Location
 }
 
+$wasmCrates = @(
+    "crates\adapters\amethystate-dioxus",
+    "crates\adapters\amethystate-leptos",
+    "crates\adapters\amethystate-yew",
+    "crates\adapters\amethystate-tauri",
+    "crates\main\amethystate-arena"
+)
+
+foreach ($crate in $wasmCrates) {
+    Push-Location $crate
+    Exec { cargo build --target wasm32-unknown-unknown }
+    Pop-Location
+}

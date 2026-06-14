@@ -205,14 +205,12 @@ where
 }
 
 pub fn join_path(prefix: &str, key: &str) -> String {
-    if prefix.is_empty() {
-        key.to_string()
+    let trimmed_prefix = prefix.trim_end_matches('.');
+    let trimmed_key = key.trim_start_matches('.');
+    if trimmed_prefix.is_empty() {
+        trimmed_key.to_string()
     } else {
-        format!(
-            "{}.{}",
-            prefix.trim_end_matches('.'),
-            key.trim_start_matches('.')
-        )
+        format!("{}.{}", trimmed_prefix, trimmed_key)
     }
 }
 

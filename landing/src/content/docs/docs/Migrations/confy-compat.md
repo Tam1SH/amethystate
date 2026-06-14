@@ -1,5 +1,7 @@
 ---
 title: Migrating from confy
+sidebar:
+  order: 8
 ---
 
 `amethystate` includes a compatibility adapter that reimplements the `confy` API on top of its own storage backend. You can switch to it by replacing the `confy` import — existing call sites stay unchanged.

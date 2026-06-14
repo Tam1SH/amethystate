@@ -1,5 +1,7 @@
 ---
 title: Migrating from a custom solution
+sidebar:
+  order: 9
 ---
 
 ## Plain serde + file

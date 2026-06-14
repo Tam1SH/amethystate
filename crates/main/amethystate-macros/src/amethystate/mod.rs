@@ -18,10 +18,15 @@ pub fn amethystate_impl(
         Err(e) => return darling::Error::from(e).write_errors().into(),
     };
 
-    let macro_args = match MacroArgs::from_list(&attr_args) {
+    let mut macro_args = match MacroArgs::from_list(&attr_args) {
         Ok(v) => v,
         Err(e) => return e.write_errors().into(),
     };
+
+    if macro_args.as_root {
+        macro_args.prefix = Some(".".to_string());
+    }
+
 
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;

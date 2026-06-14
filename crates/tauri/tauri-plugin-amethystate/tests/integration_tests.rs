@@ -4,7 +4,7 @@ use amethystate::test_utils::unique_store;
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn test_tauri_plugin_commands() {
-    use amethystate::{DefaultStore, StoreBuilder};
+    use amethystate::DefaultStore;
     use tauri::Manager;
     let store = unique_store("amethystate_tauri_test_store.redb");
 

@@ -1,5 +1,7 @@
 ---
 title: Introduction
+sidebar:
+  order: 1
 ---
 
 `amethystate` is a persistent reactive state library for Rust GUI applications.

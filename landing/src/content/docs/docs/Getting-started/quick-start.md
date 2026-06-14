@@ -1,5 +1,7 @@
 ---
 title: Quick Start
+sidebar:
+  order: 3
 ---
 
 ## Defining state

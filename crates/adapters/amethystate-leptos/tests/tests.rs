@@ -5,6 +5,7 @@ use amethystate_leptos::{
     use_field, use_map, use_map_subscribe_any, use_map_subscribe_key, use_pipeline,
 };
 use leptos::prelude::*;
+use serial_test::serial;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -41,6 +42,7 @@ impl amethystate::StateScope for DummyScope {
 }
 
 #[tokio::test(flavor = "current_thread")]
+#[serial]
 async fn test_use_field_requirements() {
     any_spawner::Executor::init_tokio().ok();
 
@@ -80,6 +82,7 @@ async fn test_use_field_requirements() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+#[serial]
 async fn test_use_map_requirements() {
     any_spawner::Executor::init_tokio().ok();
 
@@ -136,6 +139,7 @@ async fn test_use_map_requirements() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+#[serial]
 async fn test_use_pipeline_requirements() {
     any_spawner::Executor::init_tokio().ok();
 
@@ -188,6 +192,7 @@ async fn test_use_pipeline_requirements() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+#[serial]
 async fn test_map_sub_requirements() {
     any_spawner::Executor::init_tokio().ok();
 
@@ -237,6 +242,7 @@ async fn test_map_sub_requirements() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+#[serial]
 async fn test_real_component_lifecycle() {
     any_spawner::Executor::init_tokio().ok();
 

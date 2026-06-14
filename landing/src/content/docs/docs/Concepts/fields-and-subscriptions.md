@@ -1,5 +1,7 @@
 ---
 title: Fields & Subscriptions
+sidebar:
+  order: 5
 ---
 
 ## Reading and writing

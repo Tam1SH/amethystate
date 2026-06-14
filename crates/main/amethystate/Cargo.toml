@@ -40,7 +40,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 redb = { workspace = true, optional = true }
 rmp-serde = { workspace = true, optional = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
 directories = { workspace = true, optional = true }
 inventory = { workspace = true }
 parking_lot = { workspace = true, optional = true }

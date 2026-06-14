@@ -77,9 +77,9 @@ where
 
     let arena_clone = arena.clone();
     let setter = SignalSetter::map(move |val: T| {
+        let old_val = signal.get_untracked();
         #[cfg(target_arch = "wasm32")]
         {
-            let old_val = signal.get_untracked();
             set_signal.set(val.clone());
             let arena_clone = arena_clone.clone();
             leptos::task::spawn_local(async move {
@@ -93,6 +93,7 @@ where
         {
             if let Err(e) = arena_clone.set_field(handle, val) {
                 log::error!("set_field failed: {e:?}");
+                set_signal.set(old_val);
             }
         }
     });
