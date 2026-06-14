@@ -66,10 +66,14 @@ impl<S: ::amethystate::Store> ConnectionPool<S> {
     pub fn __schema_field_timeout_secs(&self) -> ::amethystate::ReadOnly<u32> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn max_connections(&self) -> ::amethystate::Field<u32, S, ::amethystate::WritableMode> {
+    pub fn max_connections(
+        &self,
+    ) -> ::amethystate::Field<u32, S, ::amethystate::WritableMode> {
         self.max_connections.clone()
     }
-    pub fn timeout_secs(&self) -> ::amethystate::Field<u32, S, ::amethystate::WritableMode> {
+    pub fn timeout_secs(
+        &self,
+    ) -> ::amethystate::Field<u32, S, ::amethystate::WritableMode> {
         self.timeout_secs.clone()
     }
     pub fn fork(&self) -> Self {
@@ -494,7 +498,9 @@ impl ::amethystate::migration::fields::AmeStateFields for ConnectionPool_Data {
     const SCHEMA_HASH: u32 = ::amethystate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(ctx: &mut ::amethystate::MigrationContext) -> ::amethystate::Result<Self> {
+    fn load_struct(
+        ctx: &mut ::amethystate::MigrationContext,
+    ) -> ::amethystate::Result<Self> {
         Ok(Self {
             max_connections: ctx.get::<u32>("max_connections")?.unwrap_or_else(|| 10),
             timeout_secs: ctx.get::<u32>("timeout_secs")?.unwrap_or_else(|| 30),
@@ -509,7 +515,7 @@ impl ::amethystate::migration::fields::AmeStateFields for ConnectionPool_Data {
         Ok(())
     }
 }
-impl<S: ::amethystate::Store> ::amethystate::amethystate for ConnectionPool<S> {
+impl<S: ::amethystate::Store> ::amethystate::AmeState for ConnectionPool<S> {
     type Data = ConnectionPool_Data;
 }
 pub struct DatabaseState<S: ::amethystate::Store = ::amethystate::DefaultStore> {
@@ -627,7 +633,9 @@ impl<S: ::amethystate::Store> ::amethystate::AmeStateNode<S> for DatabaseState<S
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct DatabaseState_Data {
-    pub pool: <ConnectionPool<::amethystate::DefaultStore> as ::amethystate::amethystate>::Data,
+    pub pool: <ConnectionPool<
+        ::amethystate::DefaultStore,
+    > as ::amethystate::AmeState>::Data,
 }
 #[doc(hidden)]
 #[allow(
@@ -778,7 +786,7 @@ const _: () = {
                     let __field0 = match _serde::de::SeqAccess::next_element::<
                         <ConnectionPool<
                             ::amethystate::DefaultStore,
-                        > as ::amethystate::amethystate>::Data,
+                        > as ::amethystate::AmeState>::Data,
                     >(&mut __seq)? {
                         _serde::__private228::Some(__value) => __value,
                         _serde::__private228::None => {
@@ -805,7 +813,7 @@ const _: () = {
                     let mut __field0: _serde::__private228::Option<
                         <ConnectionPool<
                             ::amethystate::DefaultStore,
-                        > as ::amethystate::amethystate>::Data,
+                        > as ::amethystate::AmeState>::Data,
                     > = _serde::__private228::None;
                     while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                         __Field,
@@ -821,7 +829,7 @@ const _: () = {
                                     _serde::de::MapAccess::next_value::<
                                         <ConnectionPool<
                                             ::amethystate::DefaultStore,
-                                        > as ::amethystate::amethystate>::Data,
+                                        > as ::amethystate::AmeState>::Data,
                                     >(&mut __map)?,
                                 );
                             }
@@ -904,7 +912,7 @@ impl ::amethystate::migration::fields::AmeStateFields for DatabaseState_Data {
             type_hash: 0xDEADBEEF
                 ^ <<ConnectionPool<
                     ::amethystate::DefaultStore,
-                > as ::amethystate::amethystate>::Data as ::amethystate::migration::types::AmeType>::TYPE_HASH,
+                > as ::amethystate::AmeState>::Data as ::amethystate::migration::types::AmeType>::TYPE_HASH,
             type_name: "ConnectionPool",
         },
     ];
@@ -912,11 +920,13 @@ impl ::amethystate::migration::fields::AmeStateFields for DatabaseState_Data {
     const SCHEMA_HASH: u32 = ::amethystate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "sys.database";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(ctx: &mut ::amethystate::MigrationContext) -> ::amethystate::Result<Self> {
+    fn load_struct(
+        ctx: &mut ::amethystate::MigrationContext,
+    ) -> ::amethystate::Result<Self> {
         Ok(Self {
             pool: {
                 let mut sub_ctx = ctx.scoped("pool");
-                <<ConnectionPool as ::amethystate::amethystate>::Data as ::amethystate::migration::fields::AmeStateFields>::load_struct(
+                <<ConnectionPool as ::amethystate::AmeState>::Data as ::amethystate::migration::fields::AmeStateFields>::load_struct(
                     &mut sub_ctx,
                 )?
             },
@@ -933,7 +943,7 @@ impl ::amethystate::migration::fields::AmeStateFields for DatabaseState_Data {
         Ok(())
     }
 }
-impl<S: ::amethystate::Store> ::amethystate::amethystate for DatabaseState<S> {
+impl<S: ::amethystate::Store> ::amethystate::AmeState for DatabaseState<S> {
     type Data = DatabaseState_Data;
 }
 impl<S: ::amethystate::Store> ::amethystate::AmeStateSlice<S> for DatabaseState<S> {
@@ -1015,7 +1025,9 @@ impl<S: ::amethystate::Store> InspectorState<S> {
         Ok(result)
     }
     #[doc(hidden)]
-    pub fn __schema_field_db_pool_view(&self) -> ::amethystate::ReadOnly<ConnectionPool> {
+    pub fn __schema_field_db_pool_view(
+        &self,
+    ) -> ::amethystate::ReadOnly<ConnectionPool> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn db_pool_view(&self) -> ::std::sync::Arc<ConnectionPool<S>> {
@@ -1295,7 +1307,9 @@ impl ::amethystate::migration::fields::AmeStateFields for InspectorState_Data {
     const MIGRATION_DEPS: &'static [&'static str] = &[
         <DatabaseState as ::amethystate::StateScope>::PREFIX,
     ];
-    fn load_struct(ctx: &mut ::amethystate::MigrationContext) -> ::amethystate::Result<Self> {
+    fn load_struct(
+        ctx: &mut ::amethystate::MigrationContext,
+    ) -> ::amethystate::Result<Self> {
         Ok(Self {})
     }
     fn save_struct(
@@ -1305,7 +1319,7 @@ impl ::amethystate::migration::fields::AmeStateFields for InspectorState_Data {
         Ok(())
     }
 }
-impl<S: ::amethystate::Store> ::amethystate::amethystate for InspectorState<S> {
+impl<S: ::amethystate::Store> ::amethystate::AmeState for InspectorState<S> {
     type Data = InspectorState_Data;
 }
 impl<S: ::amethystate::Store> ::amethystate::AmeStateSlice<S> for InspectorState<S> {

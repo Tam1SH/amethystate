@@ -1,10 +1,10 @@
 mod hooks;
-pub use hooks::*;
-use leptos::prelude::*;
 pub use amethystate::*;
+pub use hooks::*;
+use leptos::prelude::{Callable, Children, Get, IntoView, ReadSignal, component, provide_context};
 
-use leptos::callback::Callback;
 use amethystate_arena::{DefaultArena, ReactiveBackend};
+use leptos::callback::Callback;
 
 pub struct LeptosBackend;
 
@@ -47,8 +47,15 @@ pub fn AmeStateProvider(store: DefaultStore, children: Children) -> impl IntoVie
 #[component]
 pub fn AmeStateProvider(
     backend: AmeState::tauri::TauriBackend,
-    init: Box<dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output =
-    std::sync::Arc<std::sync::Mutex<Vec<Box<dyn FnOnce() + Send>>>>>>>>,
+    init: Box<
+        dyn Fn() -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = std::sync::Arc<std::sync::Mutex<Vec<Box<dyn FnOnce() + Send>>>>,
+                    >,
+            >,
+        >,
+    >,
     #[prop(into)] fallback: ViewFnOnce,
     children: ChildrenFn,
 ) -> impl IntoView {
@@ -78,7 +85,6 @@ pub fn AmeStateProvider(
         </Suspense>
     }
 }
-
 
 #[macro_export]
 macro_rules! preload_slices {

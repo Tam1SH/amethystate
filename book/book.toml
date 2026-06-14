@@ -1,0 +1,6 @@
+[book]
+src = "."
+
+[output.html]
+additional-css = ["theme/custom.css"]
+default-theme = "navy"

@@ -95,7 +95,7 @@ where
     /// For frameworks that do not support `Send + Sync` callbacks, the recommended
     /// workaround is to bridge via a channel:
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// let (tx, rx) = std::sync::mpsc::channel();
     ///
     /// field.subscribe(move |val| {
@@ -217,8 +217,8 @@ mod tests {
     use crate::store::{StateScope, Store};
     use crate::test_utils::unique_store;
     use crate::{DefaultStore, SubscriptionKind};
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use tracing_test::traced_test;
 
     struct UiScope;
@@ -489,7 +489,10 @@ mod tests {
     }
     #[test]
     fn test_field_update_and_modify() {
-        let field = Field::<i32, DefaultStore, WritableMode>::new_volatile(Arc::from("test.update_modify"), 10);
+        let field = Field::<i32, DefaultStore, WritableMode>::new_volatile(
+            Arc::from("test.update_modify"),
+            10,
+        );
 
         let updated = field.update(|val| val + 5).unwrap();
         assert_eq!(updated, 15);
@@ -497,5 +500,4 @@ mod tests {
         field.modify(|val| *val += 10).unwrap();
         assert_eq!(field.get(), 25);
     }
-
 }

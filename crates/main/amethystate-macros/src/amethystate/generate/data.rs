@@ -58,7 +58,7 @@ pub(crate) fn data_impl(
             quote! {
                 #crate_name::migration::fields::FieldDescriptor {
                     name: #fname_str,
-                    type_hash: 0xDEADBEEF ^ < <#ty<#crate_name::DefaultStore> as #crate_name::amethystate>::Data as #crate_name::migration::types::AmeType>::TYPE_HASH,
+                    type_hash: 0xDEADBEEF ^ < <#ty<#crate_name::DefaultStore> as #crate_name::AmeState>::Data as #crate_name::migration::types::AmeType>::TYPE_HASH,
                     type_name: #type_name,
                 }
             }
@@ -90,7 +90,7 @@ pub(crate) fn data_impl(
             quote! {
                 #fname: {
                     let mut sub_ctx = ctx.scoped(#key);
-                    < <#ty as #crate_name::amethystate>::Data as #crate_name::migration::fields::AmeStateFields>::load_struct(&mut sub_ctx)?
+                    < <#ty as #crate_name::AmeState>::Data as #crate_name::migration::fields::AmeStateFields>::load_struct(&mut sub_ctx)?
                 }
             }
         } else if let Some((k, v)) = e.get_map_types() {

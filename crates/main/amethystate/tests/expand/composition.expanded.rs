@@ -449,7 +449,9 @@ impl ::amethystate::migration::fields::AmeStateFields for NetworkState_Data {
     const SCHEMA_HASH: u32 = ::amethystate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "net";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(ctx: &mut ::amethystate::MigrationContext) -> ::amethystate::Result<Self> {
+    fn load_struct(
+        ctx: &mut ::amethystate::MigrationContext,
+    ) -> ::amethystate::Result<Self> {
         Ok(Self {
             host: ctx.get::<String>("host")?.unwrap_or_else(|| "127.0.0.1".to_string()),
             port: ctx.get::<u16>("port")?.unwrap_or_else(|| 8080),
@@ -464,7 +466,7 @@ impl ::amethystate::migration::fields::AmeStateFields for NetworkState_Data {
         Ok(())
     }
 }
-impl<S: ::amethystate::Store> ::amethystate::amethystate for NetworkState<S> {
+impl<S: ::amethystate::Store> ::amethystate::AmeState for NetworkState<S> {
     type Data = NetworkState_Data;
 }
 impl<S: ::amethystate::Store> ::amethystate::AmeStateSlice<S> for NetworkState<S> {
@@ -490,7 +492,8 @@ pub struct UiState<S: ::amethystate::Store = ::amethystate::DefaultStore> {
     pub proxy_host: ::amethystate::Field<String, S, ::amethystate::ReadOnlyMode>,
 }
 #[automatically_derived]
-impl<S: ::core::clone::Clone + ::amethystate::Store> ::core::clone::Clone for UiState<S> {
+impl<S: ::core::clone::Clone + ::amethystate::Store> ::core::clone::Clone
+for UiState<S> {
     #[inline]
     fn clone(&self) -> UiState<S> {
         UiState {
@@ -533,8 +536,8 @@ impl<S: ::amethystate::Store> UiState<S> {
                 let path = ::alloc::__export::must_use({
                     ::alloc::fmt::format(
                         format_args!(
-                            "{0}.{1}", < NetworkState as ::amethystate::StateScope >::PREFIX,
-                            "port",
+                            "{0}.{1}", < NetworkState as ::amethystate::StateScope
+                            >::PREFIX, "port",
                         ),
                     )
                 });
@@ -566,8 +569,8 @@ impl<S: ::amethystate::Store> UiState<S> {
                 let path = ::alloc::__export::must_use({
                     ::alloc::fmt::format(
                         format_args!(
-                            "{0}.{1}", < NetworkState as ::amethystate::StateScope >::PREFIX,
-                            "host",
+                            "{0}.{1}", < NetworkState as ::amethystate::StateScope
+                            >::PREFIX, "host",
                         ),
                     )
                 });
@@ -594,10 +597,14 @@ impl<S: ::amethystate::Store> UiState<S> {
     pub fn __schema_field_proxy_host(&self) -> ::amethystate::ReadOnly<String> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
-    pub fn proxy_port(&self) -> ::amethystate::Field<u16, S, ::amethystate::ReadOnlyMode> {
+    pub fn proxy_port(
+        &self,
+    ) -> ::amethystate::Field<u16, S, ::amethystate::ReadOnlyMode> {
         self.proxy_port.clone()
     }
-    pub fn proxy_host(&self) -> ::amethystate::Field<String, S, ::amethystate::ReadOnlyMode> {
+    pub fn proxy_host(
+        &self,
+    ) -> ::amethystate::Field<String, S, ::amethystate::ReadOnlyMode> {
         self.proxy_host.clone()
     }
     pub fn fork(&self) -> Self {
@@ -867,7 +874,9 @@ impl ::core::fmt::Debug for UiState_Data {
 }
 impl UiState_Data {}
 impl ::amethystate::migration::types::AmeType for UiState_Data {
-    const TYPE_HASH: u32 = ::amethystate::migration::types::fnv1a("UiState_Data".as_bytes());
+    const TYPE_HASH: u32 = ::amethystate::migration::types::fnv1a(
+        "UiState_Data".as_bytes(),
+    );
     const TYPE_NAME: &'static str = "UiState_Data";
 }
 impl ::amethystate::migration::fields::AmeStateFields for UiState_Data {
@@ -879,7 +888,9 @@ impl ::amethystate::migration::fields::AmeStateFields for UiState_Data {
         <NetworkState as ::amethystate::StateScope>::PREFIX,
         <NetworkState as ::amethystate::StateScope>::PREFIX,
     ];
-    fn load_struct(ctx: &mut ::amethystate::MigrationContext) -> ::amethystate::Result<Self> {
+    fn load_struct(
+        ctx: &mut ::amethystate::MigrationContext,
+    ) -> ::amethystate::Result<Self> {
         Ok(Self {})
     }
     fn save_struct(
@@ -889,7 +900,7 @@ impl ::amethystate::migration::fields::AmeStateFields for UiState_Data {
         Ok(())
     }
 }
-impl<S: ::amethystate::Store> ::amethystate::amethystate for UiState<S> {
+impl<S: ::amethystate::Store> ::amethystate::AmeState for UiState<S> {
     type Data = UiState_Data;
 }
 impl<S: ::amethystate::Store> ::amethystate::AmeStateSlice<S> for UiState<S> {

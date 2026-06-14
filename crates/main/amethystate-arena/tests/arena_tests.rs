@@ -1,8 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 use amethystate::test_utils::unique_store;
 use amethystate::{
-    amethystate, DefaultStore, Field, IntoPipeline, MapChange, ReactiveMap, Result as RpResult,
-    Store, WritableMode,
+    DefaultStore, Field, IntoPipeline, MapChange, ReactiveMap, Result as RpResult, Store,
+    WritableMode, amethystate,
 };
 use amethystate_arena::Arena;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -146,7 +146,7 @@ fn test_arena_cleanup_drops_fields_and_unsubscribes() {
         &store,
         Arc::from("test.field"),
         "initial_value".to_string(),
-        uuid::Uuid::new_v4()
+        uuid::Uuid::new_v4(),
     )
     .expect("Failed to initialize field");
 

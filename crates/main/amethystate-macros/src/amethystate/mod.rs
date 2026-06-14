@@ -1,11 +1,11 @@
 mod generate;
 
+use amethystate_macros_core::{MacroArgs, StoreFieldEntry};
 use darling::{FromField, FromMeta, ast::NestedMeta};
 use generate::generate_code;
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::Span;
 use quote::quote;
-use amethystate_macros_core::{MacroArgs, StoreFieldEntry};
 use syn::__private::TokenStream2;
 use syn::{Data, DataStruct, DeriveInput, Fields, parse_macro_input};
 
@@ -35,10 +35,12 @@ pub fn amethystate_impl(
             ..
         }) => &f.named,
         _ => {
-            return darling::Error::custom("amethystate can only be used on structs with named fields")
-                .with_span(struct_name)
-                .write_errors()
-                .into();
+            return darling::Error::custom(
+                "amethystate can only be used on structs with named fields",
+            )
+            .with_span(struct_name)
+            .write_errors()
+            .into();
         }
     };
 

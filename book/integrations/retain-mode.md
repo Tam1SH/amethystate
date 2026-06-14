@@ -1,6 +1,6 @@
 # egui / iced / ratatui
 
-These frameworks own the update loop — either redrawing every frame or routing all changes through a message cycle. There is no natural place for subscriptions, so `amethystate` is used in persistent-only mode: load state on startup, read and mutate fields directly, flush when needed.
+These frameworks have an explicit event loop — either redrawing every frame or routing all changes through a message cycle. There is no natural place for subscriptions, so `amethystate` is used in persistent-only mode: load state on startup, read and mutate fields directly, flush when needed.
 
 ## Pattern
 

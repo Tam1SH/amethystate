@@ -14,13 +14,13 @@ use crate::store::{
 use crate::{MigrationReport, Result};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::RwLock;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tempfile::NamedTempFile;
 use tracing::{info, warn};
 
@@ -163,7 +163,6 @@ impl<D: TextDocument> PartialEq for TextStore<D> {
     }
 }
 impl<D: TextDocument> Eq for TextStore<D> {}
-
 
 impl<D: TextDocument> Debug for TextStore<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -1,0 +1,123 @@
+---
+import Card from '../components/Card.astro';
+import Hero from '../components/sections/Hero.astro';
+import WhySection from '../components/sections/WhySection.astro';
+import HowItWorksSection from '../components/sections/HowItWorksSection.astro';
+import '../styles/global.css';
+import IntegrationsSection, { initTabs } from '../components/sections/IntegrationsSection.astro';
+import MigrationsSection from '../components/sections/MigrationsSection.astro';
+---
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="generator" content={Astro.generator} />
+  <title>amethystate</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
+</head>
+<body class="bg-[#0e0b1a] text-[#e8e4f4]">
+
+  <!-- Hero -->
+  <Hero />
+
+  <hr class="border-[rgba(255,255,255,0.06)]" />
+
+  <!-- Why -->
+  <WhySection />
+
+  <hr class="border-[rgba(255,255,255,0.06)]" />
+
+  <!-- How it works -->
+  <HowItWorksSection />
+
+  <hr class="border-[rgba(255,255,255,0.06)]" />
+
+  <!-- Integrations -->
+  <IntegrationsSection />
+  <hr class="border-[rgba(255,255,255,0.06)]" />
+
+  <!-- Migrations -->
+  <MigrationsSection />
+
+  <hr class="border-[rgba(255,255,255,0.06)]" />
+  <footer class="max-w-[1100px] mx-auto px-8 py-8 flex items-center justify-between">
+    <span class="text-sm text-[#4a4560]">amethystate · MIT</span>
+    <div class="flex gap-5">
+      <a href="https://github.com/Tam1SH/amethystate" class="text-sm text-[#6e6890] flex items-center gap-1.5"><i class="ti ti-brand-github"></i> GitHub</a>
+      <a href="/docs" class="text-sm text-[#6e6890]">Docs</a>
+    </div>
+  </footer>
+
+</body>
+</html>
+
+<script>
+function pointOnRect(t,w,h,r){
+  const top=w-2*r,right=h-2*r,bottom=w-2*r,left=h-2*r;
+  const arc=0.5*Math.PI*r,perim=2*(top+right)+4*arc;
+  let d=((t%1)+1)%1*perim;
+  if(d<top)return[r+d,0];d-=top;
+  if(d<arc){const a=-Math.PI/2+d/r;return[w-r+Math.cos(a)*r,r+Math.sin(a)*r];}d-=arc;
+  if(d<right)return[w,r+d];d-=right;
+  if(d<arc){const a=d/r;return[w-r+Math.cos(a)*r,h-r+Math.sin(a)*r];}d-=arc;
+  if(d<bottom)return[w-r-d,h];d-=bottom;
+  if(d<arc){const a=Math.PI/2+d/r;return[r+Math.cos(a)*r,h-r+Math.sin(a)*r];}d-=arc;
+  if(d<left)return[0,h-r-d];d-=left;
+  const a=Math.PI+d/r;return[r+Math.cos(a)*r,r+Math.sin(a)*r];
+}
+
+function initCards(){
+  const cards=document.querySelectorAll('.card');
+  const total=cards.length;
+  const ns='http://www.w3.org/2000/svg';
+
+  function measureCard(card){
+    const svg=card.querySelector('svg');
+    const rect=card.querySelector('rect');
+    const w=card.offsetWidth,h=card.offsetHeight;
+    svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+    rect.setAttribute('width',w-1);
+    rect.setAttribute('height',h-1);
+    card._w=w;
+    card._h=h;
+  }
+
+  cards.forEach((card,i)=>{
+    const svg=card.querySelector('svg');
+    const rect=card.querySelector('rect');
+    const defs=document.createElementNS(ns,'defs');
+    const grad=document.createElementNS(ns,'linearGradient');
+    grad.id=`sg${i}`;grad.setAttribute('gradientUnits','userSpaceOnUse');
+    [['0','rgba(255,255,255,0)'],['0.4','rgba(210,180,255,0.5)'],['0.5','rgba(240,220,255,0.95)'],['0.6','rgba(210,180,255,0.5)'],['1','rgba(255,255,255,0)']].forEach(([off,col])=>{
+      const s=document.createElementNS(ns,'stop');s.setAttribute('offset',off);s.setAttribute('stop-color',col);grad.appendChild(s);
+    });
+    defs.appendChild(grad);svg.appendChild(defs);
+    rect.setAttribute('stroke',`url(#sg${i})`);rect.setAttribute('stroke-width','1.5');
+    card._off=i/total;card._gid=`sg${i}`;
+    measureCard(card);
+  });
+
+  const ro=new ResizeObserver(()=>{
+    cards.forEach(card=>measureCard(card));
+  });
+  cards.forEach(card=>ro.observe(card));
+
+  function tick(ts){
+    const t=ts*0.00005;
+    cards.forEach(card=>{
+      const{_w:w,_h:h,_off:off,_gid:gid}=card;
+      const r=11.5,perim=2*(w-2*r)+2*(h-2*r)+2*Math.PI*r,sf=120/perim,pos=t+off;
+      const back=pointOnRect(pos-sf/2,w,h,r),fwd=pointOnRect(pos+sf/2,w,h,r);
+      const g=document.getElementById(gid);if(!g)return;
+      g.setAttribute('x1',back[0]);g.setAttribute('y1',back[1]);
+      g.setAttribute('x2',fwd[0]);g.setAttribute('y2',fwd[1]);
+    });
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+
+window.addEventListener('load',()=>{initCards();});
+</script>

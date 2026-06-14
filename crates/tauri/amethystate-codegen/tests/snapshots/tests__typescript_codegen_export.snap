@@ -1,11 +1,11 @@
 ---
-source: crates/rpstate-codegen/tests/tests.rs
+source: crates/tauri/amethystate-codegen/tests/tests.rs
 expression: ts_content
 ---
 /* eslint-disable */
 /* tslint:disable */
 // @ts-nocheck
-// src/bindings/rpstate.ts DO NOT EDIT
+// src/bindings/amethystate.ts DO NOT EDIT
 import {invoke} from "@tauri-apps/api/core";
 import {listen} from "@tauri-apps/api/event";
 
@@ -69,7 +69,7 @@ export class Field<T> {
      * @benefit Transaction-safe. Guarantees that the retrieved value is persisted on disk.
      */
     async get(): Promise<T> {
-        return invoke("plugin:rpstate|rpstate_get", { key: this.key });
+        return invoke("plugin:amethystate|amethystate_get", { key: this.key });
     }
 
     /**
@@ -81,7 +81,7 @@ export class Field<T> {
      * call and await the `save()` method on the parent slice class.
      */
     async set(value: T): Promise<void> {
-        return invoke("plugin:rpstate|rpstate_set", { key: this.key, value });
+        return invoke("plugin:amethystate|amethystate_set", { key: this.key, value });
     }
 
     destroy() {
@@ -91,17 +91,17 @@ export class Field<T> {
     }
 
     subscribe(cb: (value: T) => void): () => void {
-        invoke("plugin:rpstate|rpstate_subscribe", { key: this.key });
+        invoke("plugin:amethystate|amethystate_subscribe", { key: this.key });
         let unlisten: (() => void) | null = null;
         let cancelled = false;
 
-        const channel = `rpstate://${this.key.replace(/\./g, ":")}`;
+        const channel = `amethystate://${this.key.replace(/\./g, ":")}`;
 
         listen<T>(channel, (e) => cb(e.payload))
             .then((fn) => {
                 if (cancelled) {
                     fn();
-                    invoke("plugin:rpstate|rpstate_unsubscribe", { key: this.key });
+                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
                 } else {
                     unlisten = fn;
                 }
@@ -111,7 +111,7 @@ export class Field<T> {
             cancelled = true;
             if (unlisten) {
                 unlisten();
-                invoke("plugin:rpstate|rpstate_unsubscribe", { key: this.key });
+                invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
             }
         };
     }
@@ -155,7 +155,7 @@ export class ReadonlyField<T> {
      * @benefit Transaction-safe. Guarantees that the retrieved value is persisted on disk.
      */
     async get(): Promise<T> {
-        return invoke("plugin:rpstate|rpstate_get", { key: this.key });
+        return invoke("plugin:amethystate|amethystate_get", { key: this.key });
     }
 
     destroy() {
@@ -165,17 +165,17 @@ export class ReadonlyField<T> {
     }
 
     subscribe(cb: (value: T) => void): () => void {
-        invoke("plugin:rpstate|rpstate_subscribe", { key: this.key });
+        invoke("plugin:amethystate|amethystate_subscribe", { key: this.key });
         let unlisten: (() => void) | null = null;
         let cancelled = false;
 
-        const channel = `rpstate://${this.key.replace(/\./g, ":")}`;
+        const channel = `amethystate://${this.key.replace(/\./g, ":")}`;
 
         listen<T>(channel, (e) => cb(e.payload))
             .then((fn) => {
                 if (cancelled) {
                     fn();
-                    invoke("plugin:rpstate|rpstate_unsubscribe", { key: this.key });
+                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
                 } else {
                     unlisten = fn;
                 }
@@ -185,7 +185,7 @@ export class ReadonlyField<T> {
             cancelled = true;
             if (unlisten) {
                 unlisten();
-                invoke("plugin:rpstate|rpstate_unsubscribe", { key: this.key });
+                invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
             }
         };
     }
@@ -233,7 +233,7 @@ export class ReactiveMapField<K extends string, V> {
      * @benefit Transaction-safe. Guarantees data fresh from the persistent store.
      */
     async get(key: K): Promise<V | null> {
-        return invoke("plugin:rpstate|rpstate_get", { key: `${this.prefix}.${key}` });
+        return invoke("plugin:amethystate|amethystate_get", { key: `${this.prefix}.${key}` });
     }
 
     /**
@@ -246,7 +246,7 @@ export class ReactiveMapField<K extends string, V> {
      * call and await the `save()` method on the parent slice class.
      */
     async set(key: K, value: V): Promise<void> {
-        return invoke("plugin:rpstate|rpstate_set", { key: `${this.prefix}.${key}`, value });
+        return invoke("plugin:amethystate|amethystate_set", { key: `${this.prefix}.${key}`, value });
     }
 
     /**
@@ -295,17 +295,17 @@ export class ReactiveMapField<K extends string, V> {
 
     subscribeKey(key: K, cb: (value: V) => void): () => void {
         const fullKey = `${this.prefix}.${key}`;
-        invoke("plugin:rpstate|rpstate_subscribe", { key: fullKey });
+        invoke("plugin:amethystate|amethystate_subscribe", { key: fullKey });
         let unlisten: (() => void) | null = null;
         let cancelled = false;
 
-        const channel = `rpstate://${fullKey.replace(/\./g, ":")}`;
+        const channel = `amethystate://${fullKey.replace(/\./g, ":")}`;
 
         listen<V>(channel, (e) => cb(e.payload))
             .then((fn) => {
                 if (cancelled) {
                     fn();
-                    invoke("plugin:rpstate|rpstate_unsubscribe", { key: fullKey });
+                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
                 } else {
                     unlisten = fn;
                 }
@@ -315,24 +315,24 @@ export class ReactiveMapField<K extends string, V> {
             cancelled = true;
             if (unlisten) {
                 unlisten();
-                invoke("plugin:rpstate|rpstate_unsubscribe", { key: fullKey });
+                invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
             }
         };
     }
 
     subscribeAny(cb: (change: MapChange<K, V>) => void): () => void {
         const fullKey = this.prefix;
-        invoke("plugin:rpstate|rpstate_subscribe", { key: fullKey });
+        invoke("plugin:amethystate|amethystate_subscribe", { key: fullKey });
         let unlisten: (() => void) | null = null;
         let cancelled = false;
 
-        const channel = `rpstate://${fullKey.replace(/\./g, ":")}`;
+        const channel = `amethystate://${fullKey.replace(/\./g, ":")}`;
 
         listen<MapChange<K, V>>(channel, (e) => cb(e.payload))
             .then((fn) => {
                 if (cancelled) {
                     fn();
-                    invoke("plugin:rpstate|rpstate_unsubscribe", { key: fullKey });
+                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
                 } else {
                     unlisten = fn;
                 }
@@ -342,7 +342,7 @@ export class ReactiveMapField<K extends string, V> {
             cancelled = true;
             if (unlisten) {
                 unlisten();
-                invoke("plugin:rpstate|rpstate_unsubscribe", { key: fullKey });
+                invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
             }
         };
     }
@@ -380,7 +380,7 @@ export class TestRoot {
     }
 
     static async load(): Promise<TestRoot> {
-        const initialValues = await invoke<Partial<TestRootSchema>>("plugin:rpstate|rpstate_get_prefix", { prefix: "test_root" });
+        const initialValues = await invoke<Partial<TestRootSchema>>("plugin:amethystate|amethystate_get_prefix", { prefix: "test_root" });
         return new TestRoot(initialValues);
     }
 
@@ -389,6 +389,6 @@ export class TestRoot {
      * Resolves only when the persistent store has successfully flushed to disk.
      */
     async save(): Promise<void> {
-        return invoke("plugin:rpstate|rpstate_flush", { prefix: "test_root" });
+        return invoke("plugin:amethystate|amethystate_flush", { prefix: "test_root" });
     }
 }

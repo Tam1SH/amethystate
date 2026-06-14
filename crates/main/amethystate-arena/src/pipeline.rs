@@ -1,6 +1,6 @@
 use crate::{DefaultArena, FieldHandle};
 use amethystate::{AccessMode, Pipeline, Signal, SignalSubscription};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::cell::RefCell;
 use std::sync::Arc;
 use uuid::Uuid;

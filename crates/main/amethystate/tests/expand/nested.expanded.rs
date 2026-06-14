@@ -398,7 +398,9 @@ impl ::amethystate::migration::fields::AmeStateFields for DatabaseConfig_Data {
     const SCHEMA_HASH: u32 = ::amethystate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(ctx: &mut ::amethystate::MigrationContext) -> ::amethystate::Result<Self> {
+    fn load_struct(
+        ctx: &mut ::amethystate::MigrationContext,
+    ) -> ::amethystate::Result<Self> {
         Ok(Self {
             host: ctx.get::<String>("host")?.unwrap_or_else(|| "localhost".to_string()),
         })
@@ -411,7 +413,7 @@ impl ::amethystate::migration::fields::AmeStateFields for DatabaseConfig_Data {
         Ok(())
     }
 }
-impl<S: ::amethystate::Store> ::amethystate::amethystate for DatabaseConfig<S> {
+impl<S: ::amethystate::Store> ::amethystate::AmeState for DatabaseConfig<S> {
     type Data = DatabaseConfig_Data;
 }
 pub struct SystemSettings<S: ::amethystate::Store = ::amethystate::DefaultStore> {
@@ -453,7 +455,8 @@ impl<S: ::amethystate::Store> SystemSettings<S> {
                     &::alloc::__export::must_use({
                         ::alloc::fmt::format(
                             format_args!(
-                                "{0}.{1}", < Self as ::amethystate::StateScope >::PREFIX, "db",
+                                "{0}.{1}", < Self as ::amethystate::StateScope >::PREFIX,
+                                "db",
                             ),
                         )
                     }),
@@ -528,7 +531,9 @@ impl<S: ::amethystate::Store> ::amethystate::AmeStateNode<S> for SystemSettings<
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct SystemSettings_Data {
-    pub db: <DatabaseConfig<::amethystate::DefaultStore> as ::amethystate::amethystate>::Data,
+    pub db: <DatabaseConfig<
+        ::amethystate::DefaultStore,
+    > as ::amethystate::AmeState>::Data,
 }
 #[doc(hidden)]
 #[allow(
@@ -679,7 +684,7 @@ const _: () = {
                     let __field0 = match _serde::de::SeqAccess::next_element::<
                         <DatabaseConfig<
                             ::amethystate::DefaultStore,
-                        > as ::amethystate::amethystate>::Data,
+                        > as ::amethystate::AmeState>::Data,
                     >(&mut __seq)? {
                         _serde::__private228::Some(__value) => __value,
                         _serde::__private228::None => {
@@ -706,7 +711,7 @@ const _: () = {
                     let mut __field0: _serde::__private228::Option<
                         <DatabaseConfig<
                             ::amethystate::DefaultStore,
-                        > as ::amethystate::amethystate>::Data,
+                        > as ::amethystate::AmeState>::Data,
                     > = _serde::__private228::None;
                     while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                         __Field,
@@ -722,7 +727,7 @@ const _: () = {
                                     _serde::de::MapAccess::next_value::<
                                         <DatabaseConfig<
                                             ::amethystate::DefaultStore,
-                                        > as ::amethystate::amethystate>::Data,
+                                        > as ::amethystate::AmeState>::Data,
                                     >(&mut __map)?,
                                 );
                             }
@@ -805,7 +810,7 @@ impl ::amethystate::migration::fields::AmeStateFields for SystemSettings_Data {
             type_hash: 0xDEADBEEF
                 ^ <<DatabaseConfig<
                     ::amethystate::DefaultStore,
-                > as ::amethystate::amethystate>::Data as ::amethystate::migration::types::AmeType>::TYPE_HASH,
+                > as ::amethystate::AmeState>::Data as ::amethystate::migration::types::AmeType>::TYPE_HASH,
             type_name: "DatabaseConfig",
         },
     ];
@@ -813,11 +818,13 @@ impl ::amethystate::migration::fields::AmeStateFields for SystemSettings_Data {
     const SCHEMA_HASH: u32 = ::amethystate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "sys";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(ctx: &mut ::amethystate::MigrationContext) -> ::amethystate::Result<Self> {
+    fn load_struct(
+        ctx: &mut ::amethystate::MigrationContext,
+    ) -> ::amethystate::Result<Self> {
         Ok(Self {
             db: {
                 let mut sub_ctx = ctx.scoped("db");
-                <<DatabaseConfig as ::amethystate::amethystate>::Data as ::amethystate::migration::fields::AmeStateFields>::load_struct(
+                <<DatabaseConfig as ::amethystate::AmeState>::Data as ::amethystate::migration::fields::AmeStateFields>::load_struct(
                     &mut sub_ctx,
                 )?
             },
@@ -834,7 +841,7 @@ impl ::amethystate::migration::fields::AmeStateFields for SystemSettings_Data {
         Ok(())
     }
 }
-impl<S: ::amethystate::Store> ::amethystate::amethystate for SystemSettings<S> {
+impl<S: ::amethystate::Store> ::amethystate::AmeState for SystemSettings<S> {
     type Data = SystemSettings_Data;
 }
 impl<S: ::amethystate::Store> ::amethystate::AmeStateSlice<S> for SystemSettings<S> {

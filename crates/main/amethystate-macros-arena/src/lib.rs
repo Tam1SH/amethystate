@@ -1,9 +1,9 @@
+use amethystate_macros_core::{StoreFieldEntry, get_type_ident_str};
 use darling::FromField;
 use proc_macro::TokenStream;
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
-use amethystate_macros_core::{StoreFieldEntry, get_type_ident_str};
 use syn::{Data, DataStruct, DeriveInput, Fields, parse_macro_input};
 
 fn amethystate_arena_crate_path() -> TokenStream2 {

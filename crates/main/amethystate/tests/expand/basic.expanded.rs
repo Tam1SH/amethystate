@@ -5,7 +5,8 @@ pub struct AppConfig<S: ::amethystate::Store = ::amethystate::DefaultStore> {
     pub session_id: ::amethystate::Field<String, S, ::amethystate::WritableMode>,
 }
 #[automatically_derived]
-impl<S: ::core::clone::Clone + ::amethystate::Store> ::core::clone::Clone for AppConfig<S> {
+impl<S: ::core::clone::Clone + ::amethystate::Store> ::core::clone::Clone
+for AppConfig<S> {
     #[inline]
     fn clone(&self) -> AppConfig<S> {
         AppConfig {
@@ -65,7 +66,9 @@ impl<S: ::amethystate::Store> AppConfig<S> {
     pub fn port(&self) -> ::amethystate::Field<u16, S, ::amethystate::WritableMode> {
         self.port.clone()
     }
-    pub fn session_id(&self) -> ::amethystate::Field<String, S, ::amethystate::WritableMode> {
+    pub fn session_id(
+        &self,
+    ) -> ::amethystate::Field<String, S, ::amethystate::WritableMode> {
         self.session_id.clone()
     }
     pub fn fork(&self) -> Self {
@@ -402,7 +405,9 @@ impl ::amethystate::migration::fields::AmeStateFields for AppConfig_Data {
     const SCHEMA_HASH: u32 = ::amethystate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "app";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(ctx: &mut ::amethystate::MigrationContext) -> ::amethystate::Result<Self> {
+    fn load_struct(
+        ctx: &mut ::amethystate::MigrationContext,
+    ) -> ::amethystate::Result<Self> {
         Ok(Self {
             port: ctx.get::<u16>("port")?.unwrap_or_else(|| 8080),
         })
@@ -415,7 +420,7 @@ impl ::amethystate::migration::fields::AmeStateFields for AppConfig_Data {
         Ok(())
     }
 }
-impl<S: ::amethystate::Store> ::amethystate::amethystate for AppConfig<S> {
+impl<S: ::amethystate::Store> ::amethystate::AmeState for AppConfig<S> {
     type Data = AppConfig_Data;
 }
 impl<S: ::amethystate::Store> ::amethystate::AmeStateSlice<S> for AppConfig<S> {

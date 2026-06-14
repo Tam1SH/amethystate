@@ -8,13 +8,13 @@ pub(crate) mod sync_backend;
 pub mod util;
 pub use primitives_factory::*;
 
-use crate::migration::set::MigrationSet;
 use crate::migration::AppliedStep;
+use crate::migration::set::MigrationSet;
 use crate::store::meta::{PrefixMeta, SchemaSnapshot};
 use crate::{MigrationReport, Result};
 use amethystate_core::ReactiveScope;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -45,7 +45,7 @@ pub enum SubscriptionKind {
 
 pub trait Store: Eq + Clone + Sized + Send + Sync + 'static {
     fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>>;
-    
+
     fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()>;
     fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
         self.set(&path, value)
@@ -62,17 +62,17 @@ pub trait Store: Eq + Clone + Sized + Send + Sync + 'static {
         value: &T,
         source: Option<Uuid>,
     ) -> Result<()>;
-    
+
     fn delete_with_source(&self, path: &str, source: Option<Uuid>) -> Result<()>;
     fn delete(&self, path: &str) -> Result<()>;
-    
+
     fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>>;
 
     fn save_now(&self) -> Result<()>;
 
     fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId;
     fn unsubscribe(&self, id: SubscriptionId);
-    
+
     fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T>;
 
     /// Flushes pending in-memory modifications under the specified prefix to disk.
@@ -102,7 +102,7 @@ pub trait AmeStateSlice<S: Store>: Sized {
     fn subscribe_all<F>(&self, callback: F) -> ReactiveScope
     where
         F: Fn() + Send + Sync + 'static;
-    
+
     fn subscribe_all_external<F>(&self, callback: F) -> ReactiveScope
     where
         F: Fn() + Send + Sync + 'static;

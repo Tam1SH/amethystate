@@ -5,8 +5,8 @@ use crate::store::{
 use error::RedbStoreError;
 use migration::RedbMigrationBackend;
 use redb::{Database, ReadableDatabase};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use tables::{TABLE_DATA, TABLE_DIFF_LOG, TABLE_META, TABLE_MIGRATION_LOG};
 
@@ -20,10 +20,10 @@ use crate::store::backend::redb::tables::TABLE_SCHEMA_SNAPSHOT;
 use crate::store::backend::utils;
 use crate::store::util::debouncer::Debouncer;
 use parking_lot::{Mutex, RwLock};
-use rmp_serde::config::BytesMode;
 use rmp_serde::Serializer;
-use std::sync::atomic::{AtomicU64, Ordering};
+use rmp_serde::config::BytesMode;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -112,7 +112,6 @@ impl PartialEq for RedbStore {
     }
 }
 impl Eq for RedbStore {}
-
 
 impl RedbStore {
     pub fn open(

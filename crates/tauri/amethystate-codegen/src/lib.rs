@@ -1,8 +1,8 @@
 mod backends;
 pub use backends::*;
 
-use heck::ToLowerCamelCase;
 use amethystate_core::{FieldExportMeta, FieldKind, SchemaExportEntry};
+use heck::ToLowerCamelCase;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -796,7 +796,7 @@ macro_rules! amethystate_codegen {
             }
         }
     };
-    
+
     (@exec $rs_out:expr, leptos, $ts_opt:expr) => {
         {
             let reg = $crate::CodegenRegistry::new();

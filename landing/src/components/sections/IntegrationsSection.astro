@@ -1,0 +1,135 @@
+---
+import { Code } from 'astro:components';
+
+const snippets = {
+    egui: `// persistent-only mode\n#[amethystate(prefix = "app", mode = "persistent")]\npub struct AppState { pub theme: String }\n\nlet mut state = AppState::load()?;\nstate.theme = "dark".to_string();\nstate.save_lazy()?;`,
+    iced: `#[amethystate(prefix = "app", mode = "persistent")]\npub struct AppState { pub counter: i32 }\n\nfn update(state: &mut AppState, msg: Message) {\n    state.counter += 1;\n    state.save_lazy().ok();\n}`,
+    dioxus: `#[component]\nfn Counter(state: Handle<AppSettings>) -> Element {\n    let (count, set_count) = use_field(state.counter);\n    rsx! {\n        button { onclick: move |_| set_count(count() + 1), "count: {count}" }\n    }\n}`,
+    leptos: `#[component]\nfn Settings(state: Handle<AppSettings>) -> impl IntoView {\n    let (username, set_username) = use_field(state.username);\n    view! {\n        <input prop:value=username on:input=move |e| set_username.set(event_target_value(&e)) />\n    }\n}`,
+    tauri: `import { AppSettings } from "./bindings/amethystate";\n\nconst settings = await AppSettings.load();\nconsole.log(settings.username.value);\nsettings.username.value = "Alice";\nawait settings.save();`,
+    gpui: `impl CounterView {\n    fn new(cx: &mut Context<Self>) -> Self {\n        Self { state: cx.new_amethystate(CounterState::new).unwrap() }\n    }\n}\nfn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {\n    div().child(format!("Count: {}", self.state.read(cx).count().get()))\n}`,
+};
+
+const langs: Record<string, string> = {
+    egui: 'rust',
+    iced: 'rust',
+    dioxus: 'rust',
+    leptos: 'rust',
+    tauri: 'ts',
+    gpui: 'rust',
+};
+---
+
+<script>
+    export function initTabs() {
+        const tabs = document.querySelectorAll('.int-tab');
+
+        function setFw(fw: string) {
+            tabs.forEach(t => {
+                t.classList.toggle('active', (t as HTMLElement).dataset.fw === fw);
+            });
+            document.querySelectorAll('.int-snippet').forEach(el => {
+                (el as HTMLElement).hidden = (el as HTMLElement).dataset.fw !== fw;
+            });
+        }
+
+        document.getElementById('int-tabs')!.addEventListener('click', e => {
+            const tab = (e.target as Element).closest('.int-tab') as HTMLElement | null;
+            if (tab) setFw(tab.dataset.fw!);
+        });
+
+        setFw('egui');
+    }
+
+    window.addEventListener('load', () => { initTabs(); });
+</script>
+
+<section class="max-w-[1100px] mx-auto px-8 py-32">
+    <p class="text-xl tracking-[0.1em] text-[#7A4699] uppercase mb-4">Integrations</p>
+    <h2 class="text-4xl font-medium text-[#f0ecfc] mb-4 tracking-tight">Works with your framework</h2>
+    <p class="text-base text-[#9990b8] max-w-lg leading-relaxed mb-8">
+        Pick your framework — the integration handles the bridge between amethystate fields and framework-native signals or update loops.
+    </p>
+    <div class="flex gap-2 flex-wrap mb-6" id="int-tabs">
+        <button class="int-tab active" data-fw="egui">
+            <span class="int-tab-icon"><img src="./egui-logo.svg" /></span>
+            <span>egui</span>
+        </button>
+        <button class="int-tab" data-fw="iced">
+            <span class="int-tab-icon"><img src="./iced-logo.svg" /></span>
+            <span>iced</span>
+        </button>
+        <button class="int-tab" data-fw="dioxus">
+            <span class="int-tab-icon"><img src="./dioxus-logo.png" /></span>
+            <span>dioxus</span>
+        </button>
+        <button class="int-tab" data-fw="leptos">
+            <span class="int-tab-icon"><img src="./leptos-logo.svg" /></span>
+            <span>leptos</span>
+        </button>
+        <button class="int-tab" data-fw="tauri">
+            <span class="int-tab-icon"><img src="./tauri-logo.svg" /></span>
+            <span>tauri</span>
+        </button>
+        <button class="int-tab" data-fw="gpui">
+            <span class="int-tab-icon"><img src="./zed-logo.svg" /></span>
+            <span>gpui</span>
+        </button>
+    </div>
+
+    <div class="int-code-block">
+        {Object.entries(snippets).map(([fw, code]) => (
+                <div class="int-snippet" data-fw={fw} hidden>
+                    <Code code={code} lang={langs[fw]} theme="css-variables" />
+                </div>
+        ))}
+    </div>
+</section>
+
+<style>
+    .int-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 100px;
+        padding: 6px 16px;
+        font-size: 13px;
+        color: #9990b8;
+        background: transparent;
+        cursor: pointer;
+        font-family: inherit;
+        line-height: 1;
+    }
+    .int-tab span:last-child {
+        position: relative;
+        top: -2px;
+    }
+    .int-tab-icon {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        flex-shrink: 0;
+    }
+    .int-tab.active {
+        background: rgba(124,77,232,0.1);
+        border-color: rgba(124,77,232,0.5);
+        color: #b766e7;
+    }
+
+    .int-code-block {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        overflow: auto;
+    }
+
+    .int-code-block :global(pre) {
+        background: transparent !important;
+        margin: 0;
+        padding: 0;
+        font-size: 0.75rem;
+        line-height: 1.6;
+    }
+</style>

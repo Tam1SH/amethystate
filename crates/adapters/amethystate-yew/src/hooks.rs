@@ -1,9 +1,9 @@
 use crate::MapSignal;
-use futures::channel::mpsc;
+use amethystate::MapChange;
 use amethystate::client::{AsyncSubscriptionBackend, Field, ReactiveMap};
 use amethystate::core::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
 use amethystate::reactive::FieldValue;
-use amethystate::MapChange;
+use futures::channel::mpsc;
 use serde::Deserialize;
 use std::collections::HashMap;
 use wasm_bindgen_futures::spawn_local;
@@ -201,8 +201,9 @@ where
 
             let sub = map_clone.subscribe_key_external(key, move |change| {
                 let val = match change {
-                    MapChange::Insert { value: v, .. }
-                    | MapChange::Update { new_value: v, .. } => Some(v.clone()),
+                    MapChange::Insert { value: v, .. } | MapChange::Update { new_value: v, .. } => {
+                        Some(v.clone())
+                    }
                     MapChange::Remove { .. } | MapChange::Clear { .. } => None,
                 };
                 let _ = tx.unbounded_send(val);

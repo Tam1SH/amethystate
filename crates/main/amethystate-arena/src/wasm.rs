@@ -1,6 +1,6 @@
 use crate::primitives::*;
-use parking_lot::RwLock;
 use amethystate::{AccessMode, MapChange, Pipeline, SignalSubscription, WritableMode};
+use parking_lot::RwLock;
 
 use amethystate::client::{AsyncSubscriptionBackend, Field, ReactiveMap};
 use amethystate::reactive::FieldValue;
@@ -42,7 +42,10 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
     {
         let storage = self.storage.read();
         let item = storage.get(key).unwrap_or_else(|| {
-            panic!("amethystate-arena: Attempted to access a dropped {}", type_name)
+            panic!(
+                "amethystate-arena: Attempted to access a dropped {}",
+                type_name
+            )
         });
         let target = item
             .downcast_ref::<Item>()
@@ -101,10 +104,11 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
         M: AccessMode,
         F: Fn(T) + Send + Sync + 'static,
     {
-        self.with_item::<Field<T, B>, _, _>(handle.key, "Field", |field| field.subscribe_external(callback))
+        self.with_item::<Field<T, B>, _, _>(handle.key, "Field", |field| {
+            field.subscribe_external(callback)
+        })
     }
 
-    
     pub fn subscribe_field<T, M, F>(
         &self,
         handle: FieldHandle<T, M>,
@@ -253,7 +257,7 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
             map.subscribe_key_external(key, callback)
         })
     }
-    
+
     pub fn subscribe_map_key<K, V, F, M>(
         &self,
         handle: MapHandle<K, V, M>,

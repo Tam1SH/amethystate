@@ -3,8 +3,8 @@ use crate::migration::fields::AmeStateFields;
 use crate::migration::migrate_from::MigrateFrom;
 use crate::store::{CodecFormat, MigrationBackendAdapter};
 use crate::{MigrationError, Result};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::str::FromStr;
@@ -220,7 +220,10 @@ pub fn encode<T: Serialize>(storage: &dyn MigrationBackendAdapter, value: &T) ->
     }
 }
 
-pub fn decode<T: DeserializeOwned>(storage: &dyn MigrationBackendAdapter, bytes: &[u8]) -> Result<T> {
+pub fn decode<T: DeserializeOwned>(
+    storage: &dyn MigrationBackendAdapter,
+    bytes: &[u8],
+) -> Result<T> {
     match storage.format() {
         #[cfg(feature = "redb")]
         CodecFormat::MessagePack => rmp_serde::from_slice(bytes)

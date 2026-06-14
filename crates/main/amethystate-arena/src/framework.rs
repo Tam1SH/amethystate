@@ -45,8 +45,10 @@ pub trait AmeStateFramework<B: ReactiveBackend>:
 }
 
 #[cfg(target_arch = "wasm32")]
-impl<B: ReactiveBackend, T: amethystate::client::AmeStateSliceAsync<B::Storage> + AmeStateFrameworkNested>
-    AmeStateFramework<B> for T
+impl<
+    B: ReactiveBackend,
+    T: amethystate::client::AmeStateSliceAsync<B::Storage> + AmeStateFrameworkNested,
+> AmeStateFramework<B> for T
 {
 }
 

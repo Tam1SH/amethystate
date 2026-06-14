@@ -4,7 +4,7 @@
 
 Use the `#[amethystate]` macro to declare a state struct. The `prefix` sets the namespace under which fields are stored.
 
-```rust
+```rust,ignore
 use amethystate::amethystate;
 
 #[amethystate(prefix = "network")]
@@ -23,7 +23,7 @@ pub struct NetworkState {
 
 The simplest approach. Initialize once at startup, then access state anywhere without passing the store around.
 
-```rust
+```rust,ignore
 use amethystate::{IntoGlobalStore, StoreBuilder};
 
 // From a path string
@@ -34,8 +34,8 @@ StoreBuilder::for_app("my-app", "settings")?.init_global();
 
 // With options
 StoreBuilder::for_app("my-app", "settings")?
-.debounce(500)
-.init_global();
+    .debounce(500)
+    .init_global();
 
 let state = NetworkState::new().unwrap();
 ```
@@ -44,7 +44,7 @@ let state = NetworkState::new().unwrap();
 
 If you prefer to manage the store lifetime yourself:
 
-```rust
+```rust,ignore
 use amethystate::StoreBuilder;
 
 fn main() -> amethystate::Result<()> {
@@ -59,7 +59,7 @@ fn main() -> amethystate::Result<()> {
 
 ## Reading and writing
 
-```rust
+```rust,ignore
 // Read
 println!("{}", state.host().get());
 
@@ -68,7 +68,7 @@ state.port().set(9090)?;
 
 // Subscribe to changes
 let _sub = state.port().subscribe(|p| {
-println!("port changed to {p}");
+    println!("port changed to {p}");
 });
 ```
 
@@ -89,7 +89,7 @@ pub struct NetworkState {
 }
 ```
 
-```rust
+```rust,ignore
 let mut state = NetworkState::load_with(&store)?;
 
 // Direct field mutation
@@ -99,14 +99,14 @@ state.save()?;      // immediate flush
 
 // Block mutation — immediate flush
 state.mutate(|d| {
-d.host = "0.0.0.0".to_string();
-d.port = 443;
+    d.host = "0.0.0.0".to_string();
+    d.port = 443;
 })?;
 
 // Block mutation — debounced background flush
 state.mutate_lazy(|d| {
-d.host = "0.0.0.0".to_string();
-d.port = 443;
+    d.host = "0.0.0.0".to_string();
+    d.port = 443;
 })?;
 ```
 
@@ -114,7 +114,7 @@ d.port = 443;
 
 `ReactiveMap<K, V>` is a persistent dynamic collection where each entry is stored as an individual key.
 
-```rust
+```rust,ignore
 #[derive(Debug, Clone, Serialize, Deserialize, Default, AmeType)]
 pub struct AlertThresholds {
     pub warning: u64,
@@ -131,7 +131,7 @@ pub struct SystemSettings {
 }
 ```
 
-```rust
+```rust,ignore
 let state = SystemSettings::new()?;
 
 // Insert or update
@@ -142,12 +142,12 @@ let cpu = state.limits().get(&"cpu".into())?;
 
 // Iterate
 for (key, val) in state.limits().entries()? {
-println!("{key}: {val:?}");
+    println!("{key}: {val:?}");
 }
 
 // Subscribe to any change
 let _sub = state.limits().subscribe_any(|change| {
-println!("{change:?}");
+    println!("{change:?}");
 });
 ```
 
@@ -159,8 +159,8 @@ Pipelines derive a value from one or more reactive fields. They recompute automa
 use amethystate::IntoPipeline;
 
 let address = (state.host(), state.port())
-.pipe()
-.map(|(host, port)| format!("{host}:{port}"));
+    .pipe()
+    .map(|(host, port)| format!("{host}:{port}"));
 
 println!("{}", address.get()); // "127.0.0.1:8080"
 let mut scope = ReactiveScope::new();

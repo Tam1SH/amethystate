@@ -187,7 +187,7 @@ impl From<RpError> for ConfyError {
                     redb_err
                 );
             }
-            #[cfg(feature = "redb")]
+            #[cfg(feature = "sqlite")]
             RpError::Sqlite(sqlite) => {
                 panic!(
                     "Unexpected Sqlite store error during confy emulation: {:?}",

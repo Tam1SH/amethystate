@@ -1,5 +1,5 @@
-use darling::util::SpannedValue;
 use darling::FromField;
+use darling::util::SpannedValue;
 use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 use syn::{Expr, GenericArgument, Ident, PathArguments, Type, TypePath, Visibility};
 

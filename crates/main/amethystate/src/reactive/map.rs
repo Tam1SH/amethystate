@@ -1,5 +1,5 @@
-use crate::store::sync_backend::StoreBackend;
 use crate::store::Store;
+use crate::store::sync_backend::StoreBackend;
 use crate::{
     AccessMode, DefaultStore, Field, ReadOnlyMode, Result, StoreSubscription, WritableMode,
 };

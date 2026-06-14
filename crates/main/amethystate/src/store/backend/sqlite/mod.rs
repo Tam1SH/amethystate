@@ -13,11 +13,11 @@ use crate::{MigrationReport, Result};
 use error::SqliteStoreError;
 use parking_lot::{Mutex, RwLock};
 use rusqlite::{Connection, OptionalExtension};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{info, warn};
 
 pub mod error;

@@ -1,8 +1,11 @@
 use crate::MapSignal;
+use amethystate::{AccessMode, MapChange, Pipeline, ReactiveMapKey, ReactiveMapValue};
+use amethystate_arena::{
+    AmeStateFrameworkNested, DefaultArena, FieldHandle, MapHandle, PIPELINE_ARENA, WritableHandle,
+    WritableMapHandle,
+};
 use leptos::callback::Callback;
 use leptos::prelude::*;
-use amethystate::{AccessMode, MapChange, Pipeline, ReactiveMapKey, ReactiveMapValue};
-use amethystate_arena::{DefaultArena, FieldHandle, MapHandle, AmeStateFrameworkNested, WritableHandle, WritableMapHandle, PIPELINE_ARENA};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -60,7 +63,6 @@ where
     handle
 }
 
-
 pub fn use_field<T>(handle: WritableHandle<T>) -> (ReadSignal<T>, SignalSetter<T>)
 where
     T: DeserializeOwned + Serialize + Clone + Send + Sync + PartialEq + 'static,
@@ -68,7 +70,7 @@ where
     let arena = use_context::<DefaultArena>().expect("amethystate-leptos: Arena not found");
     let (signal, set_signal) = signal(arena.get_field(handle));
 
-    let sub = arena.subscribe_external_field(handle, move |val| {
+    let sub = arena.subscribe_field(handle, move |val| {
         set_signal.set(val);
     });
     on_cleanup(move || drop(sub));
@@ -159,7 +161,7 @@ where
     );
 
     let arena_sub = arena.clone();
-    let sub = arena.subscribe_map_any_external(handle, move |_| {
+    let sub = arena.subscribe_map_any(handle, move |_| {
         let entries = arena_sub
             .get_map_entries(handle)
             .unwrap_or_default()
@@ -174,7 +176,9 @@ where
         #[cfg(target_arch = "wasm32")]
         {
             let old = signal.get_untracked();
-            set_signal.update(|m| { m.insert(key.clone(), val.clone()); });
+            set_signal.update(|m| {
+                m.insert(key.clone(), val.clone());
+            });
             let arena_clone = arena_set.clone();
             leptos::task::spawn_local(async move {
                 if let Err(e) = arena_clone.set_map_entry(handle, key, val).await {
@@ -194,7 +198,9 @@ where
         #[cfg(target_arch = "wasm32")]
         {
             let old = signal.get_untracked();
-            set_signal.update(|m| { m.insert(key.clone(), val.clone()); });
+            set_signal.update(|m| {
+                m.insert(key.clone(), val.clone());
+            });
             let arena_clone = arena_set_or_create.clone();
             leptos::task::spawn_local(async move {
                 if let Err(e) = arena_clone.set_map_entry(handle, key, val).await {
@@ -214,7 +220,9 @@ where
         #[cfg(target_arch = "wasm32")]
         {
             let old = signal.get_untracked();
-            set_signal.update(|m| { m.remove(&key); });
+            set_signal.update(|m| {
+                m.remove(&key);
+            });
             let arena_clone = arena_remove.clone();
             let key_clone = key.clone();
             leptos::task::spawn_local(async move {
@@ -263,17 +271,22 @@ where
     let (signal, set_signal) = signal(arena.get_map_entry(handle, &key).ok().flatten());
 
     let key_clone = key.clone();
-    let sub = arena.subscribe_map_key_external(handle, key_clone, move |change: &MapChange<_, V>| match change {
-        MapChange::Insert { value, .. }
-        | MapChange::Update {
-            new_value: value, ..
-        } => {
-            set_signal.set(Some(value.clone()));
-        }
-        MapChange::Remove { .. } | MapChange::Clear { .. } => {
-            set_signal.set(None);
-        }
-    });
+    let sub =
+        arena.subscribe_map_key(
+            handle,
+            key_clone,
+            move |change: &MapChange<_, V>| match change {
+                MapChange::Insert { value, .. }
+                | MapChange::Update {
+                    new_value: value, ..
+                } => {
+                    set_signal.set(Some(value.clone()));
+                }
+                MapChange::Remove { .. } | MapChange::Clear { .. } => {
+                    set_signal.set(None);
+                }
+            },
+        );
     on_cleanup(move || drop(sub));
 
     signal

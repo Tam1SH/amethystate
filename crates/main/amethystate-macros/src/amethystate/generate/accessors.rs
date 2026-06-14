@@ -1,6 +1,6 @@
+use amethystate_macros_core::StoreFieldEntry;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote, quote_spanned};
-use amethystate_macros_core::StoreFieldEntry;
 use syn::Ident;
 
 pub(crate) fn schema_methods<'a>(

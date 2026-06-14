@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Creator: CorelDRAW -->
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="1063px" height="1063px" version="1.1" style="shape-rendering:geometricPrecision; text-rendering:geometricPrecision; image-rendering:optimizeQuality; fill-rule:evenodd; clip-rule:evenodd"
+viewBox="0 0 1063 1063"
+ xmlns:xlink="http://www.w3.org/1999/xlink"
+ xmlns:xodm="http://www.corel.com/coreldraw/odm/2003">
+ <defs>
+  <style type="text/css">
+   <![CDATA[
+    .fil2 {fill:#FEFEFE}
+    .fil0 {fill:#FEFEFE}
+    .fil1 {fill:url(#id0)}
+   ]]>
+  </style>
+  <linearGradient id="id0" gradientUnits="objectBoundingBox" x1="129.419%" y1="97.4775%" x2="0%" y2="2.52248%">
+   <stop offset="0" style="stop-opacity:1; stop-color:#FEFEFE"/>
+   <stop offset="1" style="stop-opacity:1; stop-color:black"/>
+  </linearGradient>
+ </defs>
+ <g id="Layer_x0020_1">
+  <metadata id="CorelCorpID_0Corel-Layer"/>
+  <rect class="fil0" x="138.01" y="212.32" width="50.81" height="540.89"/>
+  <rect class="fil0" x="211.23" y="142.58" width="625.99" height="47.3"/>
+  <path class="fil0" d="M837.22 142.58l27.5 0c22.08,0 40.15,18.07 40.15,40.16l0 7.14 -67.65 0 0 -47.3z"/>
+  <polygon class="fil0" points="837.22,189.88 753.66,279.69 161.77,872.56 224.98,872.56 904.87,189.88 "/>
+  <polygon class="fil0" points="753.66,279.69 321.07,279.69 321.07,325.48 707.87,325.55 "/>
+  <rect class="fil0" x="278.5" y="326.58" width="42.57" height="305.15"/>
+  <path class="fil0" d="M321.07 279.69l0 0c-23.41,0 -42.57,19.15 -42.57,42.56l0 4.33 42.57 0 0 -46.89z"/>
+  <polygon class="fil0" points="619.52,414.81 458.46,414.81 458.46,460.6 572.98,460.67 "/>
+  <path class="fil0" d="M458.46 414.81l-12.56 0c-19,0 -34.55,15.54 -34.55,34.55l0 11.24 47.11 0 0 -45.79z"/>
+  <rect class="fil0" x="411.35" y="460.6" width="47.11" height="47.18"/>
+  <path class="fil0" d="M161.77 872.56l63.21 0 0 52.09 -37.23 0c-14.29,0 -25.98,-11.69 -25.98,-25.99l0 -26.1z"/>
+  <polygon class="fil0" points="440.62,656.04 604.23,656.04 604.23,610.24 487.89,610.18 "/>
+  <path class="fil0" d="M604.23 656.04l13.31 0c19,0 34.54,-15.55 34.54,-34.55l0 -11.25 -47.85 0 0 45.8z"/>
+  <rect class="fil0" x="604.23" y="563.06" width="47.85" height="47.18"/>
+  <polygon class="fil0" points="309.01,789.27 741.6,789.27 741.6,743.48 354.8,743.41 "/>
+  <rect class="fil1" x="741.6" y="437.22" width="42.57" height="305.15"/>
+  <path class="fil0" d="M741.6 789.27l0 0c23.41,0 42.57,-19.15 42.57,-42.56l0 -4.33 -42.57 0 0 46.89z"/>
+  <rect class="fil0" x="224.98" y="877.35" width="625.99" height="47.3"/>
+  <path class="fil2" d="M211.23 142.55l0 47.34c-13.11,0.8 -20.59,8.29 -22.44,22.46l-50.77 0c4.35,-43.87 28.75,-67.14 73.21,-69.8z"/>
+  <path class="fil2" d="M850.97 924.69l0 -47.34c13.11,-0.8 20.59,-8.29 22.44,-22.46l50.78 0c-4.35,43.87 -28.76,67.14 -73.22,69.8z"/>
+  <rect class="fil1" x="873.41" y="314.02" width="50.78" height="540.87"/>
+ </g>
+</svg>

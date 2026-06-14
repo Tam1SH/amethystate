@@ -17,9 +17,9 @@ pub use uuid;
 pub use error::Error;
 pub use error::Result;
 pub use reactive::{
-    AccessMode, Change, Field, InterceptDisposer, IntoPipeline, MapChange, Pipeline, Reactive,
-    ReactiveMap, ReactiveMapKey, ReactiveMapValue, ReactiveScope, ReadOnly, ReadOnlyField,
-    ReadOnlyMode, AmeState, AmeStateNode, Signal, SignalSubscription, StoreSubscription, Writable,
+    AccessMode, AmeState, AmeStateNode, Change, Field, InterceptDisposer, IntoPipeline, MapChange,
+    Pipeline, Reactive, ReactiveMap, ReactiveMapKey, ReactiveMapValue, ReactiveScope, ReadOnly,
+    ReadOnlyField, ReadOnlyMode, Signal, SignalSubscription, StoreSubscription, Writable,
     WritableField, WritableMode,
 };
 
@@ -28,14 +28,14 @@ pub mod stores {
 }
 
 pub use store::{
-    builder::StoreBuilder, config::StoreConfig, default::DefaultStore, join_path, AmeStateSlice, StateScope, Store,
-    StoreEvent, StoreOp, SubscriptionKind,
+    AmeStateSlice, StateScope, Store, StoreEvent, StoreOp, SubscriptionKind, builder::StoreBuilder,
+    config::StoreConfig, default::DefaultStore, join_path,
 };
 
 pub use migration::{MigrationContext, MigrationError, MigrationPlan, MigrationReport};
 
+pub use amethystate_macros::{AmeType, amethystate, migrate};
 pub use global::*;
-pub use amethystate_macros::{migrate, amethystate, AmeType};
 
 #[cfg(any(feature = "tauri", feature = "json"))]
 pub use serde_json;
@@ -58,7 +58,7 @@ pub mod core {
 
 #[cfg(any(feature = "async", feature = "tauri"))]
 pub mod client {
-    pub use amethystate_core::async_impl::*;
     pub use amethystate_core::AmeBackendAsync;
     pub use amethystate_core::AmeStateSliceAsync;
+    pub use amethystate_core::async_impl::*;
 }

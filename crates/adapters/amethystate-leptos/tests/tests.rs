@@ -1,10 +1,10 @@
-use leptos::prelude::*;
 use amethystate::test_utils::unique_store;
 use amethystate::uuid;
 use amethystate_arena::{DefaultArena, IntoArenaPipeline, PIPELINE_ARENA};
 use amethystate_leptos::{
     use_field, use_map, use_map_subscribe_any, use_map_subscribe_key, use_pipeline,
 };
+use leptos::prelude::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -47,7 +47,9 @@ async fn test_use_field_requirements() {
     let store = unique_store("field");
     let arena = DefaultArena::new();
 
-    let field = amethystate::store::field_with_path(&store, Arc::from("field_1"), 10, uuid::Uuid::new_v4()).unwrap();
+    let field =
+        amethystate::store::field_with_path(&store, Arc::from("field_1"), 10, uuid::Uuid::new_v4())
+            .unwrap();
     let handle = arena.register_field(field);
 
     let probe = Probe::new();
@@ -140,9 +142,13 @@ async fn test_use_pipeline_requirements() {
     let store = unique_store("pipeline");
     let arena = DefaultArena::new();
 
-    let field =
-        amethystate::store::field_with_path(&store, std::sync::Arc::from("field_2"), 5,
-                                        uuid::Uuid::new_v4(),).unwrap();
+    let field = amethystate::store::field_with_path(
+        &store,
+        std::sync::Arc::from("field_2"),
+        5,
+        uuid::Uuid::new_v4(),
+    )
+    .unwrap();
     let dep_handle = arena.register_field(field);
 
     let probe = Probe::new();
@@ -236,9 +242,13 @@ async fn test_real_component_lifecycle() {
 
     let store = unique_store("comp");
     let arena = DefaultArena::new();
-    let field =
-        amethystate::store::field_with_path(&store, std::sync::Arc::from("field_1"), 10,
-                                        uuid::Uuid::new_v4(),).unwrap();
+    let field = amethystate::store::field_with_path(
+        &store,
+        std::sync::Arc::from("field_1"),
+        10,
+        uuid::Uuid::new_v4(),
+    )
+    .unwrap();
     let handle = arena.register_field(field);
 
     let probe = Probe::new();

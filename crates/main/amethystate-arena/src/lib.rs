@@ -65,9 +65,13 @@ mod tests {
         use amethystate::{DefaultStore, Field, StoreBuilder};
         let temp_dir = unique_temp_dir();
         let store = StoreBuilder::new(&temp_dir).build().unwrap();
-        let field: Field<i32, DefaultStore, WritableMode> =
-            amethystate::store::field_with_path(&store, std::sync::Arc::from("test.int_field"), 42, uuid::Uuid::new_v4())
-                .unwrap();
+        let field: Field<i32, DefaultStore, WritableMode> = amethystate::store::field_with_path(
+            &store,
+            std::sync::Arc::from("test.int_field"),
+            42,
+            uuid::Uuid::new_v4(),
+        )
+        .unwrap();
 
         let arena = Arena::new();
         let handle = arena.register_field(field);

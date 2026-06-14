@@ -1,4 +1,3 @@
-use parking_lot::Mutex;
 use amethystate::DefaultStore;
 use amethystate::migration::fields::FieldDescriptor;
 use amethystate::migration::set::MigrationSet;
@@ -6,6 +5,7 @@ use amethystate::migration::{MigrationError, MigrationPlan};
 use amethystate::store::config::StoreConfig;
 use amethystate::store::{Store, SubscriptionKind};
 use amethystate_core::test_utils::unique_path;
+use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::Duration;
 

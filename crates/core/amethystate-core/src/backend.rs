@@ -1,5 +1,5 @@
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -70,7 +70,8 @@ pub trait AmeBackendAsync {
     ) -> Result<(), Self::Error>;
 
     async fn delete(&self, path: &str) -> Result<(), Self::Error>;
-    async fn delete_with_source(&self, path: &str, source: Option<Uuid>) -> Result<(), Self::Error>;
+    async fn delete_with_source(&self, path: &str, source: Option<Uuid>)
+    -> Result<(), Self::Error>;
 
     async fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Self::Raw)>, Self::Error>;
 

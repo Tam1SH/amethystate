@@ -307,7 +307,10 @@ impl ::core::default::Default for AlertThresholds {
 impl ::amethystate::migration::types::AmeType for AlertThresholds {
     const TYPE_HASH: u32 = ::amethystate::migration::types::fnv1a(
         "AlertThresholds".as_bytes(),
-    );
+    ) ^ ::amethystate::migration::types::fnv1a("warning".as_bytes())
+        ^ <u64 as ::amethystate::migration::types::AmeType>::TYPE_HASH
+        ^ ::amethystate::migration::types::fnv1a("critical".as_bytes())
+        ^ <u64 as ::amethystate::migration::types::AmeType>::TYPE_HASH;
     const TYPE_NAME: &'static str = "AlertThresholds";
 }
 pub struct MonitoringConfig {
@@ -618,7 +621,10 @@ impl ::core::default::Default for MonitoringConfig {
 impl ::amethystate::migration::types::AmeType for MonitoringConfig {
     const TYPE_HASH: u32 = ::amethystate::migration::types::fnv1a(
         "MonitoringConfig".as_bytes(),
-    );
+    ) ^ ::amethystate::migration::types::fnv1a("enabled".as_bytes())
+        ^ <bool as ::amethystate::migration::types::AmeType>::TYPE_HASH
+        ^ ::amethystate::migration::types::fnv1a("thresholds".as_bytes())
+        ^ <AlertThresholds as ::amethystate::migration::types::AmeType>::TYPE_HASH;
     const TYPE_NAME: &'static str = "MonitoringConfig";
 }
 pub struct DatabaseConfig<S: ::amethystate::Store = ::amethystate::DefaultStore> {
@@ -1020,7 +1026,9 @@ impl ::amethystate::migration::fields::AmeStateFields for DatabaseConfig_Data {
     const SCHEMA_HASH: u32 = ::amethystate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(ctx: &mut ::amethystate::MigrationContext) -> ::amethystate::Result<Self> {
+    fn load_struct(
+        ctx: &mut ::amethystate::MigrationContext,
+    ) -> ::amethystate::Result<Self> {
         Ok(Self {
             host: ctx.get::<String>("host")?.unwrap_or_else(|| "localhost".to_string()),
         })
@@ -1033,20 +1041,28 @@ impl ::amethystate::migration::fields::AmeStateFields for DatabaseConfig_Data {
         Ok(())
     }
 }
-impl<S: ::amethystate::Store> ::amethystate::amethystate for DatabaseConfig<S> {
+impl<S: ::amethystate::Store> ::amethystate::AmeState for DatabaseConfig<S> {
     type Data = DatabaseConfig_Data;
 }
 pub struct SystemSettings<S: ::amethystate::Store = ::amethystate::DefaultStore> {
     __amethystate_instance_id: ::amethystate::uuid::Uuid,
     pub db: ::std::sync::Arc<DatabaseConfig<S>>,
-    pub monitoring: ::amethystate::Field<MonitoringConfig, S, ::amethystate::WritableMode>,
+    pub monitoring: ::amethystate::Field<
+        MonitoringConfig,
+        S,
+        ::amethystate::WritableMode,
+    >,
     pub limits: ::amethystate::ReactiveMap<
         String,
         AlertThresholds,
         S,
         ::amethystate::WritableMode,
     >,
-    pub presets: ::amethystate::Field<Vec<AlertThresholds>, S, ::amethystate::WritableMode>,
+    pub presets: ::amethystate::Field<
+        Vec<AlertThresholds>,
+        S,
+        ::amethystate::WritableMode,
+    >,
 }
 #[automatically_derived]
 impl<S: ::core::clone::Clone + ::amethystate::Store> ::core::clone::Clone
@@ -1086,7 +1102,8 @@ impl<S: ::amethystate::Store> SystemSettings<S> {
                     &::alloc::__export::must_use({
                         ::alloc::fmt::format(
                             format_args!(
-                                "{0}.{1}", < Self as ::amethystate::StateScope >::PREFIX, "db",
+                                "{0}.{1}", < Self as ::amethystate::StateScope >::PREFIX,
+                                "db",
                             ),
                         )
                     }),
@@ -1169,7 +1186,9 @@ impl<S: ::amethystate::Store> SystemSettings<S> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     #[doc(hidden)]
-    pub fn __schema_field_monitoring(&self) -> ::amethystate::ReadOnly<MonitoringConfig> {
+    pub fn __schema_field_monitoring(
+        &self,
+    ) -> ::amethystate::ReadOnly<MonitoringConfig> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     #[doc(hidden)]
@@ -1179,7 +1198,9 @@ impl<S: ::amethystate::Store> SystemSettings<S> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     #[doc(hidden)]
-    pub fn __schema_field_presets(&self) -> ::amethystate::ReadOnly<Vec<AlertThresholds>> {
+    pub fn __schema_field_presets(
+        &self,
+    ) -> ::amethystate::ReadOnly<Vec<AlertThresholds>> {
         ::core::panicking::panic("internal error: entered unreachable code")
     }
     pub fn db(&self) -> ::std::sync::Arc<DatabaseConfig<S>> {
@@ -1192,7 +1213,12 @@ impl<S: ::amethystate::Store> SystemSettings<S> {
     }
     pub fn limits(
         &self,
-    ) -> ::amethystate::ReactiveMap<String, AlertThresholds, S, ::amethystate::WritableMode> {
+    ) -> ::amethystate::ReactiveMap<
+        String,
+        AlertThresholds,
+        S,
+        ::amethystate::WritableMode,
+    > {
         self.limits.clone()
     }
     pub fn presets(
@@ -1284,7 +1310,9 @@ impl<S: ::amethystate::Store> ::amethystate::AmeStateNode<S> for SystemSettings<
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
 pub struct SystemSettings_Data {
-    pub db: <DatabaseConfig<::amethystate::DefaultStore> as ::amethystate::amethystate>::Data,
+    pub db: <DatabaseConfig<
+        ::amethystate::DefaultStore,
+    > as ::amethystate::AmeState>::Data,
     pub limits: ::std::collections::HashMap<String, AlertThresholds>,
     pub monitoring: MonitoringConfig,
     pub presets: Vec<AlertThresholds>,
@@ -1465,7 +1493,7 @@ const _: () = {
                     let __field0 = match _serde::de::SeqAccess::next_element::<
                         <DatabaseConfig<
                             ::amethystate::DefaultStore,
-                        > as ::amethystate::amethystate>::Data,
+                        > as ::amethystate::AmeState>::Data,
                     >(&mut __seq)? {
                         _serde::__private228::Some(__value) => __value,
                         _serde::__private228::None => {
@@ -1534,7 +1562,7 @@ const _: () = {
                     let mut __field0: _serde::__private228::Option<
                         <DatabaseConfig<
                             ::amethystate::DefaultStore,
-                        > as ::amethystate::amethystate>::Data,
+                        > as ::amethystate::AmeState>::Data,
                     > = _serde::__private228::None;
                     let mut __field1: _serde::__private228::Option<
                         ::std::collections::HashMap<String, AlertThresholds>,
@@ -1557,7 +1585,7 @@ const _: () = {
                                     _serde::de::MapAccess::next_value::<
                                         <DatabaseConfig<
                                             ::amethystate::DefaultStore,
-                                        > as ::amethystate::amethystate>::Data,
+                                        > as ::amethystate::AmeState>::Data,
                                     >(&mut __map)?,
                                 );
                             }
@@ -1718,7 +1746,7 @@ impl ::amethystate::migration::fields::AmeStateFields for SystemSettings_Data {
             type_hash: 0xDEADBEEF
                 ^ <<DatabaseConfig<
                     ::amethystate::DefaultStore,
-                > as ::amethystate::amethystate>::Data as ::amethystate::migration::types::AmeType>::TYPE_HASH,
+                > as ::amethystate::AmeState>::Data as ::amethystate::migration::types::AmeType>::TYPE_HASH,
             type_name: "DatabaseConfig",
         },
         ::amethystate::migration::fields::FieldDescriptor {
@@ -1746,11 +1774,13 @@ impl ::amethystate::migration::fields::AmeStateFields for SystemSettings_Data {
     const SCHEMA_HASH: u32 = ::amethystate::migration::types::schema_hash(Self::FIELDS);
     const PARENT_PREFIX: &'static str = "sys";
     const MIGRATION_DEPS: &'static [&'static str] = &[];
-    fn load_struct(ctx: &mut ::amethystate::MigrationContext) -> ::amethystate::Result<Self> {
+    fn load_struct(
+        ctx: &mut ::amethystate::MigrationContext,
+    ) -> ::amethystate::Result<Self> {
         Ok(Self {
             db: {
                 let mut sub_ctx = ctx.scoped("db");
-                <<DatabaseConfig as ::amethystate::amethystate>::Data as ::amethystate::migration::fields::AmeStateFields>::load_struct(
+                <<DatabaseConfig as ::amethystate::AmeState>::Data as ::amethystate::migration::fields::AmeStateFields>::load_struct(
                     &mut sub_ctx,
                 )?
             },
@@ -1799,7 +1829,7 @@ impl ::amethystate::migration::fields::AmeStateFields for SystemSettings_Data {
         Ok(())
     }
 }
-impl<S: ::amethystate::Store> ::amethystate::amethystate for SystemSettings<S> {
+impl<S: ::amethystate::Store> ::amethystate::AmeState for SystemSettings<S> {
     type Data = SystemSettings_Data;
 }
 impl<S: ::amethystate::Store> ::amethystate::AmeStateSlice<S> for SystemSettings<S> {

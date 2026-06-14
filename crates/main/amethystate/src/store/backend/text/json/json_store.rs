@@ -4,8 +4,8 @@ use crate::store::backend::text::store::TextStore;
 use crate::store::config::StoreConfig;
 use crate::store::{Store, StoreCallback, SubscriptionId, SubscriptionKind};
 use crate::{MigrationReport, Result};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -30,11 +30,21 @@ impl Store for JsonStore {
         self.0.set(path, value)
     }
 
-    fn set_with_source<T: Serialize>(&self, path: &str, value: &T, source: Option<Uuid>) -> Result<()> {
+    fn set_with_source<T: Serialize>(
+        &self,
+        path: &str,
+        value: &T,
+        source: Option<Uuid>,
+    ) -> Result<()> {
         self.0.set_with_source(path, value, source)
     }
 
-    fn set_owned_with_source<T: Serialize>(&self, path: Arc<str>, value: &T, source: Option<Uuid>) -> Result<()> {
+    fn set_owned_with_source<T: Serialize>(
+        &self,
+        path: Arc<str>,
+        value: &T,
+        source: Option<Uuid>,
+    ) -> Result<()> {
         self.0.set_owned_with_source(path, value, source)
     }
 

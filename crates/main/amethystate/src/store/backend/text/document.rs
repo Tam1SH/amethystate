@@ -1,7 +1,7 @@
-use crate::store::CodecFormat;
 use crate::Result;
-use serde::de::DeserializeOwned;
+use crate::store::CodecFormat;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
 pub trait TextDocument: Send + Sync + Sized + Clone + 'static {

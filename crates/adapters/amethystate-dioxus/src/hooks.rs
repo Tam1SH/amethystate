@@ -1,15 +1,15 @@
 use crate::MapSignal;
-use dioxus::core::{spawn, use_hook, Callback};
-use dioxus::hooks::{try_use_context, use_callback, use_context};
-use dioxus::prelude::*;
 use amethystate::{AccessMode, MapChange, Pipeline, ReactiveMapKey, ReactiveMapValue};
 use amethystate_arena::PIPELINE_ARENA;
 use amethystate_arena::{
-    DefaultArena, FieldHandle, MapHandle, PipelineHandle, AmeStateFrameworkNested, WritableHandle,
+    AmeStateFrameworkNested, DefaultArena, FieldHandle, MapHandle, PipelineHandle, WritableHandle,
     WritableMapHandle,
 };
-use serde::de::DeserializeOwned;
+use dioxus::core::{Callback, spawn, use_hook};
+use dioxus::hooks::{try_use_context, use_callback, use_context};
+use dioxus::prelude::*;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -92,7 +92,7 @@ where
     let arena_clone = arena.clone();
 
     use_hook(move || {
-        let sub = arena.subscribe_external_field(handle, move |val| {
+        let sub = arena.subscribe_field(handle, move |val| {
             let _ = tx.send(val);
         });
         Arc::new(sub)
@@ -216,7 +216,7 @@ where
     let arena_sub = arena.clone();
     use_hook(move || {
         let arena_sub_sub = arena_sub.clone();
-        let sub = arena_sub.subscribe_map_any_external(handle, move |_| {
+        let sub = arena_sub.subscribe_map_any(handle, move |_| {
             let entries = arena_sub_sub
                 .get_map_entries(handle)
                 .unwrap_or_default()
@@ -273,7 +273,7 @@ where
 
     let key_clone = key.clone();
     use_hook(move || {
-        let sub = arena.subscribe_map_key_external(handle, key_clone, move |change| match change {
+        let sub = arena.subscribe_map_key(handle, key_clone, move |change| match change {
             MapChange::Insert { value, .. }
             | MapChange::Update {
                 new_value: value, ..

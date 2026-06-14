@@ -1,19 +1,19 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use dioxus::core::NoOpMutations;
-use dioxus::prelude::*;
 use amethystate::store::field_with_path;
 use amethystate::test_utils::unique_store;
-use amethystate::{amethystate, uuid, DefaultStore, MapChange};
+use amethystate::{DefaultStore, MapChange, amethystate, uuid};
 use amethystate_arena::{
-    DefaultArena, IntoArenaPipeline, PipelineHandle, WritableHandle, WritableMapHandle,
-    PIPELINE_ARENA,
+    DefaultArena, IntoArenaPipeline, PIPELINE_ARENA, PipelineHandle, WritableHandle,
+    WritableMapHandle,
 };
 use amethystate_dioxus::{
-    use_field, use_map, use_map_subscribe_any, use_map_subscribe_key, use_pipeline, use_amethystate,
-    MapSignal, amethystateProvider,
+    AmeStateProvider, MapSignal, use_amethystate, use_field, use_map, use_map_subscribe_any,
+    use_map_subscribe_key, use_pipeline,
 };
 use amethystate_macros_arena::amethystate_framework_arena;
+use dioxus::core::NoOpMutations;
+use dioxus::prelude::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -83,8 +83,13 @@ async fn test_use_field_requirements() {
     let store = unique_store("field");
     let arena = DefaultArena::new();
 
-    let field =
-        amethystate::store::field_with_path(&store, std::sync::Arc::from("field_1"), 10, uuid::Uuid::new_v4()).unwrap();
+    let field = amethystate::store::field_with_path(
+        &store,
+        std::sync::Arc::from("field_1"),
+        10,
+        uuid::Uuid::new_v4(),
+    )
+    .unwrap();
     let handle = arena.register_field(field);
 
     let probe = Probe::new();
@@ -271,9 +276,13 @@ async fn test_use_pipeline_requirements() {
     let store = unique_store("pipeline");
     let arena = DefaultArena::new();
 
-    let field =
-        amethystate::store::field_with_path(&store, std::sync::Arc::from("field_2"), 5,
-                                        uuid::Uuid::new_v4(),).unwrap();
+    let field = amethystate::store::field_with_path(
+        &store,
+        std::sync::Arc::from("field_2"),
+        5,
+        uuid::Uuid::new_v4(),
+    )
+    .unwrap();
     let dep_handle = arena.register_field(field);
 
     let probe = Probe::new();
@@ -323,24 +332,24 @@ async fn test_use_pipeline_requirements() {
 // }
 
 #[derive(Clone, Props)]
-struct amethystateProps {
+struct AmeStateProps {
     parent_probe: Probe<MyTestStateHandle>,
     child_probe: Probe<MyTestStateHandle>,
 }
 
-impl PartialEq for amethystateProps {
+impl PartialEq for AmeStateProps {
     fn eq(&self, _other: &Self) -> bool {
         true
     }
 }
 
 #[component]
-fn amethystateParent(props: amethystateProps) -> Element {
+fn AmeStateParent(props: AmeStateProps) -> Element {
     let handle = use_amethystate::<MyTestState>();
     props.parent_probe.push(handle);
 
     rsx! {
-        amethystateChild {
+        AmeStateChild {
             parent_probe: props.parent_probe.clone(),
             child_probe: props.child_probe.clone(),
         }
@@ -348,7 +357,7 @@ fn amethystateParent(props: amethystateProps) -> Element {
 }
 
 #[component]
-fn amethystateChild(props: amethystateProps) -> Element {
+fn AmeStateChild(props: AmeStateProps) -> Element {
     let handle = use_amethystate::<MyTestState>();
     props.child_probe.push(handle);
 
@@ -356,13 +365,13 @@ fn amethystateChild(props: amethystateProps) -> Element {
 }
 
 #[derive(Clone, Props)]
-struct amethystateTestWrapperProps {
+struct AmeStateTestWrapperProps {
     store: DefaultStore,
     parent_probe: Probe<MyTestStateHandle>,
     child_probe: Probe<MyTestStateHandle>,
 }
 
-impl PartialEq for amethystateTestWrapperProps {
+impl PartialEq for AmeStateTestWrapperProps {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::eq(&self.store, &other.store)
             && self.parent_probe == other.parent_probe
@@ -371,11 +380,11 @@ impl PartialEq for amethystateTestWrapperProps {
 }
 
 #[component]
-fn amethystateTestWrapper(props: amethystateTestWrapperProps) -> Element {
+fn amethystateTestWrapper(props: AmeStateTestWrapperProps) -> Element {
     rsx! {
-        amethystateProvider {
+        AmeStateProvider {
             store: props.store.clone(),
-            amethystateParent {
+            AmeStateParent {
                 parent_probe: props.parent_probe.clone(),
                 child_probe: props.child_probe.clone(),
             }
@@ -392,7 +401,7 @@ async fn test_use_amethystate_requirements() {
 
     let mut vdom = VirtualDom::new_with_props(
         amethystateTestWrapper,
-        amethystateTestWrapperProps {
+        AmeStateTestWrapperProps {
             store,
             parent_probe: parent_probe.clone(),
             child_probe: child_probe.clone(),
@@ -602,9 +611,13 @@ async fn test_all_primitives_simultaneous_lifecycle() {
     let store = unique_store("all_primitives");
     let arena = DefaultArena::new();
 
-    let field =
-        amethystate::store::field_with_path(&store, std::sync::Arc::from("field_all"), 10,
-                                        uuid::Uuid::new_v4(),).unwrap();
+    let field = amethystate::store::field_with_path(
+        &store,
+        std::sync::Arc::from("field_all"),
+        10,
+        uuid::Uuid::new_v4(),
+    )
+    .unwrap();
     let field_handle = arena.register_field(field);
 
     let map = amethystate::store::reactive_map_with_path::<DummyScope, String, String, _, _>(
@@ -776,10 +789,10 @@ async fn test_pipeline_lifecycle_and_tuple_pipe() {
     let store = unique_store("pipeline_lifecycle");
     let arena = DefaultArena::new();
 
-    let fa = arena.register_field(field_with_path(&store, Arc::from("fa"), 1,
-                                                  uuid::Uuid::new_v4(),).unwrap());
-    let fb = arena.register_field(field_with_path(&store, Arc::from("fb"), 2,
-                                                  uuid::Uuid::new_v4(),).unwrap());
+    let fa = arena
+        .register_field(field_with_path(&store, Arc::from("fa"), 1, uuid::Uuid::new_v4()).unwrap());
+    let fb = arena
+        .register_field(field_with_path(&store, Arc::from("fb"), 2, uuid::Uuid::new_v4()).unwrap());
 
     let probe = Probe::new();
     let signal_probe = Probe::new();

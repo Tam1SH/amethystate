@@ -6,7 +6,7 @@
 
 ### Retain-mode and TEA (egui, ratatui, iced, Xilem)
 
-These frameworks own the update loop. Either they redraw every frame (immediate-mode: egui, ratatui), or all state changes flow through a message → update → render cycle (TEA/MVU: iced, Xilem). In both cases the framework decides when to read state, and there is no place to attach subscriptions in a natural way.
+These frameworks have an explicit event loop. Either they redraw every frame (immediate-mode: egui, ratatui), or all state changes flow through a message → update → render cycle (TEA/MVU: iced, Xilem). In both cases the framework decides when to read state, and there is no place to attach subscriptions in a natural way.
 
 **Persistent-only mode** is the right fit. Fields are plain Rust types, you mutate them in `update` or `show`, and call `save_lazy()` when done.
 

@@ -1,8 +1,8 @@
 use crate::async_impl::{AsyncSubscriptionBackend, SubscriptionHandle};
 use crate::primitives::field_core::FieldValue;
 use crate::{Change, FieldCore, InterceptDisposer, SignalSubscription};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 

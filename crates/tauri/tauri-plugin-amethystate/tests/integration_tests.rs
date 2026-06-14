@@ -1,16 +1,12 @@
 use amethystate::Store;
+use amethystate::test_utils::unique_store;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn test_tauri_plugin_commands() {
     use amethystate::{DefaultStore, StoreBuilder};
     use tauri::Manager;
-    let db_path = std::env::temp_dir().join("amethystate_tauri_test_store.redb");
-    if db_path.exists() {
-        let _ = std::fs::remove_file(&db_path);
-    }
-
-    let store = StoreBuilder::new(&db_path).build().unwrap();
+    let store = unique_store("amethystate_tauri_test_store.redb");
 
     store.set("test_root.value", &100i32).unwrap();
     store.save_now().unwrap();

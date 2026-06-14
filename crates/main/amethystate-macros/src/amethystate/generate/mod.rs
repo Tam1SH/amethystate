@@ -3,9 +3,9 @@ mod data;
 mod init;
 mod wasm;
 
+use amethystate_macros_core::{MacroArgs, StoreFieldEntry, get_type_ident_str};
 use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
-use amethystate_macros_core::{MacroArgs, StoreFieldEntry, get_type_ident_str};
 use syn::parse::{Parse, ParseStream, Parser};
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Expr, Ident, Token, Visibility};

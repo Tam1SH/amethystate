@@ -1,6 +1,6 @@
+use amethystate::{AmeStateSlice, DefaultStore, ReactiveScope, Store};
 use futures::StreamExt as _;
 use gpui::{App, AppContext, Entity};
-use amethystate::{DefaultStore, ReactiveScope, AmeStateSlice, Store};
 use std::marker::PhantomData;
 use std::ops::Deref;
 
@@ -8,7 +8,7 @@ use std::ops::Deref;
 pub struct RpView<T, S> {
     inner: T,
     _scope: ReactiveScope,
-    _phantom: PhantomData<S>
+    _phantom: PhantomData<S>,
 }
 
 impl<T, S> Deref for RpView<T, S> {
@@ -29,21 +29,21 @@ impl<S: Store, T: AmeStateSlice<S>> RpView<T, S> {
         Self {
             inner,
             _scope,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 }
 
 pub type RpEntity<T, S = DefaultStore> = Entity<RpView<T, S>>;
 
-pub trait amethystateExt {
+pub trait AmeStateExt {
     fn new_amethystate<S: Store, T: AmeStateSlice<S> + 'static, E>(
         &mut self,
         f: impl FnOnce() -> Result<T, E>,
     ) -> Result<RpEntity<T, S>, E>;
 }
 
-impl amethystateExt for App {
+impl AmeStateExt for App {
     fn new_amethystate<S: Store, T: AmeStateSlice<S> + 'static, E>(
         &mut self,
         f: impl FnOnce() -> Result<T, E>,
@@ -54,14 +54,14 @@ impl amethystateExt for App {
         let (tx, mut rx) = futures::channel::mpsc::unbounded::<()>();
 
         let entity = self.insert_entity(reservation, move |ctx| {
-
             ctx.spawn(async move |this, cx| {
                 while let Some(()) = rx.next().await {
                     let _ = this.update(cx, |_, entity_cx| {
                         entity_cx.notify();
                     });
                 }
-            }).detach();
+            })
+            .detach();
 
             RpView::new(inner, tx)
         });

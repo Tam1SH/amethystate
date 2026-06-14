@@ -139,7 +139,6 @@ where
         Ok(self.core.cache.lock().unwrap().clone())
     }
 
-
     pub async fn entries(&self) -> Result<HashMap<K, V>, B::Error> {
         Ok(crate::map_entries_async(&self.backend, &self.prefix)
             .await?

@@ -1,0 +1,13 @@
+:root {
+    --bg: #1a1720;
+    --fg: #e0d8f0;
+    --sidebar-bg: #141218;
+    --sidebar-fg: #c0b8d8;
+    --sidebar-active: #a855f7;
+    --link-fg: #a855f7;
+    --inline-code-color: #c084fc;
+    --quote-bg: #221e2a;
+    --quote-border: #7c3aed;
+    --table-border-color: #3d3550;
+    --theme-hover: rgba(168, 85, 247, 0.08);
+}

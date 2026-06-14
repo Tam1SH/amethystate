@@ -1,5 +1,5 @@
-use crate::migration::fields::AmeStateFields;
 use crate::Store;
+use crate::migration::fields::AmeStateFields;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -9,5 +9,11 @@ pub trait AmeStateNode<S: Store>: Sized {
 }
 
 pub trait AmeState {
-    type Data: AmeStateFields + Serialize + for<'de> Deserialize<'de> + Clone + Send + Sync + 'static;
+    type Data: AmeStateFields
+        + Serialize
+        + for<'de> Deserialize<'de>
+        + Clone
+        + Send
+        + Sync
+        + 'static;
 }

@@ -1,6 +1,5 @@
-use amethystate::{DefaultStore, ReactiveScope, AmeStateSlice, StoreBuilder, amethystate};
+use amethystate::{StoreBuilder, amethystate};
 use amethystate_core::test_utils::unique_path;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 

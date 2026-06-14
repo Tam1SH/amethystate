@@ -1,7 +1,10 @@
 use crate::primitives::*;
+use amethystate::{
+    AccessMode, Field, MapChange, Pipeline, Reactive, ReactiveMap, ReactiveMapKey,
+    ReactiveMapValue, Result as RpResult, SignalSubscription, Store, WritableMode,
+};
 use parking_lot::RwLock;
-use amethystate::{AccessMode, Field, MapChange, Pipeline, Reactive, ReactiveMap, ReactiveMapKey, ReactiveMapValue, Result as RpResult, SignalSubscription, Store, WritableMode};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use slotmap::{DefaultKey, SlotMap};
 use std::any::Any;
 use std::marker::PhantomData;
@@ -37,7 +40,10 @@ impl<S: Store> Arena<S> {
     {
         let storage = self.storage.read();
         let item = storage.get(key).unwrap_or_else(|| {
-            panic!("amethystate-arena: Attempted to access a dropped {}", type_name)
+            panic!(
+                "amethystate-arena: Attempted to access a dropped {}",
+                type_name
+            )
         });
         let target = item
             .downcast_ref::<Item>()
@@ -117,7 +123,6 @@ impl<S: Store> Arena<S> {
             field.subscribe_with_source(callback)
         })
     }
-
 
     pub fn register_pipeline<T>(&self, pipeline: Pipeline<T>) -> PipelineHandle<T>
     where

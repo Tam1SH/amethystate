@@ -1,8 +1,8 @@
-use futures::future::AbortHandle;
-use futures::StreamExt;
 use amethystate_core::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
-use amethystate_core::{AsyncSubscriptionBackend, AmeBackendAsync, SubscriptionHandle};
+use amethystate_core::{AmeBackendAsync, AsyncSubscriptionBackend, SubscriptionHandle};
 use amethystate_core::{FieldCore, MapChange, ReactiveMapCore};
+use futures::StreamExt;
+use futures::future::AbortHandle;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -13,7 +13,9 @@ use uuid::Uuid;
 pub struct TauriBackend;
 
 impl TauriBackend {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl AmeBackendAsync for TauriBackend {
@@ -33,7 +35,7 @@ impl AmeBackendAsync for TauriBackend {
             "plugin:amethystate|amethystate_get",
             &GetArgs { key: path },
         )
-            .await?;
+        .await?;
 
         raw.map(serde_json::from_value)
             .transpose()
@@ -63,9 +65,13 @@ impl AmeBackendAsync for TauriBackend {
         let value = serde_json::to_value(value).map_err(|e| e.to_string())?;
         tauri_sys::core::invoke_result::<(), String>(
             "plugin:amethystate|amethystate_set",
-            &SetArgs { key: path, value, source },
+            &SetArgs {
+                key: path,
+                value,
+                source,
+            },
         )
-            .await
+        .await
     }
 
     async fn set_owned_with_source<T: Serialize>(
@@ -81,7 +87,11 @@ impl AmeBackendAsync for TauriBackend {
         self.delete_with_source(path, None).await
     }
 
-    async fn delete_with_source(&self, path: &str, source: Option<Uuid>) -> Result<(), Self::Error> {
+    async fn delete_with_source(
+        &self,
+        path: &str,
+        source: Option<Uuid>,
+    ) -> Result<(), Self::Error> {
         #[derive(Serialize)]
         struct DeleteArgs<'a> {
             key: &'a str,
@@ -92,7 +102,7 @@ impl AmeBackendAsync for TauriBackend {
             "plugin:amethystate|amethystate_delete",
             &DeleteArgs { key: path, source },
         )
-            .await
+        .await
     }
 
     async fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Self::Raw)>, Self::Error> {
@@ -106,7 +116,7 @@ impl AmeBackendAsync for TauriBackend {
                 "plugin:amethystate|amethystate_get_prefix",
                 &PrefixArgs { prefix },
             )
-                .await?;
+            .await?;
 
         Ok(raw.into_iter().collect())
     }
@@ -145,7 +155,7 @@ impl AsyncSubscriptionBackend for TauriBackend {
                 "plugin:amethystate|amethystate_subscribe",
                 &SubArgs { key: &path },
             )
-                .await;
+            .await;
 
             if let Ok(stream) = tauri_sys::event::listen::<T>(&event_channel).await {
                 let mut aborted_stream =
@@ -159,11 +169,7 @@ impl AsyncSubscriptionBackend for TauriBackend {
         SubscriptionHandle::new(move || abort_handle.abort())
     }
 
-    fn subscribe_map<K, V>(
-        &self,
-        path: Arc<str>,
-        core: ReactiveMapCore<K, V>,
-    ) -> SubscriptionHandle
+    fn subscribe_map<K, V>(&self, path: Arc<str>, core: ReactiveMapCore<K, V>) -> SubscriptionHandle
     where
         K: ReactiveMapKey + for<'de> Deserialize<'de>,
         V: ReactiveMapValue,
@@ -181,7 +187,7 @@ impl AsyncSubscriptionBackend for TauriBackend {
                 "plugin:amethystate|amethystate_subscribe",
                 &SubArgs { key: &path },
             )
-                .await;
+            .await;
 
             if let Ok(stream) = tauri_sys::event::listen::<serde_json::Value>(&event_channel).await
             {
@@ -231,7 +237,9 @@ enum MapChangeHelper<K, V> {
 impl<K, V> MapChangeHelper<K, V> {
     fn into_core(self) -> MapChange<K, V> {
         match self {
-            MapChangeHelper::Insert { key, value, source } => MapChange::Insert { key, value, source },
+            MapChangeHelper::Insert { key, value, source } => {
+                MapChange::Insert { key, value, source }
+            }
             MapChangeHelper::Update {
                 key,
                 old_value,
@@ -243,7 +251,15 @@ impl<K, V> MapChangeHelper<K, V> {
                 new_value,
                 source,
             },
-            MapChangeHelper::Remove { key, old_value, source } => MapChange::Remove { key, old_value, source },
+            MapChangeHelper::Remove {
+                key,
+                old_value,
+                source,
+            } => MapChange::Remove {
+                key,
+                old_value,
+                source,
+            },
             MapChangeHelper::Clear { source } => MapChange::Clear { source },
         }
     }

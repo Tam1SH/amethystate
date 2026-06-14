@@ -1,6 +1,6 @@
-use crate::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
 use crate::AmeBackendAsync as AmeBackend;
-use crate::{map_apply_remote_change, MapChange, ReactiveMapCore};
+use crate::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
+use crate::{MapChange, ReactiveMapCore, map_apply_remote_change};
 use uuid::Uuid;
 
 use serde::de::DeserializeOwned;
@@ -170,13 +170,7 @@ where
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
-    map_apply_change_async(
-        backend,
-        core,
-        path,
-        MapChange::Clear { source }
-    )
-    .await
+    map_apply_change_async(backend, core, path, MapChange::Clear { source }).await
 }
 
 pub async fn map_apply_change_async<B, K, V>(

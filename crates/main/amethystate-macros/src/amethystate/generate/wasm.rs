@@ -1,7 +1,7 @@
 use crate::amethystate::generate::parse_default;
+use amethystate_macros_core::{MacroArgs, StoreFieldEntry};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use amethystate_macros_core::{MacroArgs, StoreFieldEntry};
 use syn::{Ident, Visibility};
 
 pub fn generate_wasm_code(

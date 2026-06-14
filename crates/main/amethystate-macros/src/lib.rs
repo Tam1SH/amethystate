@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 
-mod migrate;
 mod amethystate;
+mod migrate;
 //TODO: add as_root attribute
 
 /// Generates a persistent state wrapper for a struct.
@@ -191,14 +191,17 @@ pub fn ame_type_derive(input: TokenStream) -> TokenStream {
     let name = &input.ident;
 
     let field_hashes = if let syn::Data::Struct(s) = &input.data {
-        s.fields.iter().map(|f| {
-            let field_name = f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
-            let ty = &f.ty;
-            quote::quote! {
-                ^ ::amethystate::migration::types::fnv1a(#field_name.as_bytes())
-                ^ <#ty as ::amethystate::migration::types::AmeType>::TYPE_HASH
-            }
-        }).collect::<Vec<_>>()
+        s.fields
+            .iter()
+            .map(|f| {
+                let field_name = f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
+                let ty = &f.ty;
+                quote::quote! {
+                    ^ ::amethystate::migration::types::fnv1a(#field_name.as_bytes())
+                    ^ <#ty as ::amethystate::migration::types::AmeType>::TYPE_HASH
+                }
+            })
+            .collect::<Vec<_>>()
     } else {
         vec![]
     };

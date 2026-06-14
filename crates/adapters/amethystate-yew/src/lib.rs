@@ -19,7 +19,6 @@ where
     pub clear: Callback<()>,
 }
 
-
 #[derive(Properties)]
 pub struct AmeStateProviderProps<B>
 where
@@ -27,6 +26,7 @@ where
 {
     pub backend: B,
 
+    #[allow(clippy::type_complexity)]
     pub init: Rc<dyn Fn(B) -> Pin<Box<dyn Future<Output = ()>>>>,
 
     pub fallback: Html,
@@ -42,7 +42,6 @@ where
         self.backend == other.backend && Rc::ptr_eq(&self.init, &other.init)
     }
 }
-
 
 #[function_component(AmeStateProvider)]
 pub fn rp_state_provider<B>(props: &AmeStateProviderProps<B>) -> Html

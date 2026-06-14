@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Creator: CorelDRAW -->
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="128px" height="128px" version="1.1" style="shape-rendering:geometricPrecision; text-rendering:geometricPrecision; image-rendering:optimizeQuality; fill-rule:evenodd; clip-rule:evenodd"
+viewBox="0 0 128 128"
+ xmlns:xlink="http://www.w3.org/1999/xlink"
+ xmlns:xodm="http://www.corel.com/coreldraw/odm/2003">
+ <defs>
+  <style type="text/css">
+   <![CDATA[
+    .str0 {stroke:#282829;stroke-width:0.75;stroke-miterlimit:2.61313}
+    .fil0 {fill:#FEFEFE}
+    .fil1 {fill:#282829}
+   ]]>
+  </style>
+ </defs>
+ <g id="Layer_x0020_1">
+  <metadata id="CorelCorpID_0Corel-Layer"/>
+  <g id="_2960938784096">
+   <path class="fil0" d="M93.49 22.12l10.79 18.48 10.79 18.49c1.84,3.14 1.86,6.75 0.05,9.92l-10.61 18.59 -10.61 18.58c-1.81,3.17 -4.92,4.99 -8.57,5.01l-21.4 0.1 -21.4 0.11c-3.64,0.02 -6.78,-1.77 -8.62,-4.92l-10.79 -18.48 -10.79 -18.48c-1.84,-3.15 -1.86,-6.76 -0.05,-9.93l10.61 -18.58 10.61 -18.59c1.8,-3.16 4.92,-4.99 8.57,-5l21.4 -0.11 21.4 -0.11c3.64,-0.01 6.78,1.78 8.62,4.92z"/>
+   <rect class="fil1 str0" x="28.16" y="57.83" width="18.67" height="13.79"/>
+   <rect class="fil1 str0" transform="matrix(2.64845E-14 0.849193 -1 2.24905E-14 70.6306 29.3794)" width="18.67" height="13.79"/>
+   <rect class="fil1 str0" transform="matrix(2.64845E-14 0.924654 -1 2.4489E-14 70.4646 82.1513)" width="18.67" height="13.79"/>
+   <rect class="fil1 str0" x="80.65" y="57.43" width="18.67" height="13.79"/>
+   <path class="fil1 str0" d="M46.83 57.83l0 0c5.37,0 9.76,4.4 9.76,9.76l0 4.03 -9.76 0 0 -13.79z"/>
+   <path class="fil1 str0" d="M80.65 71.23l0 0c-5.37,0 -9.76,-4.4 -9.76,-9.76l0 -4.04 9.76 0 0 13.8z"/>
+   <path class="fil1 str0" d="M56.84 45.23l13.79 0 0 11.79 -2.01 0c-6.48,0 -11.78,-5.3 -11.78,-11.79l0 0z"/>
+   <path class="fil1 str0" d="M70.46 82.15l-13.79 0 0 -10.7 3.1 0c5.88,0 10.69,4.82 10.69,10.7l0 0z"/>
+  </g>
+ </g>
+</svg>

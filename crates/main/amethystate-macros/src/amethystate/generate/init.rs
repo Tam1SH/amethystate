@@ -1,8 +1,8 @@
 use crate::amethystate::generate::accessors::{field_mode, lookup_chain};
 use crate::amethystate::generate::parse_default;
+use amethystate_macros_core::StoreFieldEntry;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, quote_spanned};
-use amethystate_macros_core::StoreFieldEntry;
 
 pub(crate) fn init_fields(
     crate_name: &TokenStream2,
