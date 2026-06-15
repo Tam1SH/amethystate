@@ -120,7 +120,7 @@ fn migrate_proxy_config_v1_to_v2(
 }
 ```
 
-The `ctx` here is scoped to the node's prefix — `ctx.delete("routes.api")` deletes `network.routes.api`. See [Manual Migrations](./manual.md) for the full context API.
+The `ctx` here is scoped to the node's prefix — `ctx.delete("routes.api")` deletes `network.routes.api`. See [Manual Migrations](./manual) for the full context API.
 
 ## Multi-step paths
 

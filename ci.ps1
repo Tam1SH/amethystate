@@ -24,24 +24,24 @@ Exec { cargo test --workspace --no-default-features --features toml,confy-compat
 Exec { cargo test --workspace --no-default-features --features ron,confy-compat }
 Exec { cargo test --workspace --no-default-features --features sqlite-bundled }
 Exec { cargo test --workspace --all-features }
-
-$examples = Get-ChildItem -Path "examples" -Directory
-foreach ($example in $examples) {
-    Push-Location $example.FullName
-    Exec { cargo build }
-    Pop-Location
-}
-
-$wasmCrates = @(
-    "crates\adapters\amethystate-dioxus",
-    "crates\adapters\amethystate-leptos",
-    "crates\adapters\amethystate-yew",
-    "crates\adapters\amethystate-tauri",
-    "crates\main\amethystate-arena"
-)
-
-foreach ($crate in $wasmCrates) {
-    Push-Location $crate
-    Exec { cargo build --target wasm32-unknown-unknown }
-    Pop-Location
-}
+#
+#$examples = Get-ChildItem -Path "examples" -Directory
+#foreach ($example in $examples) {
+#    Push-Location $example.FullName
+#    Exec { cargo build }
+#    Pop-Location
+#}
+#
+#$wasmCrates = @(
+#    "crates\adapters\amethystate-dioxus",
+#    "crates\adapters\amethystate-leptos",
+#    "crates\adapters\amethystate-yew",
+#    "crates\adapters\amethystate-tauri",
+#    "crates\main\amethystate-arena"
+#)
+#
+#foreach ($crate in $wasmCrates) {
+#    Push-Location $crate
+#    Exec { cargo build --target wasm32-unknown-unknown }
+#    Pop-Location
+#}

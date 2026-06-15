@@ -62,8 +62,16 @@ impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for ReactiveMapCore
         } else {
             d.field("cache", &"<locked>");
         }
-        let interceptors_count = self.interceptors_any.try_lock().map(|l| l.len()).unwrap_or(0);
-        let subscribers_count = self.subscribers_any.try_lock().map(|l| l.len()).unwrap_or(0);
+        let interceptors_count = self
+            .interceptors_any
+            .try_lock()
+            .map(|l| l.len())
+            .unwrap_or(0);
+        let subscribers_count = self
+            .subscribers_any
+            .try_lock()
+            .map(|l| l.len())
+            .unwrap_or(0);
         d.field("interceptors_any_count", &interceptors_count)
             .field("subscribers_any_count", &subscribers_count)
             .finish()
@@ -96,15 +104,22 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
     {
         let location = std::panic::Location::caller();
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let meta = SubscriptionMeta { id, location, name: None };
-        self.subscribers_any.lock().unwrap().push((id, Arc::new(callback), meta));
+        let meta = SubscriptionMeta {
+            id,
+            location,
+            name: None,
+        };
+        self.subscribers_any
+            .lock()
+            .unwrap()
+            .push((id, Arc::new(callback), meta));
 
         let subs_for_name = self.subscribers_any.clone();
         let set_name = Arc::new(move |name: &'static str| {
-            if let Ok(mut lock) = subs_for_name.lock() {
-                if let Some(entry) = lock.iter_mut().find(|(i, _, _)| *i == id) {
-                    entry.2.name = Some(name);
-                }
+            if let Ok(mut lock) = subs_for_name.lock()
+                && let Some(entry) = lock.iter_mut().find(|(i, _, _)| *i == id)
+            {
+                entry.2.name = Some(name);
             }
         });
         let subs_for_cleanup = self.subscribers_any.clone();
@@ -128,8 +143,14 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
     {
         let location = std::panic::Location::caller();
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let meta = SubscriptionMeta { id, location, name: None };
-        self.subscribers_key.lock().unwrap()
+        let meta = SubscriptionMeta {
+            id,
+            location,
+            name: None,
+        };
+        self.subscribers_key
+            .lock()
+            .unwrap()
             .entry(key.clone())
             .or_default()
             .push((id, Arc::new(callback), meta));
@@ -137,12 +158,11 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
         let subs_for_name = self.subscribers_key.clone();
         let key_for_name = key.clone();
         let set_name = Arc::new(move |name: &'static str| {
-            if let Ok(mut lock) = subs_for_name.lock() {
-                if let Some(list) = lock.get_mut(&key_for_name) {
-                    if let Some(entry) = list.iter_mut().find(|(i, _, _)| *i == id) {
-                        entry.2.name = Some(name);
-                    }
-                }
+            if let Ok(mut lock) = subs_for_name.lock()
+                && let Some(list) = lock.get_mut(&key_for_name)
+                && let Some(entry) = list.iter_mut().find(|(i, _, _)| *i == id)
+            {
+                entry.2.name = Some(name);
             }
         });
         let subs_for_cleanup = self.subscribers_key.clone();
@@ -166,7 +186,10 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
         F: Fn(MapChange<K, V>) -> Option<MapChange<K, V>> + Send + Sync + 'static,
     {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.interceptors_any.lock().unwrap().push((id, Arc::new(callback)));
+        self.interceptors_any
+            .lock()
+            .unwrap()
+            .push((id, Arc::new(callback)));
         let subs = self.interceptors_any.clone();
         InterceptDisposer {
             id,
@@ -184,7 +207,9 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
         F: Fn(MapChange<K, V>) -> Option<MapChange<K, V>> + Send + Sync + 'static,
     {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.interceptors_key.lock().unwrap()
+        self.interceptors_key
+            .lock()
+            .unwrap()
             .entry(key.clone())
             .or_default()
             .push((id, Arc::new(callback)));

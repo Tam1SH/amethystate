@@ -26,6 +26,10 @@ impl<S: ::amethystate::Store> DatabaseConfig<S> {
         instance_id: ::amethystate::uuid::Uuid,
     ) -> ::amethystate::Result<Self> {
         use ::amethystate::Store;
+        ::amethystate::observability::register_instance(
+            instance_id,
+            ::std::any::type_name::<Self>(),
+        );
         let result = Self {
             __amethystate_instance_id: instance_id,
             host: ::amethystate::store::field_with_path(
@@ -445,24 +449,25 @@ impl<S: ::amethystate::Store> SystemSettings<S> {
         instance_id: ::amethystate::uuid::Uuid,
     ) -> ::amethystate::Result<Self> {
         use ::amethystate::Store;
+        ::amethystate::observability::register_instance(
+            instance_id,
+            ::std::any::type_name::<Self>(),
+        );
         let result = Self {
             __amethystate_instance_id: instance_id,
-            db: ::std::sync::Arc::new(
-                DatabaseConfig::<
-                    S,
-                >::new_with_id(
-                    store,
-                    &::alloc::__export::must_use({
-                        ::alloc::fmt::format(
-                            format_args!(
-                                "{0}.{1}", < Self as ::amethystate::StateScope >::PREFIX,
-                                "db",
-                            ),
-                        )
-                    }),
-                    instance_id,
-                )?,
-            ),
+            db: {
+                let prefix = <Self as ::amethystate::StateScope>::PREFIX;
+                let path = if prefix == "." {
+                    "db".to_string()
+                } else {
+                    ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("{0}.{1}", prefix, "db"))
+                    })
+                };
+                ::std::sync::Arc::new(
+                    DatabaseConfig::<S>::new_with_id(store, &path, instance_id)?,
+                )
+            },
         };
         store.mark_initialized(<Self as ::amethystate::StateScope>::PREFIX)?;
         Ok(result)

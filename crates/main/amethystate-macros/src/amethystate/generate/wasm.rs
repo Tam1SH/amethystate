@@ -1,6 +1,6 @@
+use crate::amethystate::MacroArgs;
 use crate::amethystate::generate::parse_default;
 use amethystate_macros_core::StoreFieldEntry;
-use crate::amethystate::MacroArgs;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{Ident, Visibility};
@@ -54,9 +54,14 @@ pub fn generate_wasm_code(
         else if let Some(lookup_node) = &e.lookup_node { lookup_node.to_string() }
         else { e.key.as_deref().unwrap_or(&fname.to_string()).to_string() };
 
-        let full_key = if e.lookup.is_some() || e.lookup_node.is_some() { key_suffix }
-        else if prefix_str == "." { key_suffix }
-        else { format!("{}.{}", prefix_str, key_suffix) };
+        let has_lookup = e.lookup.is_some() || e.lookup_node.is_some();
+
+        let full_key = if has_lookup || prefix_str == "." {
+            key_suffix
+        } else {
+            format!("{prefix_str}.{key_suffix}")
+        };
+
 
         let ty = &e.ty;
         let fallback = e.default.as_ref().map(parse_default).unwrap_or_else(|| quote! { ::std::default::Default::default() });

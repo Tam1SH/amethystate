@@ -28,6 +28,10 @@ impl<S: ::amethystate::Store> ConnectionPool<S> {
         instance_id: ::amethystate::uuid::Uuid,
     ) -> ::amethystate::Result<Self> {
         use ::amethystate::Store;
+        ::amethystate::observability::register_instance(
+            instance_id,
+            ::std::any::type_name::<Self>(),
+        );
         let result = Self {
             __amethystate_instance_id: instance_id,
             max_connections: ::amethystate::store::field_with_path(
@@ -547,24 +551,25 @@ impl<S: ::amethystate::Store> DatabaseState<S> {
         instance_id: ::amethystate::uuid::Uuid,
     ) -> ::amethystate::Result<Self> {
         use ::amethystate::Store;
+        ::amethystate::observability::register_instance(
+            instance_id,
+            ::std::any::type_name::<Self>(),
+        );
         let result = Self {
             __amethystate_instance_id: instance_id,
-            pool: ::std::sync::Arc::new(
-                ConnectionPool::<
-                    S,
-                >::new_with_id(
-                    store,
-                    &::alloc::__export::must_use({
-                        ::alloc::fmt::format(
-                            format_args!(
-                                "{0}.{1}", < Self as ::amethystate::StateScope >::PREFIX,
-                                "pool",
-                            ),
-                        )
-                    }),
-                    instance_id,
-                )?,
-            ),
+            pool: {
+                let prefix = <Self as ::amethystate::StateScope>::PREFIX;
+                let path = if prefix == "." {
+                    "pool".to_string()
+                } else {
+                    ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("{0}.{1}", prefix, "pool"))
+                    })
+                };
+                ::std::sync::Arc::new(
+                    ConnectionPool::<S>::new_with_id(store, &path, instance_id)?,
+                )
+            },
         };
         store.mark_initialized(<Self as ::amethystate::StateScope>::PREFIX)?;
         Ok(result)
@@ -992,6 +997,10 @@ impl<S: ::amethystate::Store> InspectorState<S> {
         instance_id: ::amethystate::uuid::Uuid,
     ) -> ::amethystate::Result<Self> {
         use ::amethystate::Store;
+        ::amethystate::observability::register_instance(
+            instance_id,
+            ::std::any::type_name::<Self>(),
+        );
         let result = Self {
             __amethystate_instance_id: instance_id,
             db_pool_view: {
@@ -1004,14 +1013,18 @@ impl<S: ::amethystate::Store> InspectorState<S> {
                     let _ = unsafe { (&*::core::ptr::null::<DatabaseState>()) }
                         .__schema_field_pool();
                 };
-                let path = ::alloc::__export::must_use({
-                    ::alloc::fmt::format(
-                        format_args!(
-                            "{0}.{1}", < DatabaseState < S > as ::amethystate::StateScope
-                            >::PREFIX, "pool",
-                        ),
-                    )
-                });
+                let parent_prefix = <DatabaseState<
+                    S,
+                > as ::amethystate::StateScope>::PREFIX;
+                let path = if parent_prefix == "." {
+                    "pool".to_string()
+                } else {
+                    ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!("{0}.{1}", parent_prefix, "pool"),
+                        )
+                    })
+                };
                 ::std::sync::Arc::new(
                     <ConnectionPool<
                         S,

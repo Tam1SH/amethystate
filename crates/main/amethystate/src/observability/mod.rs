@@ -44,9 +44,7 @@ pub fn register_field(path: Arc<str>, instance_id: Uuid, value_type_name: &'stat
         Some(n) => n,
         None => return,
     };
-    let field_name: Arc<str> = Arc::from(
-        path.rsplit('.').next().unwrap_or(path.as_ref())
-    );
+    let field_name: Arc<str> = Arc::from(path.rsplit('.').next().unwrap_or(path.as_ref()));
     if let Ok(mut map) = SCHEMA_REGISTRY.write() {
         map.entry(Arc::clone(&path)).or_insert(FieldMeta {
             struct_type_name,

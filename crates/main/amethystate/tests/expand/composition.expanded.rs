@@ -30,6 +30,10 @@ impl<S: ::amethystate::Store> NetworkState<S> {
         instance_id: ::amethystate::uuid::Uuid,
     ) -> ::amethystate::Result<Self> {
         use ::amethystate::Store;
+        ::amethystate::observability::register_instance(
+            instance_id,
+            ::std::any::type_name::<Self>(),
+        );
         let result = Self {
             __amethystate_instance_id: instance_id,
             port: ::amethystate::store::field::<
@@ -517,6 +521,10 @@ impl<S: ::amethystate::Store> UiState<S> {
         instance_id: ::amethystate::uuid::Uuid,
     ) -> ::amethystate::Result<Self> {
         use ::amethystate::Store;
+        ::amethystate::observability::register_instance(
+            instance_id,
+            ::std::any::type_name::<Self>(),
+        );
         let result = Self {
             __amethystate_instance_id: instance_id,
             proxy_port: {
@@ -533,14 +541,16 @@ impl<S: ::amethystate::Store> UiState<S> {
                             .__schema_field_port(),
                     );
                 };
-                let path = ::alloc::__export::must_use({
-                    ::alloc::fmt::format(
-                        format_args!(
-                            "{0}.{1}", < NetworkState as ::amethystate::StateScope
-                            >::PREFIX, "port",
-                        ),
-                    )
-                });
+                let parent_prefix = <NetworkState as ::amethystate::StateScope>::PREFIX;
+                let path = if parent_prefix == "." {
+                    "port".to_string()
+                } else {
+                    ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!("{0}.{1}", parent_prefix, "port"),
+                        )
+                    })
+                };
                 ::amethystate::store::field_with_path::<
                     u16,
                     _,
@@ -566,14 +576,16 @@ impl<S: ::amethystate::Store> UiState<S> {
                             .__schema_field_host(),
                     );
                 };
-                let path = ::alloc::__export::must_use({
-                    ::alloc::fmt::format(
-                        format_args!(
-                            "{0}.{1}", < NetworkState as ::amethystate::StateScope
-                            >::PREFIX, "host",
-                        ),
-                    )
-                });
+                let parent_prefix = <NetworkState as ::amethystate::StateScope>::PREFIX;
+                let path = if parent_prefix == "." {
+                    "host".to_string()
+                } else {
+                    ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!("{0}.{1}", parent_prefix, "host"),
+                        )
+                    })
+                };
                 ::amethystate::store::field_with_path::<
                     String,
                     _,

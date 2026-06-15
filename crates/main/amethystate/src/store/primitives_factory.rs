@@ -1,5 +1,5 @@
-use crate::{Field, ReactiveMap, StateScope, Store, StoreOp, StoreSubscription, SubscriptionKind};
 use crate::observability::register_field;
+use crate::{Field, ReactiveMap, StateScope, Store, StoreOp, StoreSubscription, SubscriptionKind};
 use amethystate_core::{AccessMode, FieldCore, MapChange, ReactiveMapCore, Signal, WritableMode};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -36,8 +36,11 @@ where
     TValue: Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
     M: AccessMode,
 {
-
-    register_field(Arc::clone(&path), instance_id, std::any::type_name::<TValue>());
+    register_field(
+        Arc::clone(&path),
+        instance_id,
+        std::any::type_name::<TValue>(),
+    );
 
     if store.get::<TValue>(&path)?.is_none() {
         store.set(&path, &default)?;

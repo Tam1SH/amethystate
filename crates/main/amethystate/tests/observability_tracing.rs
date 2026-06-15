@@ -12,7 +12,6 @@ pub struct ObsState {
     pub host: String,
 }
 
-
 #[test]
 fn instance_registered_on_new() {
     let path = unique_path("obs_instance_reg");
@@ -29,15 +28,14 @@ fn instance_registered_on_new() {
     );
 }
 
-
 #[test]
 fn fields_registered_in_schema_registry() {
     let path = unique_path("obs_schema_reg");
     let store = StoreBuilder::new(&path).build().unwrap();
     let _state = ObsState::new_with(&store).unwrap();
 
-    let port_meta = observability::resolve_field("obs.port")
-        .expect("obs.port must be in schema registry");
+    let port_meta =
+        observability::resolve_field("obs.port").expect("obs.port must be in schema registry");
     assert_eq!(port_meta.field_name.as_ref(), "port");
     assert!(
         port_meta.struct_type_name.contains("ObsState"),
@@ -50,12 +48,11 @@ fn fields_registered_in_schema_registry() {
         port_meta.value_type_name
     );
 
-    let host_meta = observability::resolve_field("obs.host")
-        .expect("obs.host must be in schema registry");
+    let host_meta =
+        observability::resolve_field("obs.host").expect("obs.host must be in schema registry");
     assert_eq!(host_meta.field_name.as_ref(), "host");
     assert!(host_meta.value_type_name.contains("String"));
 }
-
 
 #[test]
 #[traced_test]
@@ -67,7 +64,10 @@ fn field_set_emits_trace() {
     state.port().set(9090).unwrap();
 
     assert!(logs_contain("field write"), "expected 'field write' trace");
-    assert!(logs_contain("obs.port"), "expected path 'obs.port' in trace");
+    assert!(
+        logs_contain("obs.port"),
+        "expected path 'obs.port' in trace"
+    );
 }
 
 #[test]
@@ -84,7 +84,6 @@ fn field_set_trace_contains_source_name() {
         "expected struct name 'ObsState' in write trace"
     );
 }
-
 
 #[test]
 #[traced_test]
@@ -122,7 +121,6 @@ fn named_subscription_appears_in_trace() {
     );
 }
 
-
 #[test]
 #[traced_test]
 fn forked_write_traces_with_source() {
@@ -133,6 +131,9 @@ fn forked_write_traces_with_source() {
 
     fork.port().set(7777).unwrap();
 
-    assert!(logs_contain("field write"), "expected trace from fork write");
+    assert!(
+        logs_contain("field write"),
+        "expected trace from fork write"
+    );
     assert!(logs_contain("obs.port"));
 }

@@ -46,7 +46,7 @@ let store = StoreBuilder::new("./app.redb")
 
 No further configuration is needed if all your steps are defined with the macro.
 
-For cases where codegen isn't enough — cross-node logic, data backfills, external data sources — see [Manual Migrations](./manual.md).
+For cases where codegen isn't enough — cross-node logic, data backfills, external data sources — see [Manual Migrations](./manual).
 
 ## What happens on a clean install
 

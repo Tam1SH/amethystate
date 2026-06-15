@@ -76,7 +76,9 @@ impl<T: 'static> Signal<T> {
         let val = self.value.load_full();
         let callbacks: Vec<_> = {
             let subs = self.subscribers.lock().unwrap();
-            subs.iter().map(|(_, cb, meta)| (cb.clone(), *meta)).collect()
+            subs.iter()
+                .map(|(_, cb, meta)| (cb.clone(), *meta))
+                .collect()
         };
         for (cb, meta) in callbacks {
             tracing::trace!(
@@ -105,7 +107,11 @@ impl<T: 'static> Signal<T> {
     {
         let location = std::panic::Location::caller();
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let meta = SubscriptionMeta { id, location, name: None };
+        let meta = SubscriptionMeta {
+            id,
+            location,
+            name: None,
+        };
         {
             let mut subs = self.subscribers.lock().unwrap();
             subs.push((id, Arc::new(callback), meta));
@@ -113,10 +119,10 @@ impl<T: 'static> Signal<T> {
 
         let subscribers_for_name = self.subscribers.clone();
         let set_name = Arc::new(move |name: &'static str| {
-            if let Ok(mut subs) = subscribers_for_name.lock() {
-                if let Some(entry) = subs.iter_mut().find(|(sid, _, _)| *sid == id) {
-                    entry.2.name = Some(name);
-                }
+            if let Ok(mut subs) = subscribers_for_name.lock()
+                && let Some(entry) = subs.iter_mut().find(|(sid, _, _)| *sid == id)
+            {
+                entry.2.name = Some(name);
             }
         });
 

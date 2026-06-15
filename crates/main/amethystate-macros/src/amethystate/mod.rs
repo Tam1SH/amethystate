@@ -27,7 +27,6 @@ pub fn amethystate_impl(
         macro_args.prefix = Some(".".to_string());
     }
 
-
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
     let struct_vis = &input.vis;

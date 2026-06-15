@@ -30,6 +30,10 @@ impl<S: ::amethystate::Store> AppConfig<S> {
         instance_id: ::amethystate::uuid::Uuid,
     ) -> ::amethystate::Result<Self> {
         use ::amethystate::Store;
+        ::amethystate::observability::register_instance(
+            instance_id,
+            ::std::any::type_name::<Self>(),
+        );
         let result = Self {
             __amethystate_instance_id: instance_id,
             port: ::amethystate::store::field::<
@@ -38,16 +42,18 @@ impl<S: ::amethystate::Store> AppConfig<S> {
                 S,
             >(store, "port", 8080, instance_id)?,
             session_id: ::amethystate::Field::new_volatile_with_id(
-                ::std::sync::Arc::from(
-                    ::alloc::__export::must_use({
-                        ::alloc::fmt::format(
-                            format_args!(
-                                "{0}.{1}", < Self as ::amethystate::StateScope >::PREFIX,
-                                "session_id",
-                            ),
-                        )
-                    }),
-                ),
+                ::std::sync::Arc::from({
+                    let prefix = <Self as ::amethystate::StateScope>::PREFIX;
+                    if prefix == "." {
+                        "session_id".to_string()
+                    } else {
+                        ::alloc::__export::must_use({
+                            ::alloc::fmt::format(
+                                format_args!("{0}.{1}", prefix, "session_id"),
+                            )
+                        })
+                    }
+                }),
                 "localhost".to_string(),
                 instance_id,
             ),
