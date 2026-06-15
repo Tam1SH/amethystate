@@ -625,8 +625,6 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::fs::File;
     use std::io::Write;
-    #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
 
     #[derive(PartialEq, Default, Debug, Serialize, Deserialize)]
     struct ExampleConfig {
