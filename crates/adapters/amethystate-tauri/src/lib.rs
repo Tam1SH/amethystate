@@ -1,3 +1,4 @@
+use crate::event::Event;
 use amethystate_core::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
 use amethystate_core::{AmeBackendAsync, AsyncSubscriptionBackend, SubscriptionHandle};
 use amethystate_core::{FieldCore, MapChange, ReactiveMapCore};
@@ -6,8 +7,15 @@ use futures::future::AbortHandle;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri_sys::event::Event;
+
 use uuid::Uuid;
+pub(crate) type TauriResult<T> = std::result::Result<T, Error>;
+
+mod core;
+mod event;
+mod error;
+pub use error::*;
+
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct TauriBackend;
@@ -31,7 +39,7 @@ impl AmeBackendAsync for TauriBackend {
             key: &'a str,
         }
 
-        let raw = tauri_sys::core::invoke_result::<Option<serde_json::Value>, String>(
+        let raw = core::invoke_result::<Option<serde_json::Value>, String>(
             "plugin:amethystate|amethystate_get",
             &GetArgs { key: path },
         )
@@ -63,7 +71,7 @@ impl AmeBackendAsync for TauriBackend {
         }
 
         let value = serde_json::to_value(value).map_err(|e| e.to_string())?;
-        tauri_sys::core::invoke_result::<(), String>(
+        core::invoke_result::<(), String>(
             "plugin:amethystate|amethystate_set",
             &SetArgs {
                 key: path,
@@ -98,7 +106,7 @@ impl AmeBackendAsync for TauriBackend {
             source: Option<Uuid>,
         }
 
-        tauri_sys::core::invoke_result::<(), String>(
+        core::invoke_result::<(), String>(
             "plugin:amethystate|amethystate_delete",
             &DeleteArgs { key: path, source },
         )
@@ -112,7 +120,7 @@ impl AmeBackendAsync for TauriBackend {
         }
 
         let raw: std::collections::HashMap<String, serde_json::Value> =
-            tauri_sys::core::invoke_result::<_, Self::Error>(
+            core::invoke_result::<_, Self::Error>(
                 "plugin:amethystate|amethystate_get_prefix",
                 &PrefixArgs { prefix },
             )
@@ -151,13 +159,13 @@ impl AsyncSubscriptionBackend for TauriBackend {
                 key: &'a str,
             }
 
-            let _ = tauri_sys::core::invoke_result::<(), String>(
+            let _ = core::invoke_result::<(), String>(
                 "plugin:amethystate|amethystate_subscribe",
                 &SubArgs { key: &path },
             )
             .await;
 
-            if let Ok(stream) = tauri_sys::event::listen::<T>(&event_channel).await {
+            if let Ok(stream) = event::listen::<T>(&event_channel).await {
                 let mut aborted_stream =
                     futures::stream::Abortable::new(stream, abort_registration);
                 while let Some(Event { payload, .. }) = aborted_stream.next().await {
@@ -183,13 +191,13 @@ impl AsyncSubscriptionBackend for TauriBackend {
                 key: &'a str,
             }
 
-            let _ = tauri_sys::core::invoke_result::<(), Self::Error>(
+            let _ = core::invoke_result::<(), Self::Error>(
                 "plugin:amethystate|amethystate_subscribe",
                 &SubArgs { key: &path },
             )
             .await;
 
-            if let Ok(stream) = tauri_sys::event::listen::<serde_json::Value>(&event_channel).await
+            if let Ok(stream) = event::listen::<serde_json::Value>(&event_channel).await
             {
                 let mut aborted_stream =
                     futures::stream::Abortable::new(stream, abort_registration);
