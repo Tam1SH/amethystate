@@ -6,7 +6,6 @@ pub enum Error {
     Command(String),
     #[error("Failed to parse JSON: {0}")]
     Serde(String),
-    #[cfg(any(feature = "event", feature = "window"))]
     #[error("Oneshot cancelled: {0}")]
     OneshotCanceled(#[from] futures::channel::oneshot::Canceled),
 }

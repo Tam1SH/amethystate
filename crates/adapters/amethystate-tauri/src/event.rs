@@ -3,8 +3,8 @@ use futures::{Stream, StreamExt, channel::mpsc};
 use serde::de::DeserializeOwned;
 use serde_wasm_bindgen as swb;
 use wasm_bindgen::{JsValue, prelude::*};
-use crate::error;
 
+#[allow(unused)]
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Event<T> {
@@ -13,6 +13,7 @@ pub struct Event<T> {
     pub payload: T,
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(tag = "kind", content = "label")]
 pub enum EventTarget {
@@ -46,11 +47,13 @@ mod inner {
 }
 
 
+#[allow(unused)]
 #[derive(serde::Serialize)]
 struct ListenOptions {
     target: ListenTarget,
 }
 
+#[allow(unused)]
 #[derive(serde::Serialize)]
 #[serde(tag = "kind")]
 enum ListenTarget {
@@ -106,6 +109,8 @@ where
     })
 }
 
+
+#[allow(unused)]
 pub async fn listen_to<T>(event: &str) -> Result<Listen<T>, String>
 where
     T: DeserializeOwned + 'static,
