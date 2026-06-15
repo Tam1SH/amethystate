@@ -31,14 +31,14 @@ rust-version = "1.89.0"
 
 [workspace.dependencies]
 # internal
-amethystate = { path = "crates/main/amethystate" }
-amethystate-core = { path = "crates/core/amethystate-core" }
-amethystate-macros = { path = "crates/main/amethystate-macros" }
-amethystate-arena = { path = "crates/main/amethystate-arena" }
-amethystate-tauri = { path = "crates/adapters/amethystate-tauri" }
-amethystate-codegen = { path = "crates/tauri/amethystate-codegen" }
-amethystate-macros-core = { path = "crates/core/amethystate-macros-core" }
-amethystate-macros-arena = { path = "crates/main/amethystate-macros-arena" }
+amethystate = { path = "crates/main/amethystate", version = "0.9.0" }
+amethystate-core = { path = "crates/core/amethystate-core", version = "0.9.0" }
+amethystate-macros = { path = "crates/main/amethystate-macros", version = "0.9.0" }
+amethystate-arena = { path = "crates/main/amethystate-arena", version = "0.9.0" }
+amethystate-tauri = { path = "crates/adapters/amethystate-tauri", version = "0.9.0" }
+amethystate-codegen = { path = "crates/tauri/amethystate-codegen", version = "0.9.0" }
+amethystate-macros-core = { path = "crates/core/amethystate-macros-core", version = "0.9.0" }
+amethystate-macros-arena = { path = "crates/main/amethystate-macros-arena", version = "0.9.0" }
 
 # external
 anyhow = "1.0"
