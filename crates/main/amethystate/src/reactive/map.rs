@@ -1,7 +1,7 @@
 use crate::store::Store;
 use crate::store::sync_backend::StoreBackend;
 use crate::{
-    AccessMode, DefaultStore, Field, ReadOnlyMode, Result, StoreSubscription, WritableMode,
+    AccessMode, DefaultStore, Field, ReadOnlyMode, StoreSubscription, WritableMode,
 };
 use amethystate_core::{InterceptDisposer, MapChange, ReactiveMapCore, SignalSubscription};
 use std::marker::PhantomData;
@@ -19,6 +19,7 @@ pub struct ReactiveMap<K, V, S: Store = DefaultStore, M: AccessMode = ReadOnlyMo
 }
 
 pub use amethystate_core::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
+use crate::reactive::error::{ReactiveMapResult, ReactiveMapError};
 
 pub type ReadOnlyReactiveMap<TValue, S> = Field<TValue, S, ReadOnlyMode>;
 pub type WritableReactiveMap<TValue, S> = Field<TValue, S, WritableMode>;
@@ -79,27 +80,27 @@ where
         }
     }
 
-    pub fn get(&self, key: &K) -> Result<Option<V>> {
+    pub fn get(&self, key: &K) -> ReactiveMapResult<Option<V>> {
         let backend = StoreBackend::new(self.store.clone());
-        amethystate_core::map_get(&backend, &self.path, key)
+        Ok(amethystate_core::map_get(&backend, &self.path, key)?)
     }
 
-    pub fn contains_key(&self, key: &K) -> Result<bool> {
+    pub fn contains_key(&self, key: &K) -> ReactiveMapResult<bool> {
         let backend = StoreBackend::new(self.store.clone());
-        amethystate_core::map_contains_key::<_, _, V>(&backend, &self.path, key)
+        Ok(amethystate_core::map_contains_key::<_, _, V>(&backend, &self.path, key)?)
     }
 
-    pub fn entries(&self) -> Result<Vec<(K, V)>> {
+    pub fn entries(&self) -> ReactiveMapResult<Vec<(K, V)>> {
         let backend = StoreBackend::new(self.store.clone());
-        amethystate_core::map_entries(&backend, &self.path)
+        Ok(amethystate_core::map_entries(&backend, &self.path)?)
     }
 
-    pub fn len(&self) -> Result<usize> {
+    pub fn len(&self) -> ReactiveMapResult<usize> {
         let backend = StoreBackend::new(self.store.clone());
-        amethystate_core::map_len(&backend, &self.path)
+        Ok(amethystate_core::map_len(&backend, &self.path)?)
     }
 
-    pub fn is_empty(&self) -> Result<bool> {
+    pub fn is_empty(&self) -> ReactiveMapResult<bool> {
         self.len().map(|l| l == 0)
     }
 
@@ -158,7 +159,7 @@ where
     V: ReactiveMapValue,
     S: Store,
 {
-    pub fn update<F>(&self, key: K, f: F) -> Result<Option<V>>
+    pub fn update<F>(&self, key: K, f: F) -> ReactiveMapResult<Option<V>>
     where
         F: FnOnce(V) -> V,
     {
@@ -167,11 +168,11 @@ where
             self.set(key, &new_val)?;
             Ok(Some(new_val))
         } else {
-            Ok(None)
+            Err(ReactiveMapError::KeyNotFound(key.to_string()))
         }
     }
 
-    pub fn modify<F>(&self, key: K, f: F) -> Result<()>
+    pub fn modify<F>(&self, key: K, f: F) -> ReactiveMapResult<()>
     where
         F: FnOnce(&mut V),
     {
@@ -179,13 +180,13 @@ where
             f(&mut val);
             self.set(key, &val)
         } else {
-            Err(crate::error::Error::KeyNotFound(key.to_string()))
+            Err(ReactiveMapError::KeyNotFound(key.to_string()))
         }
     }
 
-    pub fn set(&self, key: K, value: &V) -> Result<()> {
+    pub fn set(&self, key: K, value: &V) -> ReactiveMapResult<()> {
         let backend = StoreBackend::new(self.store.clone());
-        amethystate_core::map_set_existing(
+        Ok(amethystate_core::map_set_existing(
             &backend,
             &self.core,
             self.path.clone(),
@@ -193,12 +194,12 @@ where
             value,
             false,
             Some(self.instance_id),
-        )
+        )?)
     }
 
-    pub fn set_or_create(&self, key: K, value: &V) -> Result<()> {
+    pub fn set_or_create(&self, key: K, value: &V) -> ReactiveMapResult<()> {
         let backend = StoreBackend::new(self.store.clone());
-        amethystate_core::map_set_or_create(
+        Ok(amethystate_core::map_set_or_create(
             &backend,
             &self.core,
             self.path.clone(),
@@ -206,30 +207,30 @@ where
             value,
             false,
             Some(self.instance_id),
-        )
+        )?)
     }
 
-    pub fn remove(&self, key: K) -> Result<Option<V>> {
+    pub fn remove(&self, key: K) -> ReactiveMapResult<Option<V>> {
         let backend = StoreBackend::new(self.store.clone());
-        amethystate_core::map_remove(
+        Ok(amethystate_core::map_remove(
             &backend,
             &self.core,
             self.path.clone(),
             key,
             false,
             Some(self.instance_id),
-        )
+        )?)
     }
 
-    pub fn clear(&self) -> Result<()> {
+    pub fn clear(&self) -> ReactiveMapResult<()> {
         let backend = StoreBackend::new(self.store.clone());
-        amethystate_core::map_clear(
+        Ok(amethystate_core::map_clear(
             &backend,
             &self.core,
             self.path.clone(),
             true,
             Some(self.instance_id),
-        )
+        )?)
     }
 
     pub fn intercept<F>(&self, callback: F) -> InterceptDisposer
@@ -264,7 +265,7 @@ mod tests {
 
     use super::*;
     use crate::DefaultStore;
-    use crate::error::Error;
+    
     use crate::test_utils::unique_store;
     use amethystate_core::WritableMode;
     use std::collections::HashMap;
@@ -295,7 +296,7 @@ mod tests {
         assert_eq!(map.get(&"a".into()).unwrap(), Some(20));
 
         let res = map.set("missing".into(), &30);
-        assert!(matches!(res, Err(Error::KeyNotFound(_))));
+        assert!(matches!(res, Err(ReactiveMapError::KeyNotFound(_))));
 
         map.set_or_create("b".into(), &100).unwrap();
         let entries = map.entries().unwrap();
@@ -330,7 +331,7 @@ mod tests {
         });
 
         let res = map.set_or_create("val".into(), &-1);
-        assert!(matches!(res, Err(Error::Intercepted)));
+        assert!(matches!(res, Err(ReactiveMapError::Intercepted)));
 
         store.save_now().unwrap();
         assert_eq!(map.get(&"val".into()).unwrap(), None);
@@ -538,7 +539,7 @@ mod tests {
 
         map.set("target".into(), &50).unwrap();
         let res = map.set("target".into(), &150);
-        assert!(matches!(res, Err(Error::Intercepted)));
+        assert!(matches!(res, Err(ReactiveMapError::Intercepted)));
 
         map.set("other".into(), &150).unwrap();
     }

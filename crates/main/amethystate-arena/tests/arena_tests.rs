@@ -1,7 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 use amethystate::test_utils::unique_store;
 use amethystate::{
-    DefaultStore, Field, IntoPipeline, MapChange, ReactiveMap, Result as RpResult, Store,
+    DefaultStore, Field, IntoPipeline, MapChange, ReactiveMap, Store,
     WritableMode, amethystate,
 };
 use amethystate_arena::Arena;
@@ -21,7 +21,7 @@ pub struct TestState {
 }
 
 #[test]
-fn test_arena_field_and_pipeline() -> RpResult<()> {
+fn test_arena_field_and_pipeline() -> anyhow::Result<()> {
     let store = unique_store("field_pipeline");
     let state = TestState::new_with(&store)?;
     let arena = Arena::new();
@@ -57,7 +57,7 @@ fn test_arena_field_and_pipeline() -> RpResult<()> {
 }
 
 #[test]
-fn test_subscribe_pipeline() -> RpResult<()> {
+fn test_subscribe_pipeline() -> anyhow::Result<()> {
     let store = unique_store("subscribe_pipeline");
     let state = TestState::new_with(&store)?;
     let arena = Arena::new();
@@ -83,7 +83,7 @@ fn test_subscribe_pipeline() -> RpResult<()> {
 }
 
 #[test]
-fn test_arena_reactive_map() -> RpResult<()> {
+fn test_arena_reactive_map() -> anyhow::Result<()> {
     let store = unique_store("reactive_map");
     let state = TestState::new_with(&store)?;
     let arena = Arena::new();
@@ -111,7 +111,7 @@ fn test_arena_reactive_map() -> RpResult<()> {
 }
 
 #[test]
-fn test_subscribe_map_key() -> RpResult<()> {
+fn test_subscribe_map_key() -> anyhow::Result<()> {
     let store = unique_store("subscribe_map_key");
     let state = TestState::new_with(&store)?;
     let arena = Arena::new();
@@ -175,7 +175,7 @@ fn test_arena_cleanup_drops_fields_and_unsubscribes() {
 }
 
 #[test]
-fn test_arena_remove_map_entry() -> RpResult<()> {
+fn test_arena_remove_map_entry() -> anyhow::Result<()> {
     let store = unique_store("remove_map_entry");
     let state = TestState::new_with(&store)?;
     let arena = Arena::new();
@@ -199,7 +199,7 @@ fn test_arena_remove_map_entry() -> RpResult<()> {
 }
 
 #[test]
-fn test_arena_clear_map() -> RpResult<()> {
+fn test_arena_clear_map() -> anyhow::Result<()> {
     let store = unique_store("clear_map");
     let state = TestState::new_with(&store)?;
     let arena = Arena::new();
@@ -221,7 +221,7 @@ fn test_arena_clear_map() -> RpResult<()> {
 }
 
 #[test]
-fn test_arena_remove_map_entry_fires_subscription() -> RpResult<()> {
+fn test_arena_remove_map_entry_fires_subscription() -> anyhow::Result<()> {
     let store = unique_store("remove_fires_sub");
     let state = TestState::new_with(&store)?;
     let arena = Arena::new();
@@ -245,7 +245,7 @@ fn test_arena_remove_map_entry_fires_subscription() -> RpResult<()> {
 }
 
 #[test]
-fn test_arena_clear_map_fires_subscription() -> RpResult<()> {
+fn test_arena_clear_map_fires_subscription() -> anyhow::Result<()> {
     let store = unique_store("clear_fires_sub");
     let state = TestState::new_with(&store)?;
     let arena = Arena::new();

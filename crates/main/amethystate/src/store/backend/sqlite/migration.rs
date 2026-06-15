@@ -2,10 +2,11 @@ use super::error::SqliteStoreError;
 use crate::codec::CodecError;
 use crate::migration::AppliedStep;
 use crate::store::meta::{PrefixMeta, SchemaSnapshot};
-use crate::store::{CodecFormat, MigrationBackendAdapter, Result};
+use crate::store::{CodecFormat, StorageResult};
 use rusqlite::{OptionalExtension, Transaction};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use crate::store::traits::MigrationBackendAdapter;
 
 pub struct SqliteMigrationBackend<'a> {
     pub(crate) txn: &'a Transaction<'a>,
@@ -16,7 +17,7 @@ impl<'a> SqliteMigrationBackend<'a> {
         Self { txn }
     }
 
-    fn get_typed<T: DeserializeOwned>(&self, table: &str, key: &str) -> Result<Option<T>> {
+    fn get_typed<T: DeserializeOwned>(&self, table: &str, key: &str) -> StorageResult<Option<T>> {
         let sql = format!("SELECT value FROM {} WHERE key = ?", table);
         let mut stmt = self
             .txn
@@ -37,7 +38,7 @@ impl<'a> SqliteMigrationBackend<'a> {
         }
     }
 
-    fn set_typed<T: Serialize>(&self, table: &str, key: &str, value: &T) -> Result<()> {
+    fn set_typed<T: Serialize>(&self, table: &str, key: &str, value: &T) -> StorageResult<()> {
         let bytes = sonic_rs::to_vec(value)
             .map_err(CodecError::from)
             .map_err(SqliteStoreError::from)?;
@@ -58,7 +59,7 @@ impl MigrationBackendAdapter for SqliteMigrationBackend<'_> {
         CodecFormat::SonicJson
     }
 
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+    fn get(&self, key: &str) -> StorageResult<Option<Vec<u8>>> {
         let mut stmt = self
             .txn
             .prepare_cached("SELECT value FROM data WHERE key = ?")
@@ -69,7 +70,7 @@ impl MigrationBackendAdapter for SqliteMigrationBackend<'_> {
             .map_err(SqliteStoreError::from)?)
     }
 
-    fn set(&mut self, key: &str, value: &[u8]) -> Result<()> {
+    fn set(&mut self, key: &str, value: &[u8]) -> StorageResult<()> {
         let mut stmt = self
             .txn
             .prepare_cached("REPLACE INTO data (key, value) VALUES (?, ?)")
@@ -79,7 +80,7 @@ impl MigrationBackendAdapter for SqliteMigrationBackend<'_> {
         Ok(())
     }
 
-    fn delete(&mut self, key: &str) -> Result<()> {
+    fn delete(&mut self, key: &str) -> StorageResult<()> {
         let mut stmt = self
             .txn
             .prepare_cached("DELETE FROM data WHERE key = ?")
@@ -88,7 +89,7 @@ impl MigrationBackendAdapter for SqliteMigrationBackend<'_> {
         Ok(())
     }
 
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
+    fn scan_prefix(&self, prefix: &str) -> StorageResult<Vec<(String, Vec<u8>)>> {
         let mut stmt = self
             .txn
             .prepare_cached("SELECT key, value FROM data WHERE key GLOB ?")
@@ -105,24 +106,24 @@ impl MigrationBackendAdapter for SqliteMigrationBackend<'_> {
         Ok(res)
     }
 
-    fn get_meta(&self, prefix: &str) -> Result<Option<PrefixMeta>> {
+    fn get_meta(&self, prefix: &str) -> StorageResult<Option<PrefixMeta>> {
         self.get_typed("metadata", prefix)
     }
-    fn set_meta(&mut self, prefix: &str, meta: &PrefixMeta) -> Result<()> {
+    fn set_meta(&mut self, prefix: &str, meta: &PrefixMeta) -> StorageResult<()> {
         self.set_typed("metadata", prefix, meta)
     }
 
-    fn get_schema_snapshot(&self, prefix: &str) -> Result<Option<SchemaSnapshot>> {
+    fn get_schema_snapshot(&self, prefix: &str) -> StorageResult<Option<SchemaSnapshot>> {
         self.get_typed("schema_snapshot", prefix)
     }
-    fn set_schema_snapshot(&mut self, prefix: &str, snapshot: &SchemaSnapshot) -> Result<()> {
+    fn set_schema_snapshot(&mut self, prefix: &str, snapshot: &SchemaSnapshot) -> StorageResult<()> {
         self.set_typed("schema_snapshot", prefix, snapshot)
     }
 
-    fn get_migration_log(&self, prefix: &str) -> Result<Option<Vec<AppliedStep>>> {
+    fn get_migration_log(&self, prefix: &str) -> StorageResult<Option<Vec<AppliedStep>>> {
         self.get_typed("migration_log", prefix)
     }
-    fn set_migration_log(&mut self, prefix: &str, log: &[AppliedStep]) -> Result<()> {
+    fn set_migration_log(&mut self, prefix: &str, log: &[AppliedStep]) -> StorageResult<()> {
         self.set_typed("migration_log", prefix, &log)
     }
 }

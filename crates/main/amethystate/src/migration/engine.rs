@@ -1,3 +1,4 @@
+use crate::store::StorageResult;
 use crate::migration::fields::FieldDescriptor;
 use crate::migration::meta::{PrefixMeta, SchemaSnapshot, StoredFieldEntry};
 use crate::migration::set::MigrationSet;
@@ -5,13 +6,13 @@ use crate::migration::{
     AppliedStep, ComponentOutcome, ComponentResult, FieldTypeChange, NaggingRecord, SchemaDiff,
 };
 use crate::store::MigrationBackendAdapter;
-use crate::{MigrationContext, MigrationError, MigrationPlan, MigrationReport, Result};
+use crate::{MigrationContext, MigrationError, MigrationPlan, MigrationReport};
 use std::collections::HashMap;
 
 pub trait StorageProvider {
-    fn atomic<F, T>(&self, f: F) -> Result<T>
+    fn atomic<F, T>(&self, f: F) -> StorageResult<T>
     where
-        F: FnOnce(&mut dyn MigrationBackendAdapter) -> Result<T>;
+        F: FnOnce(&mut dyn MigrationBackendAdapter) -> StorageResult<T>;
 }
 
 pub struct MigrationEngine<'a, P: StorageProvider> {
@@ -23,7 +24,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
         Self { provider }
     }
 
-    pub fn run(&self, mset: MigrationSet) -> Result<MigrationReport> {
+    pub fn run(&self, mset: MigrationSet) -> StorageResult<MigrationReport> {
         let mut report = MigrationReport::default();
         let components = mset.find_components();
 
@@ -66,7 +67,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
         storage: &mut dyn MigrationBackendAdapter,
         prefixes: &[String],
         mset: &MigrationSet,
-    ) -> Result<bool> {
+    ) -> StorageResult<bool> {
         for prefix in prefixes {
             let meta = storage.get_meta(prefix)?;
             let current_v = meta.as_ref().map(|m| m.version).unwrap_or(0);
@@ -85,7 +86,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
         storage: &mut dyn MigrationBackendAdapter,
         prefixes: &[String],
         mset: &MigrationSet,
-    ) -> Result<(Vec<AppliedStep>, Vec<NaggingRecord>)> {
+    ) -> StorageResult<(Vec<AppliedStep>, Vec<NaggingRecord>)> {
         let mut all_steps = Vec::new();
         let mut all_nagging = Vec::new();
 
@@ -103,7 +104,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
         storage: &mut dyn MigrationBackendAdapter,
         prefix: &str,
         current_fields: &[FieldDescriptor],
-    ) -> Result<Option<SchemaDiff>> {
+    ) -> StorageResult<Option<SchemaDiff>> {
         let snapshot = storage.get_schema_snapshot(prefix)?;
         let Some(old) = snapshot else {
             return Ok(None);
@@ -153,7 +154,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
         storage: &mut dyn MigrationBackendAdapter,
         prefix: &str,
         mset: &MigrationSet,
-    ) -> Result<(Vec<AppliedStep>, Vec<NaggingRecord>)> {
+    ) -> StorageResult<(Vec<AppliedStep>, Vec<NaggingRecord>)> {
         let (target_v, target_hash, target_fields) = mset.get_target(prefix);
 
         let meta_opt = storage.get_meta(prefix)?;
@@ -248,7 +249,7 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
         meta: &mut PrefixMeta,
         target_v: u32,
         history: &mut Vec<AppliedStep>,
-    ) -> Result<Vec<AppliedStep>> {
+    ) -> StorageResult<Vec<AppliedStep>> {
         let mut new_steps = Vec::new();
         let mut ctx = MigrationContext::new(prefix.to_string(), storage);
 
@@ -293,10 +294,10 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Error;
+    
     use crate::migration::context::{decode, encode};
     use crate::migration::fields::FieldDescriptor;
-    use crate::store::CodecFormat;
+    use crate::store::{CodecFormat, StorageError};
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::ops::Deref;
@@ -325,18 +326,18 @@ mod tests {
             CodecFormat::Default
         }
 
-        fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+        fn get(&self, key: &str) -> StorageResult<Option<Vec<u8>>> {
             Ok(self.data.get(key).cloned())
         }
-        fn set(&mut self, key: &str, value: &[u8]) -> Result<()> {
+        fn set(&mut self, key: &str, value: &[u8]) -> StorageResult<()> {
             self.data.insert(key.to_string(), value.to_vec());
             Ok(())
         }
-        fn delete(&mut self, key: &str) -> Result<()> {
+        fn delete(&mut self, key: &str) -> StorageResult<()> {
             self.data.remove(key);
             Ok(())
         }
-        fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
+        fn scan_prefix(&self, prefix: &str) -> StorageResult<Vec<(String, Vec<u8>)>> {
             let mut res = Vec::new();
             for (k, v) in &self.data {
                 if k.starts_with(prefix) {
@@ -345,33 +346,33 @@ mod tests {
             }
             Ok(res)
         }
-        fn get_meta(&self, prefix: &str) -> Result<Option<PrefixMeta>> {
+        fn get_meta(&self, prefix: &str) -> StorageResult<Option<PrefixMeta>> {
             Ok(self.meta.get(prefix).cloned())
         }
-        fn set_meta(&mut self, prefix: &str, meta: &PrefixMeta) -> Result<()> {
+        fn set_meta(&mut self, prefix: &str, meta: &PrefixMeta) -> StorageResult<()> {
             self.meta.insert(prefix.to_string(), meta.clone());
             Ok(())
         }
-        fn get_schema_snapshot(&self, prefix: &str) -> Result<Option<SchemaSnapshot>> {
+        fn get_schema_snapshot(&self, prefix: &str) -> StorageResult<Option<SchemaSnapshot>> {
             Ok(self.snapshots.get(prefix).cloned())
         }
-        fn set_schema_snapshot(&mut self, prefix: &str, snapshot: &SchemaSnapshot) -> Result<()> {
+        fn set_schema_snapshot(&mut self, prefix: &str, snapshot: &SchemaSnapshot) -> StorageResult<()> {
             self.snapshots.insert(prefix.to_string(), snapshot.clone());
             Ok(())
         }
-        fn get_migration_log(&self, prefix: &str) -> Result<Option<Vec<AppliedStep>>> {
+        fn get_migration_log(&self, prefix: &str) -> StorageResult<Option<Vec<AppliedStep>>> {
             Ok(self.logs.get(prefix).cloned())
         }
-        fn set_migration_log(&mut self, prefix: &str, log: &[AppliedStep]) -> Result<()> {
+        fn set_migration_log(&mut self, prefix: &str, log: &[AppliedStep]) -> StorageResult<()> {
             self.logs.insert(prefix.to_string(), log.to_vec());
             Ok(())
         }
     }
 
     impl StorageProvider for RefCell<InMemoryStorage> {
-        fn atomic<F, T>(&self, f: F) -> Result<T>
+        fn atomic<F, T>(&self, f: F) -> StorageResult<T>
         where
-            F: FnOnce(&mut dyn MigrationBackendAdapter) -> Result<T>,
+            F: FnOnce(&mut dyn MigrationBackendAdapter) -> StorageResult<T>,
         {
             let backup = self.borrow().clone();
 
@@ -439,7 +440,7 @@ mod tests {
             panic!("Expected failed migration component");
         };
 
-        let Error::Migration(MigrationError::Gap {
+        let StorageError::Migration(MigrationError::Gap {
             prefix,
             reached_version,
             expected_version,
@@ -525,7 +526,7 @@ mod tests {
             panic!("Expected failed migration component");
         };
 
-        if let Error::Migration(MigrationError::Downgrade {
+        if let StorageError::Migration(MigrationError::Downgrade {
             db_version,
             code_version,
             ..

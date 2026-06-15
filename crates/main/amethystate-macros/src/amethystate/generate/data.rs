@@ -211,6 +211,24 @@ pub(crate) fn data_impl(
         }
     });
 
+    let fields_for_hash = p_fields.iter().map(|e| {
+        let fname_str = e.ident.as_ref().unwrap().to_string();
+        let ty = &e.ty;
+        let field_ty = if e.nested {
+            quote! { <#ty<#crate_name::DefaultStore> as #crate_name::AmeState>::Data }
+        } else if let Some((k, v)) = e.get_map_types() {
+            quote! { ::std::collections::HashMap<#k, #v> }
+        } else {
+            quote! { #ty }
+        };
+        (fname_str, field_ty)
+    }).collect::<Vec<_>>();
+
+    let recursive_hash_expr = crate::hash::gen_recursive_type_hash(
+        crate_name,
+        fields_for_hash,
+    );
+
     let prefix_expr = prefix.clone().unwrap_or_default();
     let deps = migration_deps(crate_name, entries);
     let is_root = prefix.is_some();
@@ -249,26 +267,26 @@ pub(crate) fn data_impl(
                 }
 
                 impl<S: #crate_name::Store> #name<S> {
-                    pub fn save_lazy(&self) -> #crate_name::Result<()> {
+                    pub fn save_lazy(&self) -> #crate_name::StorageResult<()> {
                         self.inner.__amethystate_save_to(&self.store, &self.prefix)
                     }
 
-                    pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::Result<()> {
+                    pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::StorageResult<()> {
                         f(&mut self.inner);
                         self.save_lazy()
                     }
 
-                    pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::Result<()> {
+                    pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::StorageResult<()> {
                         f(&mut self.inner);
                         self.save()
                     }
 
-                    pub fn save(&self) -> #crate_name::Result<()> {
+                    pub fn save(&self) -> #crate_name::StorageResult<()> {
                         self.save_lazy()?;
                         <S as #crate_name::Store>::flush_prefix(&self.store, &self.prefix)
                     }
 
-                    pub fn load_with(store: &S) -> #crate_name::Result<Self> {
+                    pub fn load_with(store: &S) -> #crate_name::StorageResult<Self> {
                         Ok(Self {
                             inner: #data_struct_name::__amethystate_load_from(store, #prefix_expr)?,
                             store: store.clone(),
@@ -278,7 +296,7 @@ pub(crate) fn data_impl(
                 }
 
                 impl #name<#crate_name::DefaultStore> {
-                    pub fn load() -> #crate_name::Result<Self> {
+                    pub fn load() -> #crate_name::StorageResult<Self> {
                         let store = #crate_name::global_store();
                         Self::load_with(&store)
                     }
@@ -319,28 +337,28 @@ pub(crate) fn data_impl(
                 }
 
                 impl<S: #crate_name::Store> #persisted_struct_name<S> {
-                    pub fn save_lazy(&self) -> #crate_name::Result<()> {
+                    pub fn save_lazy(&self) -> #crate_name::StorageResult<()> {
                         self.inner.__amethystate_save_to(&self.store, &self.prefix)
                     }
 
-                    pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::Result<()> {
+                    pub fn mutate_lazy(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::StorageResult<()> {
                         f(&mut self.inner);
                         self.save_lazy()
                     }
 
-                    pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::Result<()> {
+                    pub fn mutate(&mut self, f: impl FnOnce(&mut #data_struct_name)) -> #crate_name::StorageResult<()> {
                         f(&mut self.inner);
                         self.save()
                     }
 
-                    pub fn save(&self) -> #crate_name::Result<()> {
+                    pub fn save(&self) -> #crate_name::StorageResult<()> {
                         self.save_lazy()?;
                         <S as #crate_name::Store>::flush_prefix(&self.store, &self.prefix)
                     }
                 }
 
                 impl<S: #crate_name::Store> #name<S> {
-                    pub fn load_with(store: &S) -> #crate_name::Result<#persisted_struct_name<S>> {
+                    pub fn load_with(store: &S) -> #crate_name::StorageResult<#persisted_struct_name<S>> {
                         Ok(#persisted_struct_name {
                             inner: #data_struct_name::__amethystate_load_from(store, #prefix_expr)?,
                             store: store.clone(),
@@ -350,7 +368,7 @@ pub(crate) fn data_impl(
                 }
 
                 impl #name<#crate_name::DefaultStore> {
-                    pub fn load() -> #crate_name::Result<#persisted_struct_name<#crate_name::DefaultStore>> {
+                    pub fn load() -> #crate_name::StorageResult<#persisted_struct_name<#crate_name::DefaultStore>> {
                         let store = #crate_name::global_store();
                         Self::load_with(&store)
                     }
@@ -367,7 +385,7 @@ pub(crate) fn data_impl(
             pub fn __amethystate_load_from<S: #crate_name::Store>(
                 store: &S,
                 prefix: &str,
-            ) -> #crate_name::Result<Self> {
+            ) -> #crate_name::StorageResult<Self> {
                 Ok(Self {
                     #(#store_load_fields,)*
                 })
@@ -378,7 +396,7 @@ pub(crate) fn data_impl(
                 &self,
                 store: &S,
                 prefix: &str,
-            ) -> #crate_name::Result<()> {
+            ) -> #crate_name::StorageResult<()> {
                 #(#store_save_fields)*
                 Ok(())
             }
@@ -403,7 +421,7 @@ pub(crate) fn data_impl(
         }
 
         impl #crate_name::migration::types::AmeType for #data_struct_name {
-            const TYPE_HASH: u32 = #crate_name::migration::types::fnv1a(stringify!(#data_struct_name).as_bytes());
+            const TYPE_HASH: u32 = #recursive_hash_expr;
             const TYPE_NAME: &'static str = stringify!(#data_struct_name);
         }
 
@@ -416,13 +434,13 @@ pub(crate) fn data_impl(
             const PARENT_PREFIX: &'static str = #prefix_expr;
             const MIGRATION_DEPS: &'static [&'static str] = &[ #(#deps),* ];
 
-            fn load_struct(ctx: &mut #crate_name::MigrationContext) -> #crate_name::Result<Self> {
+            fn load_struct(ctx: &mut #crate_name::MigrationContext) -> #crate_name::StorageResult<Self> {
                 Ok(Self {
                     #(#load_fields,)*
                 })
             }
 
-            fn save_struct(&self, ctx: &mut #crate_name::MigrationContext) -> #crate_name::Result<()> {
+            fn save_struct(&self, ctx: &mut #crate_name::MigrationContext) -> #crate_name::StorageResult<()> {
                 #(#save_fields)*
                 Ok(())
             }

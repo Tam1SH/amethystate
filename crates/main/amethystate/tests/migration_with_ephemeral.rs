@@ -59,7 +59,7 @@ pub struct Dashboard {
 #[rename(port => listen_port)]
 fn migrate_network_settings_v1_to_v2(
     old: AmeData<v1::NetworkSettings>,
-) -> amethystate::Result<AmeData<NetworkSettings>> {
+) -> amethystate::MigrationResult<AmeData<NetworkSettings>> {
     Ok(AmeData::<NetworkSettings> {
         listen_port: old.port,
     })
@@ -69,7 +69,7 @@ fn migrate_network_settings_v1_to_v2(
 fn migrate_system_config_v1_to_v2(
     old: AmeData<v1::SystemConfig>,
     ctx: &mut amethystate::migration::MigrationContext,
-) -> amethystate::Result<AmeData<SystemConfig>> {
+) -> amethystate::MigrationResult<AmeData<SystemConfig>> {
     Ok(AmeData::<SystemConfig> {
         net: migrate_field!(ctx, old.net),
     })

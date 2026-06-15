@@ -1,16 +1,21 @@
+use std::borrow::Borrow;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use uuid::Uuid;
 
-//TODO: bullshit
-pub trait AmeBackend {
+pub trait AmeBackendSync {
     type Error;
-    type Raw;
+    type Raw: Borrow<Self::Borrowed>;
+    type Borrowed: ?Sized;
 
     fn get<T>(&self, path: &str) -> Result<Option<T>, Self::Error>
     where
         T: DeserializeOwned;
+
+    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<(), Self::Error> {
+        self.set(&path, value)
+    }
 
     fn set_with_source<T: Serialize>(
         &self,
@@ -35,13 +40,9 @@ pub trait AmeBackend {
 
     fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Self::Raw)>, Self::Error>;
 
-    fn decode<T>(&self, raw: &Self::Raw) -> Result<T, Self::Error>
+    fn decode<T>(&self, raw: &Self::Borrowed) -> Result<T, Self::Error>
     where
         T: DeserializeOwned + Default;
-
-    fn intercepted(&self) -> Self::Error;
-
-    fn key_not_found(&self, key: String) -> Self::Error;
 }
 #[cfg(feature = "async")]
 #[allow(async_fn_in_trait)]
@@ -78,8 +79,4 @@ pub trait AmeBackendAsync {
     fn decode<T>(&self, raw: &Self::Raw) -> Result<T, Self::Error>
     where
         T: DeserializeOwned + Default;
-
-    fn intercepted(&self) -> Self::Error;
-
-    fn key_not_found(&self, key: String) -> Self::Error;
 }

@@ -1,6 +1,7 @@
 use crate::store::sync_backend::StoreBackend;
+use super::error::{ReactiveFieldResult, FieldError};
 use crate::store::{Store, SubscriptionId};
-use crate::{AccessMode, ReadOnlyMode, Result, WritableMode};
+use crate::{AccessMode, ReadOnlyMode, WritableMode};
 use amethystate_core::{Change, FieldCore, InterceptDisposer, Signal, SignalSubscription};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -119,7 +120,7 @@ where
     TValue: FieldValue,
     S: Store,
 {
-    pub fn update<F>(&self, f: F) -> Result<TValue>
+    pub fn update<F>(&self, f: F) -> ReactiveFieldResult<TValue>
     where
         F: FnOnce(TValue) -> TValue,
     {
@@ -129,7 +130,7 @@ where
         Ok(new_val)
     }
 
-    pub fn modify<F>(&self, f: F) -> Result<()>
+    pub fn modify<F>(&self, f: F) -> ReactiveFieldResult<()>
     where
         F: FnOnce(&mut TValue),
     {
@@ -138,7 +139,7 @@ where
         self.set(val)
     }
 
-    pub fn set(&self, value: TValue) -> Result<()> {
+    pub fn set(&self, value: TValue) -> ReactiveFieldResult<()> {
         tracing::trace!(
             target: "amethystate",
             path = %self.path,
@@ -159,7 +160,7 @@ where
             let change = self
                 .core
                 .run_interceptors(self.path.clone(), value, Some(self.instance_id))
-                .map_err(|_| crate::error::Error::Intercepted)?;
+                .map_err(|_| FieldError::Intercepted)?;
             self.core.signal.set(change.new_value, change.source);
         }
         Ok(())

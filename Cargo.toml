@@ -13,7 +13,8 @@ members = [
     "crates/adapters/amethystate-gpui",
     "crates/adapters/amethystate-leptos",
     "crates/adapters/amethystate-dioxus",
-    "crates/adapters/amethystate-yew"
+    "crates/adapters/amethystate-yew",
+    "crates/adapters/amethystate-slint"
 ]
 
 [workspace.package]
@@ -27,7 +28,7 @@ description = "Type-safe reactive persistence for Rust GUI apps"
 keywords = ["state", "state-managment", "reactive", "persistence", "gui"]
 categories = ["config", "data-structures", "gui"]
 readme = "README.md"
-rust-version = "1.89.0"
+rust-version = "1.90.0"
 
 [workspace.dependencies]
 # internal

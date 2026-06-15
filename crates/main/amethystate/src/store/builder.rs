@@ -1,3 +1,4 @@
+use crate::store::StorageResult;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -6,7 +7,7 @@ use crate::migration::builder::MigrationBuilder;
 use crate::migration::set::MigrationSet;
 
 use crate::store::config::StoreConfig;
-use crate::{DefaultStore, MigrationReport, Result};
+use crate::{DefaultStore, MigrationReport};
 
 pub struct NoMigrations;
 pub struct WithMigrations;
@@ -152,83 +153,17 @@ impl<M> StoreBuilder<M> {
 }
 
 impl StoreBuilder<NoMigrations> {
-    pub fn build(self) -> Result<DefaultStore> {
-        #[cfg(backend = "redb")]
-        {
-            let (store, _) =
-                crate::store::backend::redb::RedbStore::open(self.config, Default::default())?;
-            Ok(store)
-        }
-        #[cfg(backend = "sqlite")]
-        {
-            let (store, _) =
-                crate::store::backend::sqlite::SqliteStore::open(self.config, Default::default())?;
-            Ok(store)
-        }
-
-        #[cfg(backend = "ron")]
-        {
-            let (store, _) =
-                crate::store::backend::text::RonStore::open(self.config, Default::default())?;
-            Ok(store)
-        }
-
-        #[cfg(backend = "json")]
-        {
-            let (store, _) =
-                crate::store::backend::text::JsonStore::open(self.config, Default::default())?;
-            Ok(store)
-        }
-
-        #[cfg(backend = "toml")]
-        {
-            let (store, _) =
-                crate::store::backend::text::TomlStore::open(self.config, Default::default())?;
-            Ok(store)
-        }
+    pub fn build(self) -> StorageResult<DefaultStore> {
+        let (store, _) = crate::store::default::DefaultStore::open(self.config, Default::default())?;
+        Ok(store)
     }
 }
 
 impl StoreBuilder<WithMigrations> {
-    pub fn build(self) -> Result<(DefaultStore, MigrationReport)> {
-        #[cfg(backend = "redb")]
-        {
-            let (store, report) =
-                crate::store::backend::redb::RedbStore::open(self.config, self.migration_set)?;
-            report.log_to_tracing();
-            Ok((store, report))
-        }
-
-        #[cfg(backend = "sqlite")]
-        {
-            let (store, report) =
-                crate::store::backend::sqlite::SqliteStore::open(self.config, self.migration_set)?;
-            report.log_to_tracing();
-            Ok((store, report))
-        }
-
-        #[cfg(backend = "json")]
-        {
-            let (store, report) =
-                crate::store::backend::text::JsonStore::open(self.config, self.migration_set)?;
-            report.log_to_tracing();
-            Ok((store, report))
-        }
-
-        #[cfg(backend = "ron")]
-        {
-            let (store, report) =
-                crate::store::backend::text::RonStore::open(self.config, self.migration_set)?;
-            report.log_to_tracing();
-            Ok((store, report))
-        }
-
-        #[cfg(backend = "toml")]
-        {
-            let (store, report) =
-                crate::store::backend::text::TomlStore::open(self.config, self.migration_set)?;
-            report.log_to_tracing();
-            Ok((store, report))
-        }
+    pub fn build(self) -> StorageResult<(DefaultStore, MigrationReport)> {
+        let (store, report) =
+            crate::store::default::DefaultStore::open(self.config, self.migration_set)?;
+        report.log_to_tracing();
+        Ok((store, report))
     }
 }

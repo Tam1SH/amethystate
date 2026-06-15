@@ -1,10 +1,12 @@
 use crate::async_impl::{AsyncSubscriptionBackend, SubscriptionHandle};
 use crate::primitives::field_core::FieldValue;
 use crate::{Change, FieldCore, InterceptDisposer, SignalSubscription};
+use crate::primitives::error::ReactiveFieldResult;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+use crate::error::FieldError;
 
 pub struct Field<T, B> {
     pub core: FieldCore<T>,
@@ -102,14 +104,14 @@ where
         self.core.get()
     }
 
-    pub async fn get(&self) -> Result<T, B::Error> {
+    pub async fn get(&self) -> ReactiveFieldResult<T, B::Error> {
         self.backend
             .get(&self.path)
             .await?
-            .ok_or_else(|| self.backend.key_not_found(self.path.to_string()))
+            .ok_or_else(|| FieldError::KeyNotFound(self.path.to_string()))
     }
 
-    pub async fn update<F>(&self, f: F) -> Result<T, B::Error>
+    pub async fn update<F>(&self, f: F) -> ReactiveFieldResult<T, B::Error>
     where
         F: FnOnce(T) -> T,
     {
@@ -119,7 +121,7 @@ where
         Ok(new_val)
     }
 
-    pub async fn modify<F>(&self, f: F) -> Result<(), B::Error>
+    pub async fn modify<F>(&self, f: F) -> ReactiveFieldResult<(), B::Error>
     where
         F: FnOnce(&mut T),
     {
@@ -128,7 +130,7 @@ where
         self.set(val).await
     }
 
-    pub async fn set(&self, value: T) -> Result<(), B::Error> {
+    pub async fn set(&self, value: T) -> ReactiveFieldResult<(), B::Error> {
         crate::field_set_async(
             &self.backend,
             &self.core,

@@ -76,11 +76,11 @@ pub(crate) fn node_impl(crate_name: &TokenStream2, name: &Ident, is_root: bool) 
     if is_root {
         quote! {
             impl<S: #crate_name::Store> #crate_name::AmeStateNode<S> for #name<S> {
-                fn new_node(store: &S, _path: &str) -> #crate_name::Result<Self> {
+                fn new_node(store: &S, _path: &str) -> #crate_name::StorageResult<Self> {
                     Self::new_with(store)
                 }
 
-                fn new_node_with_id(store: &S, _path: &str, instance_id: #crate_name::uuid::Uuid) -> #crate_name::Result<Self> {
+                fn new_node_with_id(store: &S, _path: &str, instance_id: #crate_name::uuid::Uuid) -> #crate_name::StorageResult<Self> {
                     Self::new_with_id(store, instance_id)
                 }
             }
@@ -88,11 +88,11 @@ pub(crate) fn node_impl(crate_name: &TokenStream2, name: &Ident, is_root: bool) 
     } else {
         quote! {
             impl<S: #crate_name::Store> #crate_name::AmeStateNode<S> for #name<S> {
-                fn new_node(store: &S, path: &str) -> #crate_name::Result<Self> {
+                fn new_node(store: &S, path: &str) -> #crate_name::StorageResult<Self> {
                     Self::new(store, path)
                 }
 
-                fn new_node_with_id(store: &S, path: &str, instance_id: #crate_name::uuid::Uuid) -> #crate_name::Result<Self> {
+                fn new_node_with_id(store: &S, path: &str, instance_id: #crate_name::uuid::Uuid) -> #crate_name::StorageResult<Self> {
                     Self::new_with_id(store, path, instance_id)
                 }
             }
@@ -117,11 +117,11 @@ pub(crate) fn constructor(
 ) -> TokenStream2 {
     if is_root {
         quote! {
-            pub fn new_with(store: &S) -> #crate_name::Result<Self> {
+            pub fn new_with(store: &S) -> #crate_name::StorageResult<Self> {
                 Self::new_with_id(store, #crate_name::uuid::Uuid::new_v4())
             }
 
-            pub fn new_with_id(store: &S, instance_id: #crate_name::uuid::Uuid) -> #crate_name::Result<Self> {
+            pub fn new_with_id(store: &S, instance_id: #crate_name::uuid::Uuid) -> #crate_name::StorageResult<Self> {
                 use #crate_name::Store;
                 #crate_name::observability::register_instance(
                     instance_id,
@@ -134,11 +134,11 @@ pub(crate) fn constructor(
         }
     } else {
         quote! {
-            pub fn new(store: &S, namespace: &str) -> #crate_name::Result<Self> {
+            pub fn new(store: &S, namespace: &str) -> #crate_name::StorageResult<Self> {
                 Self::new_with_id(store, namespace, #crate_name::uuid::Uuid::new_v4())
             }
 
-            pub fn new_with_id(store: &S, namespace: &str, instance_id: #crate_name::uuid::Uuid) -> #crate_name::Result<Self> {
+            pub fn new_with_id(store: &S, namespace: &str, instance_id: #crate_name::uuid::Uuid) -> #crate_name::StorageResult<Self> {
                 use #crate_name::Store;
                 #crate_name::observability::register_instance(
                     instance_id,

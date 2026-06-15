@@ -1,10 +1,11 @@
 use crate::Store;
-use crate::error::Error;
-use amethystate_core::AmeBackend;
+
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use uuid::Uuid;
+use amethystate_core::AmeBackendSync;
+use crate::store::StorageError;
 
 pub(crate) struct StoreBackend<S> {
     pub(crate) store: S,
@@ -16,12 +17,13 @@ impl<S> StoreBackend<S> {
     }
 }
 
-impl<S> AmeBackend for StoreBackend<S>
+impl<S> AmeBackendSync for StoreBackend<S>
 where
     S: Store,
 {
-    type Error = Error;
+    type Error = StorageError;
     type Raw = Vec<u8>;
+    type Borrowed = [u8];
 
     fn get<T>(&self, path: &str) -> Result<Option<T>, Self::Error>
     where
@@ -67,18 +69,11 @@ where
         self.store.scan_prefix(prefix)
     }
 
-    fn decode<T>(&self, raw: &Self::Raw) -> Result<T, Self::Error>
+    fn decode<T>(&self, raw: &[u8]) -> Result<T, Self::Error>
     where
         T: DeserializeOwned + Default,
     {
         self.store.decode(raw)
     }
 
-    fn intercepted(&self) -> Self::Error {
-        Error::Intercepted
-    }
-
-    fn key_not_found(&self, key: String) -> Self::Error {
-        Error::KeyNotFound(key)
-    }
 }

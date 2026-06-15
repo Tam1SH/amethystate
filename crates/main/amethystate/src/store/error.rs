@@ -2,7 +2,7 @@ use crate::MigrationError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum StorageError {
     #[cfg(feature = "text")]
     #[error(transparent)]
     TextStore(#[from] crate::store::backend::text::error::TextStoreError),
@@ -17,14 +17,7 @@ pub enum Error {
 
     #[error(transparent)]
     Migration(#[from] MigrationError),
-
-    //TODO: remove
-    #[error("Change intercepted")]
-    Intercepted,
-
-    //TODO: remove
-    #[error("Key not found in ReactiveMap: {0}")]
-    KeyNotFound(String),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+
+pub type StorageResult<T> = std::result::Result<T, StorageError>;

@@ -1,3 +1,4 @@
+use crate::store::StorageResult;
 use crate::MigrationContext;
 use crate::migration::fields::FieldDescriptor;
 use crate::store::StateScope;
@@ -11,7 +12,7 @@ pub struct MigrationStepEntry {
     pub dependencies: &'static [&'static str],
     pub fields: &'static [FieldDescriptor],
     pub schema_hash: u32,
-    pub run: fn(&mut MigrationContext) -> crate::Result<()>,
+    pub run: fn(&mut MigrationContext) -> StorageResult<()>,
 }
 
 inventory::collect!(MigrationStepEntry);

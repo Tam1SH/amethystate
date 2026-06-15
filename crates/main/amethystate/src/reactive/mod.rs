@@ -1,6 +1,7 @@
 pub mod field;
 pub mod map;
 pub mod pipeline;
+pub mod error;
 
 pub use crate::migration::node::*;
 pub use amethystate_core::access::*;

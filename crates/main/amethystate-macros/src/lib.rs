@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 
 mod amethystate;
 mod migrate;
-//TODO: add as_root attribute
+mod hash;
 
 /// Generates a persistent state wrapper for a struct.
 ///
@@ -12,7 +12,9 @@ mod migrate;
 ///
 /// # Struct Attributes (`#[amethystate(...)]`)
 ///
-/// * `#[amethystate(prefix = "path", version = 1, mode = "reactive")]` - Defines a **Root** struct.
+/// * `#[amethystate(prefix = "path", version = 1, mode = "reactive"), as_root]` - Defines a **Root** struct.
+///   * `as_root` (optional flag): If specified, fields are written directly to the store root without
+///     a namespace.
 ///   * `prefix` (String): Sets the top-level namespace path in the store.
 ///     Generates `pub fn new(store: &Arc<DefaultStore>) -> Result<Self>`.
 ///   * `version` (optional u32): Schema version for migrations (defaults to 0).
@@ -184,32 +186,66 @@ pub fn migrate(args: TokenStream, input: TokenStream) -> TokenStream {
     migrate::migrate_impl(args, input)
 }
 
-//TODO: check corner-cases
+/// Derives the `AmeType` trait for a struct, providing compile-time schema hashing and identification.
+///
+/// This macro automatically generates a unique schema hash (`TYPE_HASH`) and a string identification
+/// name (`TYPE_NAME`) at compile time. It is used by the migration and persistence systems
+/// to detect schema changes.
+///
+/// # Hash Calculation Behavior
+///
+/// - **Recursive**: The `TYPE_HASH` is calculated recursively based on the name and type of every
+///   field inside the struct. Therefore, all fields must also implement the `AmeType` trait.
+/// - **Structural (Rename-Compatible)**: The name of the struct itself is **excluded** from the
+///   `TYPE_HASH`. This guarantees that renaming a struct in Rust code does not alter its database
+///   compatibility or trigger false-positive migrations, as long as its fields and their types
+///   remain identical.
+///
+/// # Examples
+///
+/// Simple struct:
+///
+/// ```rust,ignore
+/// #[derive(AmeType)]
+/// pub struct Endpoint {
+///     pub host: String,
+///     pub port: u16,
+/// }
+/// ```
+///
+/// Nested struct (both must derive `AmeType` to calculate the recursive hash):
+///
+/// ```rust,ignore
+/// #[derive(AmeType)]
+/// pub struct DbConfig {
+///     pub username: String,
+///     pub endpoint: Endpoint, // Recursive hash calculation will include Endpoint's fields
+/// }
+/// ```
 #[proc_macro_derive(AmeType)]
 pub fn ame_type_derive(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
     let name = &input.ident;
+    let crate_name = amethystate::amethystate_crate_path();
 
-    let field_hashes = if let syn::Data::Struct(s) = &input.data {
+    let fields_info = if let syn::Data::Struct(s) = &input.data {
         s.fields
             .iter()
             .map(|f| {
                 let field_name = f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
                 let ty = &f.ty;
-                quote::quote! {
-                    ^ ::amethystate::migration::types::fnv1a(#field_name.as_bytes())
-                    ^ <#ty as ::amethystate::migration::types::AmeType>::TYPE_HASH
-                }
+                (field_name, quote::quote!(#ty))
             })
             .collect::<Vec<_>>()
     } else {
         vec![]
     };
 
+    let type_hash_expr = hash::gen_recursive_type_hash(&crate_name, fields_info);
+
     let expanded = quote::quote! {
-        impl ::amethystate::migration::types::AmeType for #name {
-            const TYPE_HASH: u32 = ::amethystate::migration::types::fnv1a(stringify!(#name).as_bytes())
-                #(#field_hashes)*;
+        impl #crate_name::migration::types::AmeType for #name {
+            const TYPE_HASH: u32 = #type_hash_expr;
             const TYPE_NAME: &'static str = stringify!(#name);
         }
     };

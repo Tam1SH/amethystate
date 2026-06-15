@@ -189,7 +189,7 @@ pub fn generate_code(
 
         quote! {
             impl<S: #crate_name::Store> #crate_name::AmeStateSlice<S> for #name<S> {
-                fn load_slice(store: &S) -> #crate_name::Result<Self> {
+                fn load_slice(store: &S) -> #crate_name::StorageResult<Self> {
                     #load_fn
                 }
 
@@ -203,7 +203,7 @@ pub fn generate_code(
     let global_new_impl = if is_root {
         quote! {
             impl #name<#crate_name::DefaultStore> {
-                pub fn new() -> #crate_name::Result<Self> {
+                pub fn new() -> #crate_name::StorageResult<Self> {
                     let store = #crate_name::global_store();
                     Self::new_with(&store)
                 }

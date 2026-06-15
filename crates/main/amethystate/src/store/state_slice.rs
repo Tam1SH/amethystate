@@ -1,0 +1,19 @@
+use amethystate_core::ReactiveScope;
+use crate::Store;
+use crate::store::error::StorageResult;
+
+pub trait StateScope {
+    const PREFIX: &'static str;
+}
+
+pub trait AmeStateSlice<S: Store>: Sized {
+    fn load_slice(store: &S) -> StorageResult<Self>;
+
+    fn subscribe_all<F>(&self, callback: F) -> ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static;
+
+    fn subscribe_all_external<F>(&self, callback: F) -> ReactiveScope
+    where
+        F: Fn() + Send + Sync + 'static;
+}

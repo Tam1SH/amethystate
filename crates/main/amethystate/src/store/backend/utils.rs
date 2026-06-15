@@ -1,5 +1,6 @@
-use crate::store::{StoreEvent, SubscriptionEntry, matches_kind};
+use crate::store::{StoreEvent, SubscriptionEntry};
 use parking_lot::RwLock;
+use crate::SubscriptionKind;
 
 pub fn emit_events(subs_lock: &RwLock<Vec<SubscriptionEntry>>, event: StoreEvent) {
     let callbacks = {
@@ -12,6 +13,19 @@ pub fn emit_events(subs_lock: &RwLock<Vec<SubscriptionEntry>>, event: StoreEvent
     };
     for cb in callbacks {
         cb(&event);
+    }
+}
+
+fn matches_kind(kind: &SubscriptionKind, path: &str) -> bool {
+    match kind {
+        SubscriptionKind::Any => true,
+        SubscriptionKind::ExactPath(p) => **p == *path,
+        SubscriptionKind::Prefix(prefix) => {
+            *path == **prefix
+                || path
+                .strip_prefix(&**prefix)
+                .is_some_and(|t| t.starts_with('.'))
+        }
     }
 }
 

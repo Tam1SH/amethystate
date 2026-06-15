@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::store::StorageResult;
 use crate::store::CodecFormat;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -9,16 +9,16 @@ pub trait TextDocument: Send + Sync + Sized + Clone + 'static {
     fn format() -> CodecFormat;
 
     fn get(&self, parts: &[&str]) -> Option<&Self::Node>;
-    fn set(&mut self, parts: &[&str], node: Self::Node) -> Result<()>;
-    fn delete(&mut self, parts: &[&str]) -> Result<Option<Self::Node>>;
+    fn set(&mut self, parts: &[&str], node: Self::Node) -> StorageResult<()>;
+    fn delete(&mut self, parts: &[&str]) -> StorageResult<Option<Self::Node>>;
     fn scan(&self, parts: &[&str]) -> Vec<(String, Self::Node)>;
-    fn parse(src: &str) -> Result<Self>;
-    fn serialize(&self) -> Result<String>;
+    fn parse(src: &str) -> StorageResult<Self>;
+    fn serialize(&self) -> StorageResult<String>;
     fn empty() -> Self;
-    fn deserialize_node<T: DeserializeOwned>(node: &Self::Node) -> Result<T>;
-    fn serialize_node<T: Serialize>(value: &T) -> Result<Self::Node>;
-    fn node_to_bytes(node: &Self::Node) -> Result<Vec<u8>>;
-    fn bytes_to_node(bytes: &[u8]) -> Result<Self::Node>;
+    fn deserialize_node<T: DeserializeOwned>(node: &Self::Node) -> StorageResult<T>;
+    fn serialize_node<T: Serialize>(value: &T) -> StorageResult<Self::Node>;
+    fn node_to_bytes(node: &Self::Node) -> StorageResult<Vec<u8>>;
+    fn bytes_to_node(bytes: &[u8]) -> StorageResult<Self::Node>;
 }
 
 pub trait Navigable: Sized + Clone {
@@ -53,7 +53,7 @@ pub fn generic_get<'a, N: Navigable>(root: &'a N, parts: &[&str]) -> Option<&'a 
     Some(current)
 }
 
-pub fn generic_set<N: Navigable>(root: &mut N, parts: &[&str], node: N) -> Result<()> {
+pub fn generic_set<N: Navigable>(root: &mut N, parts: &[&str], node: N) -> StorageResult<()> {
     let parts = normalise_parts(parts);
 
     if parts.is_empty() {
@@ -74,7 +74,7 @@ pub fn generic_set<N: Navigable>(root: &mut N, parts: &[&str], node: N) -> Resul
     Ok(())
 }
 
-pub fn generic_delete<N: Navigable>(root: &mut N, parts: &[&str]) -> Result<Option<N>> {
+pub fn generic_delete<N: Navigable>(root: &mut N, parts: &[&str]) -> StorageResult<Option<N>> {
     let parts = normalise_parts(parts);
 
     if parts.is_empty() {

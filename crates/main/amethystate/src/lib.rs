@@ -1,6 +1,5 @@
 #![allow(clippy::complexity)]
 mod codec;
-mod error;
 mod global;
 mod macros;
 
@@ -10,13 +9,13 @@ pub mod reactive;
 pub mod store;
 
 pub type AmeData<T> = <T as AmeState>::Data;
+pub type MigrationResult<T> = StorageResult<T>;
 
 pub use inventory;
 pub use serde;
 pub use uuid;
 
-pub use error::Error;
-pub use error::Result;
+
 pub use reactive::{
     AccessMode, AmeState, AmeStateNode, Change, Field, InterceptDisposer, IntoPipeline, MapChange,
     Pipeline, Reactive, ReactiveMap, ReactiveMapKey, ReactiveMapValue, ReactiveScope, ReadOnly,
@@ -24,13 +23,18 @@ pub use reactive::{
     WritableField, WritableMode,
 };
 
+
+pub mod errors {
+    pub use crate::store::StorageError;
+    pub use crate::reactive::error::{ReactiveMapError, FieldError};
+}
 pub mod stores {
     pub use crate::store::default::*;
 }
 
 pub use store::{
-    AmeStateSlice, StateScope, Store, StoreEvent, StoreOp, SubscriptionKind, builder::StoreBuilder,
-    config::StoreConfig, default::DefaultStore, join_path,
+    AmeStateSlice, StateScope, StoreEvent, StoreOp, SubscriptionKind, builder::StoreBuilder,
+    config::StoreConfig, default::DefaultStore, join_path, StorageResult
 };
 
 pub use migration::{MigrationContext, MigrationError, MigrationPlan, MigrationReport};
@@ -40,6 +44,7 @@ pub use global::*;
 
 #[cfg(any(feature = "tauri", feature = "json"))]
 pub use serde_json;
+pub use store::Store;
 
 #[cfg(any(feature = "confy-compat", feature = "confy-compat-0-6"))]
 pub mod confy;

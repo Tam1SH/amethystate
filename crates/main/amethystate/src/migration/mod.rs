@@ -1,4 +1,3 @@
-use crate::Result;
 use tracing::{info, warn};
 
 pub mod builder;
@@ -12,8 +11,8 @@ pub mod registry;
 pub mod set;
 pub mod types;
 
-use crate::error::Error;
-use crate::store::meta;
+
+use crate::store::{meta, StorageError, StorageResult};
 pub use context::MigrationContext;
 pub use error::MigrationError;
 
@@ -63,7 +62,7 @@ pub struct ComponentResult {
 pub enum ComponentOutcome {
     Committed { steps: Vec<AppliedStep> },
     Skipped,
-    Failed { error: Error },
+    Failed { error: StorageError },
 }
 
 impl MigrationReport {
@@ -126,7 +125,7 @@ pub trait Migration: Send + Sync {
     fn description(&self) -> Option<&str> {
         None
     }
-    fn run(&self, ctx: &mut MigrationContext) -> Result<()>;
+    fn run(&self, ctx: &mut MigrationContext) -> StorageResult<()>;
 }
 
 pub struct MigrationPlan {
@@ -140,7 +139,7 @@ impl MigrationPlan {
 
     pub fn step<F>(mut self, version: u32, description: &str, f: F) -> Self
     where
-        F: Fn(&mut MigrationContext) -> Result<()> + Send + Sync + 'static,
+        F: Fn(&mut MigrationContext) -> StorageResult<()> + Send + Sync + 'static,
     {
         struct ClosureMigration<F> {
             v: u32,
@@ -149,7 +148,7 @@ impl MigrationPlan {
         }
         impl<F> Migration for ClosureMigration<F>
         where
-            F: Fn(&mut MigrationContext) -> Result<()> + Send + Sync + 'static,
+            F: Fn(&mut MigrationContext) -> StorageResult<()> + Send + Sync + 'static,
         {
             fn target_version(&self) -> u32 {
                 self.v
@@ -157,7 +156,7 @@ impl MigrationPlan {
             fn description(&self) -> Option<&str> {
                 Some(&self.d)
             }
-            fn run(&self, ctx: &mut MigrationContext) -> Result<()> {
+            fn run(&self, ctx: &mut MigrationContext) -> StorageResult<()> {
                 (self.f)(ctx)
             }
         }

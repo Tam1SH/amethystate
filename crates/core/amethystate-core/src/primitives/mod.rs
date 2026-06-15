@@ -9,3 +9,4 @@ pub mod map_ops;
 pub mod map_ops_async;
 pub mod pipeline;
 pub mod signal;
+pub mod error;

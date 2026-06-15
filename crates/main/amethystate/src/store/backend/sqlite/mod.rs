@@ -1,3 +1,4 @@
+use crate::store::StorageResult;
 use crate::codec::CodecError;
 use crate::migration::engine::{MigrationEngine, StorageProvider};
 use crate::migration::set::MigrationSet;
@@ -6,10 +7,10 @@ use crate::store::backend::utils;
 use crate::store::config::StoreConfig;
 use crate::store::util::debouncer::Debouncer;
 use crate::store::{
-    MigrationBackendAdapter, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp,
+    SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp,
     SubscriptionEntry, SubscriptionId, SubscriptionKind,
 };
-use crate::{MigrationReport, Result};
+use crate::MigrationReport;
 use error::SqliteStoreError;
 use parking_lot::{Mutex, RwLock};
 use rusqlite::{Connection, OptionalExtension};
@@ -19,6 +20,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{info, warn};
+use crate::store::traits::MigrationBackendAdapter;
 
 pub mod error;
 mod migration;
@@ -33,13 +35,13 @@ struct SqliteStoreInner {
 }
 
 impl SqliteStoreInner {
-    pub fn close(&self) -> Result<()> {
+    pub fn close(&self) -> StorageResult<()> {
         info!("Closing SqliteStore...");
         self.save_now()?;
         Ok(())
     }
 
-    pub fn flush_prefix(&self, prefix: &str) -> Result<()> {
+    pub fn flush_prefix(&self, prefix: &str) -> StorageResult<()> {
         let _write_guard = self.write_lock.lock();
 
         let changes = {
@@ -79,15 +81,15 @@ impl SqliteStoreInner {
         }
     }
 
-    fn run_migrations(&self, mset: MigrationSet) -> Result<MigrationReport> {
+    fn run_migrations(&self, mset: MigrationSet) -> StorageResult<MigrationReport> {
         struct SqliteProvider<'a> {
             conn: &'a Mutex<Connection>,
         }
 
         impl<'a> StorageProvider for SqliteProvider<'a> {
-            fn atomic<F, T>(&self, f: F) -> Result<T>
+            fn atomic<F, T>(&self, f: F) -> StorageResult<T>
             where
-                F: FnOnce(&mut dyn MigrationBackendAdapter) -> Result<T>,
+                F: FnOnce(&mut dyn MigrationBackendAdapter) -> StorageResult<T>,
             {
                 let mut conn = self.conn.lock();
                 let txn = conn.transaction().map_err(SqliteStoreError::from)?;
@@ -107,7 +109,7 @@ impl SqliteStoreInner {
         engine.run(mset)
     }
 
-    fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
+    fn get<T: DeserializeOwned>(&self, path: &str) -> StorageResult<Option<T>> {
         {
             let lock = self.pending.lock();
             if let Some(opt_bytes) = lock.get(path) {
@@ -141,7 +143,7 @@ impl SqliteStoreInner {
         }
     }
 
-    fn set<T: Serialize>(&self, path: &str, value: &T, source: Option<uuid::Uuid>) -> Result<()> {
+    fn set<T: Serialize>(&self, path: &str, value: &T, source: Option<uuid::Uuid>) -> StorageResult<()> {
         self.set_owned_with_source(Arc::from(path), value, source)
     }
 
@@ -150,7 +152,7 @@ impl SqliteStoreInner {
         path: Arc<str>,
         value: &T,
         source: Option<uuid::Uuid>,
-    ) -> Result<()> {
+    ) -> StorageResult<()> {
         self.check_debouncer();
         let vec = sonic_rs::to_vec(value)
             .map_err(CodecError::from)
@@ -181,12 +183,12 @@ impl SqliteStoreInner {
         Ok(())
     }
 
-    fn save_now(&self) -> Result<()> {
+    fn save_now(&self) -> StorageResult<()> {
         self.flush_prefix("")
     }
 
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
-        let mut results = Vec::new();
+    fn scan_prefix(&self, prefix: &str) -> StorageResult<Vec<(String, Vec<u8>)>> {
+        let mut StorageResults = Vec::new();
 
         {
             let conn = self.conn.lock();
@@ -202,7 +204,7 @@ impl SqliteStoreInner {
 
             for row in rows {
                 let (k, v) = row.map_err(SqliteStoreError::from)?;
-                results.push((k, v));
+                StorageResults.push((k, v));
             }
         }
 
@@ -218,20 +220,20 @@ impl SqliteStoreInner {
 
         for (k, opt_v) in pending_map {
             if let Some(v) = opt_v {
-                if let Some(pos) = results.iter().position(|(rk, _)| *rk == k) {
-                    results[pos].1 = v;
+                if let Some(pos) = StorageResults.iter().position(|(rk, _)| *rk == k) {
+                    StorageResults[pos].1 = v;
                 } else {
-                    results.push((k, v));
+                    StorageResults.push((k, v));
                 }
             } else {
-                results.retain(|(rk, _)| *rk != k);
+                StorageResults.retain(|(rk, _)| *rk != k);
             }
         }
 
-        Ok(results)
+        Ok(StorageResults)
     }
 
-    fn delete(&self, path: &str, source: Option<uuid::Uuid>) -> Result<()> {
+    fn delete(&self, path: &str, source: Option<uuid::Uuid>) -> StorageResult<()> {
         self.check_debouncer();
         let path_arc: Arc<str> = Arc::from(path);
 
@@ -282,7 +284,7 @@ impl SqliteStoreInner {
         self.subscriptions.write().retain(|s| s.id != id);
     }
 
-    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
+    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> StorageResult<T> {
         match sonic_rs::from_slice(bytes) {
             Ok(val) => Ok(val),
             Err(e) => {
@@ -292,7 +294,7 @@ impl SqliteStoreInner {
         }
     }
 
-    fn is_initialized(&self, namespace: &str) -> Result<bool> {
+    fn is_initialized(&self, namespace: &str) -> StorageResult<bool> {
         let key = format!("__init::{namespace}");
         let conn = self.conn.lock();
         let mut stmt = conn
@@ -301,7 +303,7 @@ impl SqliteStoreInner {
         Ok(stmt.exists([key]).map_err(SqliteStoreError::from)?)
     }
 
-    fn mark_initialized(&self, namespace: &str) -> Result<()> {
+    fn mark_initialized(&self, namespace: &str) -> StorageResult<()> {
         let key = format!("__init::{namespace}");
         let conn = self.conn.lock();
         conn.execute(
@@ -336,7 +338,7 @@ impl SqliteStore {
     pub fn open(
         config: StoreConfig,
         migration_set: MigrationSet,
-    ) -> Result<(Self, MigrationReport)> {
+    ) -> StorageResult<(Self, MigrationReport)> {
         let conn = Connection::open(&config.path).map_err(SqliteStoreError::from)?;
 
         conn.execute_batch(
@@ -429,23 +431,23 @@ impl SqliteStore {
         Ok((store, report))
     }
 
-    pub fn close(&mut self) -> Result<()> {
+    pub fn close(&mut self) -> StorageResult<()> {
         self.inner.close()
     }
 }
 
 impl SchemaAwareStore for SqliteStore {
-    fn run_migrations(&self, mset: MigrationSet) -> Result<MigrationReport> {
+    fn run_migrations(&self, mset: MigrationSet) -> StorageResult<MigrationReport> {
         self.inner.run_migrations(mset)
     }
 }
 
 impl Store for SqliteStore {
-    fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
+    fn get<T: DeserializeOwned>(&self, path: &str) -> StorageResult<Option<T>> {
         self.inner.get(path)
     }
 
-    fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
+    fn set<T: Serialize>(&self, path: &str, value: &T) -> StorageResult<()> {
         self.set_with_source(path, value, None)
     }
 
@@ -454,11 +456,11 @@ impl Store for SqliteStore {
         path: &str,
         value: &T,
         source: Option<uuid::Uuid>,
-    ) -> Result<()> {
+    ) -> StorageResult<()> {
         self.inner.set(path, value, source)
     }
 
-    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
+    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> StorageResult<()> {
         self.set_owned_with_source(path, value, None)
     }
 
@@ -467,23 +469,23 @@ impl Store for SqliteStore {
         path: Arc<str>,
         value: &T,
         source: Option<uuid::Uuid>,
-    ) -> Result<()> {
+    ) -> StorageResult<()> {
         self.inner.set_owned_with_source(path, value, source)
     }
 
-    fn save_now(&self) -> Result<()> {
+    fn save_now(&self) -> StorageResult<()> {
         self.inner.save_now()
     }
 
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
+    fn scan_prefix(&self, prefix: &str) -> StorageResult<Vec<(String, Vec<u8>)>> {
         self.inner.scan_prefix(prefix)
     }
 
-    fn delete(&self, path: &str) -> Result<()> {
+    fn delete(&self, path: &str) -> StorageResult<()> {
         self.delete_with_source(path, None)
     }
 
-    fn delete_with_source(&self, path: &str, source: Option<uuid::Uuid>) -> Result<()> {
+    fn delete_with_source(&self, path: &str, source: Option<uuid::Uuid>) -> StorageResult<()> {
         self.inner.delete(path, source)
     }
 
@@ -495,19 +497,19 @@ impl Store for SqliteStore {
         self.inner.unsubscribe(id)
     }
 
-    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
+    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> StorageResult<T> {
         self.inner.decode(bytes)
     }
 
-    fn flush_prefix(&self, prefix: &str) -> Result<()> {
+    fn flush_prefix(&self, prefix: &str) -> StorageResult<()> {
         self.inner.flush_prefix(prefix)
     }
 
-    fn is_initialized(&self, namespace: &str) -> Result<bool> {
+    fn is_initialized(&self, namespace: &str) -> StorageResult<bool> {
         self.inner.is_initialized(namespace)
     }
 
-    fn mark_initialized(&self, namespace: &str) -> Result<()> {
+    fn mark_initialized(&self, namespace: &str) -> StorageResult<()> {
         self.inner.mark_initialized(namespace)
     }
 }

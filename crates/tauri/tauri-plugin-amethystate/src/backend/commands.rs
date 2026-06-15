@@ -1,4 +1,4 @@
-use amethystate::Store;
+use amethystate::store::Store;
 use amethystate::store::SubscriptionId;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

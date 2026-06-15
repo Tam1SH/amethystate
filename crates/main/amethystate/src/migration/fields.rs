@@ -1,4 +1,5 @@
-use crate::{MigrationContext, Result};
+use crate::store::StorageResult;
+use crate::MigrationContext;
 
 pub struct FieldDescriptor {
     pub name: &'static str,
@@ -13,7 +14,7 @@ pub trait AmeStateFields: Sized {
     const PARENT_PREFIX: &'static str;
     const MIGRATION_DEPS: &'static [&'static str];
 
-    fn load_struct(ctx: &mut MigrationContext) -> Result<Self>;
+    fn load_struct(ctx: &mut MigrationContext) -> StorageResult<Self>;
 
-    fn save_struct(&self, ctx: &mut MigrationContext) -> Result<()>;
+    fn save_struct(&self, ctx: &mut MigrationContext) -> StorageResult<()>;
 }

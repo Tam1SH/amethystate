@@ -1,3 +1,5 @@
+use crate::errors::StorageError;
+use crate::store::StorageResult;
 use super::document::TextDocument;
 use super::error::TextStoreError;
 use crate::codec::CodecError;
@@ -8,10 +10,10 @@ use crate::store::backend::utils;
 use crate::store::config::StoreConfig;
 use crate::store::util::debouncer::Debouncer;
 use crate::store::{
-    MigrationBackendAdapter, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp,
+    SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp,
     SubscriptionEntry, SubscriptionId, SubscriptionKind,
 };
-use crate::{MigrationReport, Result};
+use crate::MigrationReport;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::RwLock;
 use serde::Serialize;
@@ -23,6 +25,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tempfile::NamedTempFile;
 use tracing::{info, warn};
+use crate::store::traits::MigrationBackendAdapter;
 
 pub struct StoreFile<D> {
     pub path: PathBuf,
@@ -50,14 +53,14 @@ impl<D: TextDocument> StoreFile<D> {
         }
     }
 
-    pub fn create_backup(&self) -> Result<()> {
+    pub fn create_backup(&self) -> StorageResult<()> {
         if self.path.exists() {
             std::fs::copy(&self.path, &self.backup_path).map_err(TextStoreError::from)?;
         }
         Ok(())
     }
 
-    pub fn load_or_empty(&self) -> Result<D> {
+    pub fn load_or_empty(&self) -> StorageResult<D> {
         if self.path.exists() {
             let content = std::fs::read_to_string(&self.path).map_err(TextStoreError::from)?;
             D::parse(&content)
@@ -66,7 +69,7 @@ impl<D: TextDocument> StoreFile<D> {
         }
     }
 
-    pub fn persist(&self) -> Result<()> {
+    pub fn persist(&self) -> StorageResult<()> {
         let content = self.doc.read().serialize()?;
         persist_atomic(&self.path, &content).map_err(TextStoreError::from)?;
         Ok(())
@@ -105,13 +108,13 @@ impl<D: TextDocument> Clone for StoreFiles<D> {
 }
 
 impl<D: TextDocument> StoreFiles<D> {
-    pub fn create_backups(&self) -> Result<()> {
+    pub fn create_backups(&self) -> StorageResult<()> {
         self.data.create_backup()?;
         self.meta.create_backup()?;
         Ok(())
     }
 
-    pub fn persist(&self) -> Result<()> {
+    pub fn persist(&self) -> StorageResult<()> {
         self.data.persist()?;
         self.meta.persist()?;
         Ok(())
@@ -138,7 +141,7 @@ struct TextStoreInner<D: TextDocument> {
 }
 
 impl<D: TextDocument> TextStoreInner<D> {
-    fn check_debouncer(&self) -> Result<()> {
+    fn check_debouncer(&self) -> StorageResult<()> {
         if self.debouncer.is_poisoned() {
             panic!("debouncer thread is dead — store integrity cannot be guaranteed");
         }
@@ -177,7 +180,7 @@ impl<D: TextDocument + Send + 'static> TextStore<D> {
     pub fn open(
         config: StoreConfig,
         migration_set: MigrationSet,
-    ) -> Result<(Self, MigrationReport)> {
+    ) -> StorageResult<(Self, MigrationReport)> {
         let path = config.path.clone();
         let meta_path = config.path.with_extension("meta");
 
@@ -212,7 +215,7 @@ impl<D: TextDocument + Send + 'static> TextStore<D> {
         }
     }
 
-    fn new(config: StoreConfig, files: StoreFiles<D>) -> Result<Self> {
+    fn new(config: StoreConfig, files: StoreFiles<D>) -> StorageResult<Self> {
         info!(
             path = %config.path.display(),
             "initializing TextStore"
@@ -317,16 +320,16 @@ impl<D: TextDocument + Send + 'static> TextStore<D> {
 }
 
 impl<D: TextDocument + Send + 'static> SchemaAwareStore for TextStore<D> {
-    fn run_migrations(&self, mset: MigrationSet) -> Result<MigrationReport> {
+    fn run_migrations(&self, mset: MigrationSet) -> StorageResult<MigrationReport> {
         struct TextProvider<D: TextDocument> {
             data_doc: Arc<RwLock<D>>,
             meta_doc: Arc<RwLock<D>>,
         }
 
         impl<D: TextDocument> StorageProvider for TextProvider<D> {
-            fn atomic<F, T>(&self, f: F) -> Result<T>
+            fn atomic<F, T>(&self, f: F) -> StorageResult<T>
             where
-                F: FnOnce(&mut dyn MigrationBackendAdapter) -> Result<T>,
+                F: FnOnce(&mut dyn MigrationBackendAdapter) -> StorageResult<T>,
             {
                 let mut data_guard = self.data_doc.write();
                 let mut meta_guard = self.meta_doc.write();
@@ -360,7 +363,7 @@ impl<D: TextDocument + Send + 'static> SchemaAwareStore for TextStore<D> {
 }
 
 impl<D: TextDocument> TextStoreInner<D> {
-    fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
+    fn get<T: DeserializeOwned>(&self, path: &str) -> StorageResult<Option<T>> {
         let guard = self.files.data.doc.read();
         let parts = split_path(path);
         if let Some(node) = guard.get(&parts) {
@@ -370,7 +373,7 @@ impl<D: TextDocument> TextStoreInner<D> {
         }
     }
 
-    fn set<T: Serialize>(&self, path: &str, value: &T, source: Option<uuid::Uuid>) -> Result<()> {
+    fn set<T: Serialize>(&self, path: &str, value: &T, source: Option<uuid::Uuid>) -> StorageResult<()> {
         self.check_debouncer()?;
 
         let path_str = normalize_path(path)?;
@@ -403,18 +406,18 @@ impl<D: TextDocument> TextStoreInner<D> {
         Ok(())
     }
 
-    fn save_now(&self) -> Result<()> {
+    fn save_now(&self) -> StorageResult<()> {
         self.files.persist()?;
         self.has_pending.store(false, Ordering::Release);
         Ok(())
     }
 
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
+    fn scan_prefix(&self, prefix: &str) -> StorageResult<Vec<(String, Vec<u8>)>> {
         let guard = self.files.data.doc.read();
         scan_prefix_impl(&*guard, prefix)
     }
 
-    fn delete(&self, path: &str, source: Option<uuid::Uuid>) -> Result<()> {
+    fn delete(&self, path: &str, source: Option<uuid::Uuid>) -> StorageResult<()> {
         self.check_debouncer()?;
 
         let path_str = normalize_path(path)?;
@@ -456,7 +459,7 @@ impl<D: TextDocument> TextStoreInner<D> {
         self.subscriptions.write().retain(|s| s.id != id);
     }
 
-    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
+    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> StorageResult<T> {
         match D::bytes_to_node(bytes).and_then(|node| D::deserialize_node(&node)) {
             Ok(val) => Ok(val),
             Err(e) => {
@@ -470,13 +473,13 @@ impl<D: TextDocument> TextStoreInner<D> {
         }
     }
 
-    fn is_initialized(&self, namespace: &str) -> Result<bool> {
+    fn is_initialized(&self, namespace: &str) -> StorageResult<bool> {
         let guard = self.files.meta.doc.read();
         let parts = vec!["__init", namespace];
         Ok(guard.get(&parts).is_some())
     }
 
-    fn mark_initialized(&self, namespace: &str) -> Result<()> {
+    fn mark_initialized(&self, namespace: &str) -> StorageResult<()> {
         {
             let mut guard = self.files.meta.doc.write();
             let parts = vec!["__init", namespace];
@@ -490,11 +493,11 @@ impl<D: TextDocument> TextStoreInner<D> {
 }
 
 impl<D: TextDocument + Send + 'static> Store for TextStore<D> {
-    fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
+    fn get<T: DeserializeOwned>(&self, path: &str) -> StorageResult<Option<T>> {
         self.inner.get(path)
     }
 
-    fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
+    fn set<T: Serialize>(&self, path: &str, value: &T) -> StorageResult<()> {
         self.set_with_source(path, value, None)
     }
 
@@ -503,11 +506,11 @@ impl<D: TextDocument + Send + 'static> Store for TextStore<D> {
         path: &str,
         value: &T,
         source: Option<uuid::Uuid>,
-    ) -> Result<()> {
+    ) -> StorageResult<()> {
         self.inner.set(path, value, source)
     }
 
-    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
+    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> StorageResult<()> {
         self.set_owned_with_source(path, value, None)
     }
 
@@ -516,23 +519,23 @@ impl<D: TextDocument + Send + 'static> Store for TextStore<D> {
         path: Arc<str>,
         value: &T,
         source: Option<uuid::Uuid>,
-    ) -> Result<()> {
+    ) -> StorageResult<()> {
         self.set_with_source(&path, value, source)
     }
 
-    fn save_now(&self) -> Result<()> {
+    fn save_now(&self) -> StorageResult<()> {
         self.inner.save_now()
     }
 
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
+    fn scan_prefix(&self, prefix: &str) -> StorageResult<Vec<(String, Vec<u8>)>> {
         self.inner.scan_prefix(prefix)
     }
 
-    fn delete(&self, path: &str) -> Result<()> {
+    fn delete(&self, path: &str) -> StorageResult<()> {
         self.delete_with_source(path, None)
     }
 
-    fn delete_with_source(&self, path: &str, source: Option<uuid::Uuid>) -> Result<()> {
+    fn delete_with_source(&self, path: &str, source: Option<uuid::Uuid>) -> StorageResult<()> {
         self.inner.delete(path, source)
     }
 
@@ -544,24 +547,24 @@ impl<D: TextDocument + Send + 'static> Store for TextStore<D> {
         self.inner.unsubscribe(id)
     }
 
-    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
+    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> StorageResult<T> {
         self.inner.decode(bytes)
     }
 
-    fn flush_prefix(&self, _prefix: &str) -> Result<()> {
+    fn flush_prefix(&self, _prefix: &str) -> StorageResult<()> {
         self.save_now()
     }
 
-    fn is_initialized(&self, namespace: &str) -> Result<bool> {
+    fn is_initialized(&self, namespace: &str) -> StorageResult<bool> {
         self.inner.is_initialized(namespace)
     }
 
-    fn mark_initialized(&self, namespace: &str) -> Result<()> {
+    fn mark_initialized(&self, namespace: &str) -> StorageResult<()> {
         self.inner.mark_initialized(namespace)
     }
 }
 
-pub fn normalize_path(path: &str) -> Result<String> {
+pub fn normalize_path(path: &str) -> StorageResult<String> {
     let trimmed = path.trim();
 
     if trimmed == "." {
@@ -575,7 +578,7 @@ pub fn normalize_path(path: &str) -> Result<String> {
         .join(".");
 
     if normalized.is_empty() {
-        return Err(crate::error::Error::TextStore(TextStoreError::Codec(
+        return Err(StorageError::TextStore(TextStoreError::Codec(
             CodecError::Custom("path cannot be empty".into()),
         )));
     }
@@ -637,28 +640,28 @@ fn persist_atomic(path: &Path, content: &str) -> std::io::Result<()> {
 pub(super) fn scan_prefix_impl<D: TextDocument>(
     doc: &D,
     prefix: &str,
-) -> Result<Vec<(String, Vec<u8>)>> {
+) -> StorageResult<Vec<(String, Vec<u8>)>> {
     let parts = split_path(prefix);
     let target_depth = parts.len() + 1;
     let mut raw_nodes = Vec::new();
     scan_prefix_recursive(doc, &parts, prefix, &mut raw_nodes, Some(target_depth));
 
-    let mut results = Vec::new();
+    let mut StorageResults = Vec::new();
     for (k, node) in raw_nodes {
         if k.starts_with(prefix) {
             let bytes = D::node_to_bytes(&node)?;
-            results.push((k, bytes));
+            StorageResults.push((k, bytes));
         }
     }
 
-    Ok(results)
+    Ok(StorageResults)
 }
 
 pub(super) fn scan_prefix_recursive<D: TextDocument>(
     doc: &D,
     parts: &[&str],
     prefix_str: &str,
-    results: &mut Vec<(String, D::Node)>,
+    StorageResults: &mut Vec<(String, D::Node)>,
     target_depth: Option<usize>,
 ) {
     let current_depth = parts.len();
@@ -670,7 +673,7 @@ pub(super) fn scan_prefix_recursive<D: TextDocument>(
             && !prefix_str.ends_with('.')
             && let Some(node) = doc.get(parts)
         {
-            results.push((prefix_str.to_string(), node.clone()));
+            StorageResults.push((prefix_str.to_string(), node.clone()));
         }
         return;
     }
@@ -681,7 +684,7 @@ pub(super) fn scan_prefix_recursive<D: TextDocument>(
             && !prefix_str.ends_with('.')
             && let Some(node) = doc.get(parts)
         {
-            results.push((prefix_str.to_string(), node.clone()));
+            StorageResults.push((prefix_str.to_string(), node.clone()));
         }
     } else {
         for (full_key, _node) in children {
@@ -693,10 +696,10 @@ pub(super) fn scan_prefix_recursive<D: TextDocument>(
 
             if should_stop {
                 if let Some(child_node) = doc.get(&child_parts) {
-                    results.push((full_key, child_node.clone()));
+                    StorageResults.push((full_key, child_node.clone()));
                 }
             } else {
-                scan_prefix_recursive(doc, &child_parts, prefix_str, results, target_depth);
+                scan_prefix_recursive(doc, &child_parts, prefix_str, StorageResults, target_depth);
             }
         }
     }

@@ -204,7 +204,7 @@ pub struct BrokenChild {
 #[rename(login => username, tier => plan)]
 fn migrate_identity_v1_to_v2(
     old: AmeData<identity_v1::Identity>,
-) -> amethystate::Result<AmeData<Identity>> {
+) -> amethystate::MigrationResult<AmeData<Identity>> {
     Ok(AmeData::<Identity> {
         username: old.login,
         plan: match old.tier.as_str() {
@@ -219,7 +219,7 @@ fn migrate_identity_v1_to_v2(
 #[rename(title => name, theme => appearance_theme)]
 fn migrate_workspace_v1_to_v2(
     old: AmeData<workspace_v1::Workspace>,
-) -> amethystate::Result<AmeData<workspace_v2::Workspace>> {
+) -> amethystate::MigrationResult<AmeData<workspace_v2::Workspace>> {
     Ok(AmeData::<workspace_v2::Workspace> {
         name: old.title,
         appearance_theme: old.theme,
@@ -230,7 +230,7 @@ fn migrate_workspace_v1_to_v2(
 #[rename(sample_rate => sample_rate_per_mille)]
 fn migrate_telemetry_v1_to_v2(
     old: AmeData<telemetry_v1::Telemetry>,
-) -> amethystate::Result<AmeData<Telemetry>> {
+) -> amethystate::MigrationResult<AmeData<Telemetry>> {
     Ok(AmeData::<Telemetry> {
         enabled: old.enabled,
         sample_rate_per_mille: old.sample_rate.saturating_mul(10),

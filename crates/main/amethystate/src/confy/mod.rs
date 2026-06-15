@@ -30,12 +30,13 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::codec::CodecError;
-use crate::{DefaultStore, Error as RpError, Store, StoreBuilder};
+use crate::{DefaultStore, Error as RpError, StoreBuilder};
 
 #[cfg(feature = "toml")]
 use toml_edit::de::Error as TomlDeErr;
 #[cfg(feature = "toml")]
 use toml_edit::ser::Error as TomlSerErr;
+use crate::store::Store;
 
 #[cfg(backend = "toml")]
 const EXTENSION: &str = "toml";

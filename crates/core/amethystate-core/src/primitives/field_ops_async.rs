@@ -1,5 +1,6 @@
 use crate::primitives::field_core::FieldValue;
 use crate::{AmeBackendAsync, FieldCore};
+use crate::primitives::error::{ReactiveFieldResult, FieldError};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -9,14 +10,14 @@ pub async fn field_set_async<B, T>(
     path: Arc<str>,
     value: T,
     source: Option<Uuid>,
-) -> Result<(), B::Error>
+) -> ReactiveFieldResult<(), B::Error>
 where
     B: AmeBackendAsync,
     T: FieldValue,
 {
     let change = core
         .run_interceptors(path.clone(), value, source)
-        .map_err(|_| backend.intercepted())?;
+        .map_err(|_| FieldError::Intercepted)?;
 
     backend
         .set_owned_with_source(path, &change.new_value, change.source)

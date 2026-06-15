@@ -2,26 +2,27 @@ use crate::AmeBackendAsync as AmeBackend;
 use crate::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
 use crate::{MapChange, ReactiveMapCore, map_apply_remote_change};
 use uuid::Uuid;
+use crate::primitives::error::{ReactiveMapResult, ReactiveMapError};
 
 use serde::de::DeserializeOwned;
 use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::Arc;
 
-pub async fn map_get_async<B, K, V>(backend: &B, path: &str, key: &K) -> Result<Option<V>, B::Error>
+pub async fn map_get_async<B, K, V>(backend: &B, path: &str, key: &K) -> ReactiveMapResult<Option<V>, B::Error>
 where
     B: AmeBackend,
     K: Display,
     V: DeserializeOwned,
 {
-    backend.get(&format!("{}.{}", path, key)).await
+    Ok(backend.get(&format!("{}.{}", path, key)).await?)
 }
 
 pub async fn map_contains_key_async<B, K, V>(
     backend: &B,
     path: &str,
     key: &K,
-) -> Result<bool, B::Error>
+) -> ReactiveMapResult<bool, B::Error>
 where
     B: AmeBackend,
     K: Display,
@@ -32,7 +33,7 @@ where
         .map(|v| v.is_some())
 }
 
-pub async fn map_entries_async<B, K, V>(backend: &B, path: &str) -> Result<Vec<(K, V)>, B::Error>
+pub async fn map_entries_async<B, K, V>(backend: &B, path: &str) -> ReactiveMapResult<Vec<(K, V)>, B::Error>
 where
     B: AmeBackend,
     K: FromStr,
@@ -54,14 +55,14 @@ where
     Ok(results)
 }
 
-pub async fn map_len_async<B>(backend: &B, path: &str) -> Result<usize, B::Error>
+pub async fn map_len_async<B>(backend: &B, path: &str) -> ReactiveMapResult<usize, B::Error>
 where
     B: AmeBackend,
 {
-    backend
+    Ok(backend
         .scan_prefix(&format!("{}.", path))
         .await
-        .map(|kvs| kvs.len())
+        .map(|kvs| kvs.len())?)
 }
 
 pub async fn map_set_existing_async<B, K, V>(
@@ -71,7 +72,7 @@ pub async fn map_set_existing_async<B, K, V>(
     key: K,
     value: &V,
     source: Option<Uuid>,
-) -> Result<(), B::Error>
+) -> ReactiveMapResult<(), B::Error>
 where
     B: AmeBackend,
     K: ReactiveMapKey,
@@ -80,7 +81,7 @@ where
     let full_path = format!("{}.{}", path, key);
     let old_value = match backend.get::<V>(&full_path).await? {
         Some(old_value) => old_value,
-        None => return Err(backend.key_not_found(key.to_string())),
+        None => return Err(ReactiveMapError::KeyNotFound(key.to_string())),
     };
 
     let change = MapChange::Update {
@@ -100,7 +101,7 @@ pub async fn map_set_or_create_async<B, K, V>(
     key: K,
     value: &V,
     source: Option<Uuid>,
-) -> Result<(), B::Error>
+) -> ReactiveMapResult<(), B::Error>
 where
     B: AmeBackend,
     K: ReactiveMapKey,
@@ -132,7 +133,7 @@ pub async fn map_remove_async<B, K, V>(
     path: Arc<str>,
     key: K,
     source: Option<Uuid>,
-) -> Result<Option<V>, B::Error>
+) -> ReactiveMapResult<Option<V>, B::Error>
 where
     B: AmeBackend,
     K: ReactiveMapKey,
@@ -164,7 +165,7 @@ pub async fn map_clear_async<B, K, V>(
     core: &ReactiveMapCore<K, V>,
     path: Arc<str>,
     source: Option<Uuid>,
-) -> Result<(), B::Error>
+) -> ReactiveMapResult<(), B::Error>
 where
     B: AmeBackend,
     K: ReactiveMapKey,
@@ -178,7 +179,7 @@ pub async fn map_apply_change_async<B, K, V>(
     core: &ReactiveMapCore<K, V>,
     path: Arc<str>,
     change: MapChange<K, V>,
-) -> Result<(), B::Error>
+) -> ReactiveMapResult<(), B::Error>
 where
     B: AmeBackend,
     K: ReactiveMapKey,
@@ -191,7 +192,7 @@ where
 
     let processed = core
         .run_interceptors(context_path, change)
-        .map_err(|_| backend.intercepted())?;
+        .map_err(|_| ReactiveMapError::Intercepted)?;
 
     map_apply_remote_change(core, &processed);
 
@@ -217,6 +218,6 @@ where
     }
 
     core.notify(&processed);
-    
+
     Ok(())
 }

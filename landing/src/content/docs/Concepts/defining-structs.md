@@ -11,7 +11,7 @@ The `#[amethystate]` macro transforms a plain Rust struct into a persistent stat
 ### Struct attributes
 
 ```rust
-#[amethystate(prefix = "network", version = 1, mode = "reactive")]
+#[amethystate(prefix = "network", version = 1, mode = "reactive", as_root)]
 pub struct NetworkState { ... }
 ```
 
@@ -20,6 +20,7 @@ pub struct NetworkState { ... }
 | `prefix` | `String` | Namespace path in the store. Required for root structs. |
 | `version` | `u32` | Schema version for migrations. Defaults to `0`. |
 | `mode` | `String` | Code generation mode: `"reactive"` (default), `"persistent"`, or `"both"`. |
+|`as_root`| `flag` | If specified, fields are written directly to the store root without a namespace. |
 
 Structs without `prefix` are nested components, intended to be embedded in other structs via `nested`.
 
@@ -47,6 +48,20 @@ pub struct AppState {
 | `lookup` | `String` | Links to a field in a `parent` struct. Supports dot-notation. |
 | `lookup_node` | `String` | Links to a nested struct node in a `parent` struct. |
 | `parent` | `Type` | The source struct for `lookup` or `lookup_node`. |
+
+## #[derive(AmeType)]
+
+The `#[derive(AmeType)]` macro is used to implement schema tracking for plain Rust structs (e.g., custom data types used as fields inside your `#[amethystate]` containers).
+
+It calculates a unique compile-time `TYPE_HASH` representing the structure of your data.
+
+```rust
+#[derive(Debug, AmeType)]
+pub struct CustomEndpoint {
+    pub host: String,
+    pub port: u16,
+}
+```
 
 ## Volatile fields
 

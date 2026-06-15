@@ -9,13 +9,14 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::sync::Arc;
 use uuid::Uuid;
+use crate::store::StorageResult;
 
 pub fn field<TScope, TValue, S>(
     store: &S,
     key: &str,
     default: TValue,
     instance_id: Uuid,
-) -> crate::Result<Field<TValue, S, WritableMode>>
+) -> StorageResult<Field<TValue, S, WritableMode>>
 where
     TScope: StateScope,
     S: Store,
@@ -30,7 +31,7 @@ pub fn field_with_path<TValue, S, M>(
     path: Arc<str>,
     default: TValue,
     instance_id: Uuid,
-) -> crate::Result<Field<TValue, S, M>>
+) -> StorageResult<Field<TValue, S, M>>
 where
     S: Store,
     TValue: Serialize + DeserializeOwned + Default + Clone + Send + Sync + 'static,
@@ -84,7 +85,7 @@ pub fn reactive_map<TScope, K, V, S>(
     key: &str,
     default: HashMap<K, V>,
     instance_id: Uuid,
-) -> crate::Result<ReactiveMap<K, V, S, WritableMode>>
+) -> StorageResult<ReactiveMap<K, V, S, WritableMode>>
 where
     TScope: StateScope,
     S: Store,
@@ -100,7 +101,7 @@ pub fn reactive_map_with_path<TScope, K, V, S, M>(
     path: Arc<str>,
     defaults: HashMap<K, V>,
     instance_id: Uuid,
-) -> crate::Result<ReactiveMap<K, V, S, M>>
+) -> StorageResult<ReactiveMap<K, V, S, M>>
 where
     TScope: StateScope,
     S: Store,

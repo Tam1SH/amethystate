@@ -1,13 +1,14 @@
 use crate::codec::CodecError;
 use crate::migration::fields::AmeStateFields;
 use crate::migration::migrate_from::MigrateFrom;
-use crate::store::{CodecFormat, MigrationBackendAdapter};
-use crate::{MigrationError, Result};
+use crate::store::{CodecFormat, StorageResult};
+use crate::MigrationError;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::str::FromStr;
+use crate::store::MigrationBackendAdapter;
 
 pub struct MigrationContext<'a> {
     prefix: String,
@@ -19,7 +20,7 @@ impl<'a> MigrationContext<'a> {
         Self { prefix, storage }
     }
 
-    pub fn nested<TOld, TNew>(&mut self, key: &str, old_data: TOld) -> Result<TNew>
+    pub fn nested<TOld, TNew>(&mut self, key: &str, old_data: TOld) -> StorageResult<TNew>
     where
         TOld: AmeStateFields,
         TNew: MigrateFrom<TOld> + AmeStateFields,
@@ -39,11 +40,11 @@ impl<'a> MigrationContext<'a> {
         Ok(new_data)
     }
 
-    pub fn delete(&mut self, key: &str) -> Result<()> {
+    pub fn delete(&mut self, key: &str) -> StorageResult<()> {
         self.storage.delete(&self.scoped_path(key))
     }
 
-    pub fn rename(&mut self, from: &str, to: &str) -> Result<()> {
+    pub fn rename(&mut self, from: &str, to: &str) -> StorageResult<()> {
         if let Some(bytes) = self.get_raw(from)? {
             self.set_raw(to, &bytes)?;
             self.delete(from)?;
@@ -54,8 +55,8 @@ impl<'a> MigrationContext<'a> {
     pub fn transform<TOld, TNew>(
         &mut self,
         key: &str,
-        f: impl FnOnce(TOld) -> Result<TNew>,
-    ) -> Result<()>
+        f: impl FnOnce(TOld) -> StorageResult<TNew>,
+    ) -> StorageResult<()>
     where
         TOld: DeserializeOwned,
         TNew: Serialize,
@@ -71,8 +72,8 @@ impl<'a> MigrationContext<'a> {
         &mut self,
         from: (&str, &str),
         into: &str,
-        f: impl FnOnce(TOld1, TOld2) -> Result<TNew>,
-    ) -> Result<()>
+        f: impl FnOnce(TOld1, TOld2) -> StorageResult<TNew>,
+    ) -> StorageResult<()>
     where
         TOld1: DeserializeOwned,
         TOld2: DeserializeOwned,
@@ -91,8 +92,8 @@ impl<'a> MigrationContext<'a> {
         &mut self,
         from: &str,
         into: (&str, &str),
-        f: impl FnOnce(TOld) -> Result<(TNew1, TNew2)>,
-    ) -> Result<()>
+        f: impl FnOnce(TOld) -> StorageResult<(TNew1, TNew2)>,
+    ) -> StorageResult<()>
     where
         TOld: DeserializeOwned,
         TNew1: Serialize,
@@ -107,34 +108,34 @@ impl<'a> MigrationContext<'a> {
         Ok(())
     }
 
-    pub fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
+    pub fn get<T: DeserializeOwned>(&self, key: &str) -> StorageResult<Option<T>> {
         match self.get_raw(key)? {
             Some(bytes) => Ok(Some(decode(self.storage, &bytes)?)),
             None => Ok(None),
         }
     }
 
-    pub fn set<T: Serialize>(&mut self, key: &str, value: &T) -> Result<()> {
+    pub fn set<T: Serialize>(&mut self, key: &str, value: &T) -> StorageResult<()> {
         self.set_raw(key, &encode(self.storage, value)?)
     }
 
-    pub fn global_get<T: DeserializeOwned>(&self, full_key: &str) -> Result<Option<T>> {
+    pub fn global_get<T: DeserializeOwned>(&self, full_key: &str) -> StorageResult<Option<T>> {
         match self.storage.get(full_key)? {
             Some(bytes) => Ok(Some(decode(self.storage, &bytes)?)),
             None => Ok(None),
         }
     }
 
-    pub fn global_set<T: Serialize>(&mut self, full_key: &str, value: &T) -> Result<()> {
+    pub fn global_set<T: Serialize>(&mut self, full_key: &str, value: &T) -> StorageResult<()> {
         let bytes = encode(self.storage, value)?;
         self.storage.set(full_key, &bytes)
     }
 
-    pub fn get_raw(&self, key: &str) -> Result<Option<Vec<u8>>> {
+    pub fn get_raw(&self, key: &str) -> StorageResult<Option<Vec<u8>>> {
         self.storage.get(&self.scoped_path(key))
     }
 
-    pub fn set_raw(&mut self, key: &str, value: &[u8]) -> Result<()> {
+    pub fn set_raw(&mut self, key: &str, value: &[u8]) -> StorageResult<()> {
         self.storage.set(&self.scoped_path(key), value)
     }
 
@@ -145,7 +146,7 @@ impl<'a> MigrationContext<'a> {
         }
     }
 
-    pub fn scan_map<K, V>(&self, key: &str) -> Result<HashMap<K, V>>
+    pub fn scan_map<K, V>(&self, key: &str) -> StorageResult<HashMap<K, V>>
     where
         K: FromStr + Eq + Hash,
         V: DeserializeOwned,
@@ -173,7 +174,7 @@ impl<'a> MigrationContext<'a> {
     }
 }
 
-pub fn encode<T: Serialize>(storage: &dyn MigrationBackendAdapter, value: &T) -> Result<Vec<u8>> {
+pub fn encode<T: Serialize>(storage: &dyn MigrationBackendAdapter, value: &T) -> StorageResult<Vec<u8>> {
     match storage.format() {
         #[cfg(feature = "redb")]
         CodecFormat::MessagePack => rmp_serde::to_vec(value)
@@ -223,7 +224,7 @@ pub fn encode<T: Serialize>(storage: &dyn MigrationBackendAdapter, value: &T) ->
 pub fn decode<T: DeserializeOwned>(
     storage: &dyn MigrationBackendAdapter,
     bytes: &[u8],
-) -> Result<T> {
+) -> StorageResult<T> {
     match storage.format() {
         #[cfg(feature = "redb")]
         CodecFormat::MessagePack => rmp_serde::from_slice(bytes)
@@ -285,43 +286,43 @@ mod tests {
             CodecFormat::Default
         }
 
-        fn get(&self, key: &str) -> crate::Result<Option<Vec<u8>>> {
+        fn get(&self, key: &str) -> StorageResult<Option<Vec<u8>>> {
             Ok(self.data.get(key).cloned())
         }
-        fn set(&mut self, key: &str, value: &[u8]) -> crate::Result<()> {
+        fn set(&mut self, key: &str, value: &[u8]) -> StorageResult<()> {
             self.data.insert(key.to_string(), value.to_vec());
             Ok(())
         }
-        fn delete(&mut self, key: &str) -> crate::Result<()> {
+        fn delete(&mut self, key: &str) -> StorageResult<()> {
             self.data.remove(key);
             Ok(())
         }
 
-        fn scan_prefix(&self, _: &str) -> Result<Vec<(String, Vec<u8>)>> {
+        fn scan_prefix(&self, _: &str) -> StorageResult<Vec<(String, Vec<u8>)>> {
             unreachable!()
         }
 
-        fn get_meta(&self, _prefix: &str) -> Result<Option<PrefixMeta>> {
+        fn get_meta(&self, _prefix: &str) -> StorageResult<Option<PrefixMeta>> {
             unreachable!()
         }
 
-        fn set_meta(&mut self, _prefix: &str, _meta: &PrefixMeta) -> Result<()> {
+        fn set_meta(&mut self, _prefix: &str, _meta: &PrefixMeta) -> StorageResult<()> {
             unreachable!()
         }
 
-        fn get_schema_snapshot(&self, _prefix: &str) -> Result<Option<SchemaSnapshot>> {
+        fn get_schema_snapshot(&self, _prefix: &str) -> StorageResult<Option<SchemaSnapshot>> {
             unreachable!()
         }
 
-        fn set_schema_snapshot(&mut self, _prefix: &str, _snapshot: &SchemaSnapshot) -> Result<()> {
+        fn set_schema_snapshot(&mut self, _prefix: &str, _snapshot: &SchemaSnapshot) -> StorageResult<()> {
             unreachable!()
         }
 
-        fn get_migration_log(&self, _prefix: &str) -> Result<Option<Vec<AppliedStep>>> {
+        fn get_migration_log(&self, _prefix: &str) -> StorageResult<Option<Vec<AppliedStep>>> {
             unreachable!()
         }
 
-        fn set_migration_log(&mut self, _prefix: &str, _log: &[AppliedStep]) -> Result<()> {
+        fn set_migration_log(&mut self, _prefix: &str, _log: &[AppliedStep]) -> StorageResult<()> {
             unreachable!()
         }
     }

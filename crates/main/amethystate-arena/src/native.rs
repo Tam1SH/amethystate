@@ -1,7 +1,7 @@
 use crate::primitives::*;
 use amethystate::{
     AccessMode, Field, MapChange, Pipeline, Reactive, ReactiveMap, ReactiveMapKey,
-    ReactiveMapValue, Result as RpResult, SignalSubscription, Store, WritableMode,
+    ReactiveMapValue, StorageResult, SignalSubscription, WritableMode,
 };
 use parking_lot::RwLock;
 use serde::{Serialize, de::DeserializeOwned};
@@ -10,6 +10,8 @@ use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use uuid::Uuid;
+use amethystate::reactive::error::{ReactiveFieldResult, ReactiveMapResult};
+use amethystate::store::Store;
 
 type ErasedItem = Box<dyn Any + Send + Sync>;
 
@@ -71,7 +73,7 @@ impl<S: Store> Arena<S> {
         self.with_item::<Field<T, S, M>, _, _>(handle.key, "Field", |field| field.get())
     }
 
-    pub fn set_field<T>(&self, handle: WritableHandle<T>, value: T) -> RpResult<()>
+    pub fn set_field<T>(&self, handle: WritableHandle<T>, value: T) -> ReactiveFieldResult<()>
     where
         T: DeserializeOwned + Serialize + Clone + Send + Sync + 'static,
     {
@@ -167,7 +169,7 @@ impl<S: Store> Arena<S> {
         }
     }
 
-    pub fn get_map_entry<K, V, M>(&self, handle: MapHandle<K, V, M>, key: &K) -> RpResult<Option<V>>
+    pub fn get_map_entry<K, V, M>(&self, handle: MapHandle<K, V, M>, key: &K) -> ReactiveMapResult<Option<V>>
     where
         K: ReactiveMapKey,
         V: ReactiveMapValue,
@@ -183,7 +185,7 @@ impl<S: Store> Arena<S> {
         handle: WritableMapHandle<K, V>,
         key: K,
         value: V,
-    ) -> RpResult<()>
+    ) -> ReactiveMapResult<()>
     where
         K: ReactiveMapKey,
         V: ReactiveMapValue,
@@ -265,7 +267,7 @@ impl<S: Store> Arena<S> {
         self.storage.write().remove(handle.key);
     }
 
-    pub fn get_map_entries<K, V, M>(&self, handle: MapHandle<K, V, M>) -> RpResult<Vec<(K, V)>>
+    pub fn get_map_entries<K, V, M>(&self, handle: MapHandle<K, V, M>) -> ReactiveMapResult<Vec<(K, V)>>
     where
         K: ReactiveMapKey,
         V: ReactiveMapValue,
@@ -280,7 +282,7 @@ impl<S: Store> Arena<S> {
         &self,
         handle: WritableMapHandle<K, V>,
         key: K,
-    ) -> RpResult<Option<V>>
+    ) -> ReactiveMapResult<Option<V>>
     where
         K: ReactiveMapKey,
         V: ReactiveMapValue,
@@ -292,7 +294,7 @@ impl<S: Store> Arena<S> {
         )
     }
 
-    pub fn clear_map<K, V>(&self, handle: WritableMapHandle<K, V>) -> RpResult<()>
+    pub fn clear_map<K, V>(&self, handle: WritableMapHandle<K, V>) -> ReactiveMapResult<()>
     where
         K: ReactiveMapKey,
         V: ReactiveMapValue,

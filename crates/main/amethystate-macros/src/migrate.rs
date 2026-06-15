@@ -46,7 +46,7 @@ pub fn migrate_impl(
 
     let new_ty = match &item_fn.sig.output {
         ReturnType::Type(_, ty) => extract_target_type(ty).unwrap(),
-        _ => panic!("Expected Result<TargetType>"),
+        _ => panic!("Expected MigrationResult<TargetType>"),
     };
 
     let mut renames = Vec::new();
@@ -98,7 +98,7 @@ pub fn migrate_impl(
                 #(#rename_tuples),*
             ];
 
-            fn migrate(old_val: #old_ty, ctx_val: &mut #crate_name::migration::MigrationContext) -> #crate_name::Result<Self> {
+            fn migrate(old_val: #old_ty, ctx_val: &mut #crate_name::migration::MigrationContext) -> #crate_name::StorageResult<Self> {
                 #call_expr
             }
         }
@@ -152,7 +152,7 @@ pub fn migrate_impl(
 fn extract_target_type(ty: &Type) -> Option<Type> {
     if let Type::Path(type_path) = ty
         && let Some(segment) = type_path.path.segments.last()
-        && segment.ident == "Result"
+        && segment.ident == "MigrationResult"
         && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
         && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
     {

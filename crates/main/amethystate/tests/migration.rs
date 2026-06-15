@@ -24,7 +24,7 @@ pub struct Config {
 
 #[migrate]
 #[rename(host => address)]
-fn migrate_config_v1_to_v2(old: AmeData<v1::Config>) -> amethystate::Result<AmeData<Config>> {
+fn migrate_config_v1_to_v2(old: AmeData<v1::Config>) -> amethystate::MigrationResult<AmeData<Config>> {
     Ok(AmeData::<Config> {
         address: old.host,
         port: 9090,

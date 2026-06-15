@@ -1,6 +1,7 @@
+use crate::store::StorageResult;
 use super::MigrationPlan;
 use crate::migration::fields::FieldDescriptor;
-use crate::{MigrationError, Result};
+use crate::MigrationError;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -85,7 +86,7 @@ impl MigrationSet {
         components
     }
 
-    pub(crate) fn topo_sort_component(&self, prefixes: &[String]) -> Result<Vec<String>> {
+    pub(crate) fn topo_sort_component(&self, prefixes: &[String]) -> StorageResult<Vec<String>> {
         let mut sub_graph = DiGraph::new();
         let mut sub_nodes = HashMap::new();
 
@@ -122,8 +123,9 @@ impl MigrationSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Error;
+    
     use crate::migration::fields::FieldDescriptor;
+    use crate::store::StorageError;
 
     const EMPTY_FIELDS: &[FieldDescriptor] = &[];
 
@@ -189,7 +191,7 @@ mod tests {
         let result = set.topo_sort_component(comp).unwrap_err();
 
         match result {
-            Error::Migration(MigrationError::Cycle(prefix)) => {
+            StorageError::Migration(MigrationError::Cycle(prefix)) => {
                 assert!(["a", "b", "c"].contains(&prefix.as_str()));
             }
             _ => panic!("Expected MigrationCycle error, got {:?}", result),

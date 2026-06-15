@@ -1,4 +1,6 @@
-use crate::AmeBackend;
+use std::borrow::Borrow;
+use crate::primitives::error::{ReactiveMapResult, ReactiveMapError};
+use crate::AmeBackendSync;
 use crate::primitives::map_core::{ReactiveMapKey, ReactiveMapValue};
 use crate::{MapChange, ReactiveMapCore};
 
@@ -8,27 +10,27 @@ use std::str::FromStr;
 use std::sync::Arc;
 use uuid::Uuid;
 
-pub fn map_get<B, K, V>(backend: &B, path: &str, key: &K) -> Result<Option<V>, B::Error>
+pub fn map_get<B, K, V>(backend: &B, path: &str, key: &K) -> ReactiveMapResult<Option<V>, B::Error>
 where
-    B: AmeBackend,
+    B: AmeBackendSync,
     K: Display,
     V: DeserializeOwned,
 {
-    backend.get(&format!("{}.{}", path, key))
+    Ok(backend.get(&format!("{}.{}", path, key))?)
 }
 
-pub fn map_contains_key<B, K, V>(backend: &B, path: &str, key: &K) -> Result<bool, B::Error>
+pub fn map_contains_key<B, K, V>(backend: &B, path: &str, key: &K) -> ReactiveMapResult<bool, B::Error>
 where
-    B: AmeBackend,
+    B: AmeBackendSync,
     K: Display,
     V: DeserializeOwned,
 {
     map_get::<B, K, V>(backend, path, key).map(|v| v.is_some())
 }
 
-pub fn map_entries<B, K, V>(backend: &B, path: &str) -> Result<Vec<(K, V)>, B::Error>
+pub fn map_entries<B, K, V>(backend: &B, path: &str) -> ReactiveMapResult<Vec<(K, V)>, B::Error>
 where
-    B: AmeBackend,
+    B: AmeBackendSync,
     K: FromStr,
     V: DeserializeOwned + Default,
 {
@@ -40,7 +42,7 @@ where
     for (full_path, raw) in kvs {
         if let Some(key_str) = full_path.strip_prefix(&prefix)
             && let Ok(k) = K::from_str(key_str)
-            && let Ok(v) = backend.decode::<V>(&raw)
+            && let Ok(v) = backend.decode::<V>(raw.borrow())
         {
             results.push((k, v));
         }
@@ -49,13 +51,13 @@ where
     Ok(results)
 }
 
-pub fn map_len<B>(backend: &B, path: &str) -> Result<usize, B::Error>
+pub fn map_len<B>(backend: &B, path: &str) -> ReactiveMapResult<usize, B::Error>
 where
-    B: AmeBackend,
+    B: AmeBackendSync,
 {
-    backend
+    Ok(backend
         .scan_prefix(&format!("{}.", path))
-        .map(|kvs| kvs.len())
+        .map(|kvs| kvs.len())?)
 }
 
 pub fn map_set_existing<B, K, V>(
@@ -66,16 +68,16 @@ pub fn map_set_existing<B, K, V>(
     value: &V,
     notify_after_commit: bool,
     source: Option<Uuid>,
-) -> Result<(), B::Error>
+) -> ReactiveMapResult<(), B::Error>
 where
-    B: AmeBackend,
+    B: AmeBackendSync,
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
     let full_path = format!("{}.{}", path, key);
     let old_value = match backend.get::<V>(&full_path)? {
         Some(old_value) => old_value,
-        None => return Err(backend.key_not_found(key.to_string())),
+        None => return Err(ReactiveMapError::KeyNotFound(key.to_string())),
     };
 
     let change = MapChange::Update {
@@ -96,9 +98,9 @@ pub fn map_set_or_create<B, K, V>(
     value: &V,
     notify_after_commit: bool,
     source: Option<Uuid>,
-) -> Result<(), B::Error>
+) -> ReactiveMapResult<(), B::Error>
 where
-    B: AmeBackend,
+    B: AmeBackendSync,
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
@@ -129,9 +131,9 @@ pub fn map_remove<B, K, V>(
     key: K,
     notify_after_commit: bool,
     source: Option<Uuid>,
-) -> Result<Option<V>, B::Error>
+) -> ReactiveMapResult<Option<V>, B::Error>
 where
-    B: AmeBackend,
+    B: AmeBackendSync,
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
@@ -162,9 +164,9 @@ pub fn map_clear<B, K, V>(
     path: Arc<str>,
     notify_after_commit: bool,
     source: Option<Uuid>,
-) -> Result<(), B::Error>
+) -> ReactiveMapResult<(), B::Error>
 where
-    B: AmeBackend,
+    B: AmeBackendSync,
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
@@ -183,9 +185,9 @@ pub fn map_apply_change<B, K, V>(
     path: Arc<str>,
     change: MapChange<K, V>,
     notify_after_commit: bool,
-) -> Result<(), B::Error>
+) -> ReactiveMapResult<(), B::Error>
 where
-    B: AmeBackend,
+    B: AmeBackendSync,
     K: ReactiveMapKey,
     V: ReactiveMapValue,
 {
@@ -196,7 +198,7 @@ where
 
     let processed = core
         .run_interceptors(context_path, change)
-        .map_err(|_| backend.intercepted())?;
+        .map_err(|_| ReactiveMapError::Intercepted)?;
 
     match &processed {
         MapChange::Insert { key, value, .. }

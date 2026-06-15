@@ -136,13 +136,6 @@ impl AmeBackendAsync for TauriBackend {
         serde_json::from_value(raw.clone()).map_err(|e| e.to_string())
     }
 
-    fn intercepted(&self) -> Self::Error {
-        "Change intercepted".to_string()
-    }
-
-    fn key_not_found(&self, key: String) -> Self::Error {
-        format!("Key not found: {key}")
-    }
 }
 
 impl AsyncSubscriptionBackend for TauriBackend {

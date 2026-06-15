@@ -2,6 +2,7 @@ use crate::primitives::*;
 use amethystate::{AccessMode, MapChange, Pipeline, SignalSubscription, WritableMode};
 use parking_lot::RwLock;
 
+use amethystate::core::error::{ReactiveMapResult, ReactiveFieldResult};
 use amethystate::client::{AsyncSubscriptionBackend, Field, ReactiveMap};
 use amethystate::reactive::FieldValue;
 use amethystate::{ReactiveMapKey, ReactiveMapValue};
@@ -71,7 +72,7 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
         self.with_item::<Field<T, B>, _, _>(handle.key, "Field", |field| field.value())
     }
 
-    pub async fn set_field<T>(&self, handle: WritableHandle<T>, value: T) -> Result<(), B::Error>
+    pub async fn set_field<T>(&self, handle: WritableHandle<T>, value: T) -> ReactiveFieldResult<(), B::Error>
     where
         T: FieldValue,
     {
@@ -169,7 +170,7 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
         &self,
         handle: MapHandle<K, V, M>,
         key: &K,
-    ) -> Result<Option<V>, B::Error>
+    ) -> ReactiveMapResult<Option<V>, B::Error>
     where
         K: ReactiveMapKey + for<'de> Deserialize<'de>,
         V: ReactiveMapValue,
@@ -184,7 +185,7 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
         &self,
         handle: MapHandle<K, V>,
         key: &K,
-    ) -> Result<Option<V>, B::Error>
+    ) -> ReactiveMapResult<Option<V>, B::Error>
     where
         K: ReactiveMapKey + for<'de> Deserialize<'de>,
         V: ReactiveMapValue,
@@ -199,7 +200,7 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
         handle: WritableMapHandle<K, V>,
         key: K,
         value: V,
-    ) -> Result<(), B::Error>
+    ) -> ReactiveMapResult<(), B::Error>
     where
         K: ReactiveMapKey + for<'de> Deserialize<'de>,
         V: ReactiveMapValue,
@@ -282,7 +283,7 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
     pub async fn get_map_entries_async<K, V, M>(
         &self,
         handle: MapHandle<K, V, M>,
-    ) -> Result<Vec<(K, V)>, B::Error>
+    ) -> ReactiveMapResult<Vec<(K, V)>, B::Error>
     where
         K: ReactiveMapKey + for<'de> Deserialize<'de>,
         V: ReactiveMapValue,
@@ -296,7 +297,7 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
     pub fn get_map_entries<K, V, M>(
         &self,
         handle: MapHandle<K, V, M>,
-    ) -> Result<Vec<(K, V)>, B::Error>
+    ) -> ReactiveMapResult<Vec<(K, V)>, B::Error>
     where
         K: ReactiveMapKey + for<'de> Deserialize<'de>,
         V: ReactiveMapValue,
@@ -311,7 +312,7 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
         &self,
         handle: WritableMapHandle<K, V>,
         key: K,
-    ) -> Result<Option<V>, B::Error>
+    ) -> ReactiveMapResult<Option<V>, B::Error>
     where
         K: ReactiveMapKey + for<'de> Deserialize<'de>,
         V: ReactiveMapValue,
@@ -321,7 +322,7 @@ impl<B: AsyncSubscriptionBackend> Arena<B> {
         map.remove(key).await
     }
 
-    pub async fn clear_map<K, V>(&self, handle: WritableMapHandle<K, V>) -> Result<(), B::Error>
+    pub async fn clear_map<K, V>(&self, handle: WritableMapHandle<K, V>) -> ReactiveMapResult<(), B::Error>
     where
         K: ReactiveMapKey + for<'de> Deserialize<'de>,
         V: ReactiveMapValue,

@@ -1,5 +1,5 @@
 use crate::store::{
-    MigrationBackendAdapter, SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp,
+    SchemaAwareStore, Store, StoreCallback, StoreEvent, StoreOp,
     SubscriptionEntry, SubscriptionId, SubscriptionKind,
 };
 use error::RedbStoreError;
@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use tables::{TABLE_DATA, TABLE_DIFF_LOG, TABLE_META, TABLE_MIGRATION_LOG};
 
 use crate::store::config::StoreConfig;
-use crate::{MigrationReport, Result};
+use crate::{MigrationReport, store::error::StorageResult};
 
 use crate::codec::CodecError;
 use crate::migration::engine::{MigrationEngine, StorageProvider};
@@ -26,6 +26,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{info, warn};
 use uuid::Uuid;
+use crate::store::traits::MigrationBackendAdapter;
 
 pub mod error;
 mod migration;
@@ -52,17 +53,17 @@ struct RedbStoreInner {
 }
 
 impl RedbStoreInner {
-    pub fn close(&self) -> Result<()> {
+    pub fn close(&self) -> StorageResult<()> {
         info!("Closing RedbStore...");
         self.save_now()?;
         Ok(())
     }
 
-    pub fn save_now(&self) -> Result<()> {
+    pub fn save_now(&self) -> StorageResult<()> {
         self.flush_prefix("")
     }
 
-    pub fn flush_prefix(&self, prefix: &str) -> Result<()> {
+    pub fn flush_prefix(&self, prefix: &str) -> StorageResult<()> {
         let _write_guard = self.write_lock.lock();
 
         let changes = {
@@ -117,7 +118,7 @@ impl RedbStore {
     pub fn open(
         config: StoreConfig,
         migration_set: MigrationSet,
-    ) -> Result<(Self, MigrationReport)> {
+    ) -> StorageResult<(Self, MigrationReport)> {
         let db = Arc::new(Database::create(&config.path).map_err(RedbStoreError::from)?);
 
         let write_txn = db.begin_write().map_err(RedbStoreError::from)?;
@@ -208,21 +209,21 @@ impl RedbStore {
         Ok((store, report))
     }
 
-    pub fn close(&self) -> Result<()> {
+    pub fn close(&self) -> StorageResult<()> {
         self.inner.close()
     }
 }
 
 impl SchemaAwareStore for RedbStore {
-    fn run_migrations(&self, mset: MigrationSet) -> Result<MigrationReport> {
+    fn run_migrations(&self, mset: MigrationSet) -> StorageResult<MigrationReport> {
         struct RedbProvider<'a> {
             db: &'a Database,
         }
 
         impl<'a> StorageProvider for RedbProvider<'a> {
-            fn atomic<F, T>(&self, f: F) -> Result<T>
+            fn atomic<F, T>(&self, f: F) -> StorageResult<T>
             where
-                F: FnOnce(&mut dyn MigrationBackendAdapter) -> Result<T>,
+                F: FnOnce(&mut dyn MigrationBackendAdapter) -> StorageResult<T>,
             {
                 let write_txn = self.db.begin_write().map_err(RedbStoreError::from)?;
 
@@ -243,7 +244,7 @@ impl SchemaAwareStore for RedbStore {
 }
 
 impl Store for RedbStore {
-    fn get<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>> {
+    fn get<T: DeserializeOwned>(&self, path: &str) -> StorageResult<Option<T>> {
         {
             let lock = self.inner.pending.lock();
             if let Some(opt_bytes) = lock.get(path) {
@@ -275,11 +276,11 @@ impl Store for RedbStore {
         }
     }
 
-    fn set<T: Serialize>(&self, path: &str, value: &T) -> Result<()> {
+    fn set<T: Serialize>(&self, path: &str, value: &T) -> StorageResult<()> {
         self.set_with_source(path, value, None)
     }
 
-    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> Result<()> {
+    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> StorageResult<()> {
         self.set_owned_with_source(path, value, None)
     }
 
@@ -288,7 +289,7 @@ impl Store for RedbStore {
         path: &str,
         value: &T,
         source: Option<uuid::Uuid>,
-    ) -> Result<()> {
+    ) -> StorageResult<()> {
         self.set_owned_with_source(Arc::from(path), value, source)
     }
 
@@ -297,7 +298,7 @@ impl Store for RedbStore {
         path: Arc<str>,
         value: &T,
         source: Option<uuid::Uuid>,
-    ) -> Result<()> {
+    ) -> StorageResult<()> {
         self.inner.check_debouncer();
         let bytes = SERIALIZATION_BUFFER.with(|buf| {
             let mut b = buf.borrow_mut();
@@ -333,11 +334,11 @@ impl Store for RedbStore {
         Ok(())
     }
 
-    fn save_now(&self) -> Result<()> {
+    fn save_now(&self) -> StorageResult<()> {
         self.inner.save_now()
     }
 
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
+    fn scan_prefix(&self, prefix: &str) -> StorageResult<Vec<(String, Vec<u8>)>> {
         let mut results = Vec::new();
 
         let read_txn = self.inner.db.begin_read().map_err(RedbStoreError::from)?;
@@ -381,7 +382,7 @@ impl Store for RedbStore {
         Ok(results)
     }
 
-    fn delete_with_source(&self, path: &str, source: Option<Uuid>) -> Result<()> {
+    fn delete_with_source(&self, path: &str, source: Option<Uuid>) -> StorageResult<()> {
         self.inner.check_debouncer();
         let path_arc: Arc<str> = Arc::from(path);
 
@@ -421,7 +422,7 @@ impl Store for RedbStore {
         Ok(())
     }
 
-    fn delete(&self, path: &str) -> Result<()> {
+    fn delete(&self, path: &str) -> StorageResult<()> {
         self.delete_with_source(path, None)
     }
 
@@ -438,7 +439,7 @@ impl Store for RedbStore {
         self.inner.subscriptions.write().retain(|s| s.id != id);
     }
 
-    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> Result<T> {
+    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> StorageResult<T> {
         match rmp_serde::from_slice(bytes) {
             Ok(val) => Ok(val),
             Err(e) => {
@@ -452,11 +453,11 @@ impl Store for RedbStore {
         }
     }
 
-    fn flush_prefix(&self, prefix: &str) -> Result<()> {
+    fn flush_prefix(&self, prefix: &str) -> StorageResult<()> {
         self.inner.flush_prefix(prefix)
     }
 
-    fn is_initialized(&self, namespace: &str) -> Result<bool> {
+    fn is_initialized(&self, namespace: &str) -> StorageResult<bool> {
         let key = format!("__init::{namespace}");
         let read_txn = self.inner.db.begin_read().map_err(RedbStoreError::from)?;
         let table = read_txn
@@ -468,7 +469,7 @@ impl Store for RedbStore {
             .is_some())
     }
 
-    fn mark_initialized(&self, namespace: &str) -> Result<()> {
+    fn mark_initialized(&self, namespace: &str) -> StorageResult<()> {
         let key = format!("__init::{namespace}");
         let write_txn = self.inner.db.begin_write().map_err(RedbStoreError::from)?;
         {
@@ -579,8 +580,8 @@ mod tests {
         let (store, _) = RedbStore::open(StoreConfig::new(path), MigrationSet::default()).unwrap();
         let garbage = vec![0x00, 0x01, 0x02];
 
-        let result: String = store.decode(&garbage).unwrap();
-        assert_eq!(result, String::default());
+        let StorageResult: String = store.decode(&garbage).unwrap();
+        assert_eq!(StorageResult, String::default());
     }
 
     #[test]

@@ -23,6 +23,7 @@ uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 amethystate = { workspace = true, features = ["test-utils"] }
+anyhow = "1.0.102"
 
 [features]
 tauri-backend = ["dep:amethystate-tauri", "amethystate/tauri"]

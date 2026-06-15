@@ -1,0 +1,73 @@
+use serde::{Serialize, de::DeserializeOwned};
+use std::sync::Arc;
+use uuid::Uuid;
+use crate::migration::AppliedStep;
+use crate::migration::set::MigrationSet;
+use crate::store::{CodecFormat, StoreCallback, SubscriptionId};
+use crate::store::error::StorageResult;
+use crate::store::meta::{PrefixMeta, SchemaSnapshot};
+use crate::{MigrationReport, SubscriptionKind};
+
+pub trait MigrationBackendAdapter {
+    fn format(&self) -> CodecFormat;
+
+    fn get(&self, key: &str) -> StorageResult<Option<Vec<u8>>>;
+    fn set(&mut self, key: &str, value: &[u8]) -> StorageResult<()>;
+    fn delete(&mut self, key: &str) -> StorageResult<()>;
+    fn scan_prefix(&self, prefix: &str) -> StorageResult<Vec<(String, Vec<u8>)>>;
+
+    fn get_meta(&self, prefix: &str) -> StorageResult<Option<PrefixMeta>>;
+    fn set_meta(&mut self, prefix: &str, meta: &PrefixMeta) -> StorageResult<()>;
+    fn get_schema_snapshot(&self, prefix: &str) -> StorageResult<Option<SchemaSnapshot>>;
+    fn set_schema_snapshot(&mut self, prefix: &str, snapshot: &SchemaSnapshot) -> StorageResult<()>;
+    fn get_migration_log(&self, prefix: &str) -> StorageResult<Option<Vec<AppliedStep>>>;
+    fn set_migration_log(&mut self, prefix: &str, log: &[AppliedStep]) -> StorageResult<()>;
+}
+
+pub trait SchemaAwareStore: Store {
+    fn run_migrations(&self, mset: MigrationSet) -> StorageResult<MigrationReport>;
+}
+
+pub trait Store: Eq + Clone + Sized + Send + Sync + 'static {
+    fn get<T: DeserializeOwned>(&self, path: &str) -> StorageResult<Option<T>>;
+
+    fn set<T: Serialize>(&self, path: &str, value: &T) -> StorageResult<()>;
+    fn set_owned<T: Serialize>(&self, path: Arc<str>, value: &T) -> StorageResult<()> {
+        self.set(&path, value)
+    }
+    fn set_with_source<T: Serialize>(
+        &self,
+        path: &str,
+        value: &T,
+        source: Option<Uuid>,
+    ) -> StorageResult<()>;
+    fn set_owned_with_source<T: Serialize>(
+        &self,
+        path: Arc<str>,
+        value: &T,
+        source: Option<Uuid>,
+    ) -> StorageResult<()>;
+
+    fn delete_with_source(&self, path: &str, source: Option<Uuid>) -> StorageResult<()>;
+    fn delete(&self, path: &str) -> StorageResult<()>;
+
+    fn scan_prefix(&self, prefix: &str) -> StorageResult<Vec<(String, Vec<u8>)>>;
+
+    fn save_now(&self) -> StorageResult<()>;
+
+    fn subscribe(&self, kind: SubscriptionKind, callback: StoreCallback) -> SubscriptionId;
+    fn unsubscribe(&self, id: SubscriptionId);
+
+    fn decode<T: DeserializeOwned + Default>(&self, bytes: &[u8]) -> StorageResult<T>;
+
+    /// Flushes pending in-memory modifications under the specified prefix to disk.
+    ///
+    /// # Note
+    /// Behavior is backend-specific: transactional engines (such as `redb`, `sqlite`) will
+    /// selectively commit changes under the given prefix, while monolithic document engines
+    /// (such as `json`, `toml`) will serialize and rewrite the entire file.
+    fn flush_prefix(&self, prefix: &str) -> StorageResult<()>;
+
+    fn is_initialized(&self, namespace: &str) -> StorageResult<bool>;
+    fn mark_initialized(&self, namespace: &str) -> StorageResult<()>;
+}

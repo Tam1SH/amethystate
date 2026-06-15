@@ -1,11 +1,13 @@
 use super::error::RedbStoreError;
 use super::tables::{
-    TABLE_DATA, TABLE_META, TABLE_MIGRATION_LOG, TABLE_SCHEMA_SNAPSHOT, TableReader, TableWriter,
+    TableReader, TableWriter, TABLE_DATA, TABLE_META, TABLE_MIGRATION_LOG, TABLE_SCHEMA_SNAPSHOT,
 };
 use crate::migration::AppliedStep;
 use crate::store::meta::{PrefixMeta, SchemaSnapshot};
-use crate::store::{CodecFormat, MigrationBackendAdapter, Result};
+use crate::store::CodecFormat;
 use redb::ReadableTable;
+use crate::store::error::StorageResult;
+use crate::store::traits::MigrationBackendAdapter;
 
 pub(super) struct RedbMigrationBackend<'a> {
     txn: &'a redb::WriteTransaction,
@@ -22,7 +24,7 @@ impl MigrationBackendAdapter for RedbMigrationBackend<'_> {
         CodecFormat::MessagePack
     }
 
-    fn get(&self, key: &str) -> Result<Option<Vec<u8>>> {
+    fn get(&self, key: &str) -> StorageResult<Option<Vec<u8>>> {
         let table = self
             .txn
             .open_table(TABLE_DATA)
@@ -33,7 +35,7 @@ impl MigrationBackendAdapter for RedbMigrationBackend<'_> {
             .map(|v| v.value().to_vec()))
     }
 
-    fn set(&mut self, key: &str, value: &[u8]) -> Result<()> {
+    fn set(&mut self, key: &str, value: &[u8]) -> StorageResult<()> {
         let mut table = self
             .txn
             .open_table(TABLE_DATA)
@@ -42,7 +44,7 @@ impl MigrationBackendAdapter for RedbMigrationBackend<'_> {
         Ok(())
     }
 
-    fn delete(&mut self, key: &str) -> Result<()> {
+    fn delete(&mut self, key: &str) -> StorageResult<()> {
         let mut table = self
             .txn
             .open_table(TABLE_DATA)
@@ -51,7 +53,7 @@ impl MigrationBackendAdapter for RedbMigrationBackend<'_> {
         Ok(())
     }
 
-    fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Vec<u8>)>> {
+    fn scan_prefix(&self, prefix: &str) -> StorageResult<Vec<(String, Vec<u8>)>> {
         use redb::ReadableTable;
         let table = self
             .txn
@@ -67,29 +69,29 @@ impl MigrationBackendAdapter for RedbMigrationBackend<'_> {
         }
         Ok(result)
     }
-    fn get_meta(&self, prefix: &str) -> Result<Option<PrefixMeta>> {
+    fn get_meta(&self, prefix: &str) -> StorageResult<Option<PrefixMeta>> {
         Ok(self.txn.load_typed(TABLE_META, prefix)?)
     }
 
-    fn set_meta(&mut self, prefix: &str, meta: &PrefixMeta) -> Result<()> {
+    fn set_meta(&mut self, prefix: &str, meta: &PrefixMeta) -> StorageResult<()> {
         Ok(self.txn.save_typed(TABLE_META, prefix, meta)?)
     }
 
-    fn get_schema_snapshot(&self, prefix: &str) -> Result<Option<SchemaSnapshot>> {
+    fn get_schema_snapshot(&self, prefix: &str) -> StorageResult<Option<SchemaSnapshot>> {
         Ok(self.txn.load_typed(TABLE_SCHEMA_SNAPSHOT, prefix)?)
     }
 
-    fn set_schema_snapshot(&mut self, prefix: &str, snapshot: &SchemaSnapshot) -> Result<()> {
+    fn set_schema_snapshot(&mut self, prefix: &str, snapshot: &SchemaSnapshot) -> StorageResult<()> {
         Ok(self
             .txn
             .save_typed(TABLE_SCHEMA_SNAPSHOT, prefix, snapshot)?)
     }
 
-    fn get_migration_log(&self, prefix: &str) -> Result<Option<Vec<AppliedStep>>> {
+    fn get_migration_log(&self, prefix: &str) -> StorageResult<Option<Vec<AppliedStep>>> {
         Ok(self.txn.load_typed(TABLE_MIGRATION_LOG, prefix)?)
     }
 
-    fn set_migration_log(&mut self, prefix: &str, log: &[AppliedStep]) -> Result<()> {
+    fn set_migration_log(&mut self, prefix: &str, log: &[AppliedStep]) -> StorageResult<()> {
         Ok(self.txn.save_typed(TABLE_MIGRATION_LOG, prefix, &log)?)
     }
 }

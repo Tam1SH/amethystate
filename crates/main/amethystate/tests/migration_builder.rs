@@ -39,7 +39,7 @@ pub struct Profile {
 #[rename(full_name => display_name)]
 fn migrate_profile_v1_to_v2(
     old: AmeData<v1::Profile>,
-) -> amethystate::Result<AmeData<v2::Profile>> {
+) -> amethystate::MigrationResult<AmeData<v2::Profile>> {
     Ok(AmeData::<v2::Profile> {
         display_name: old.full_name,
     })
