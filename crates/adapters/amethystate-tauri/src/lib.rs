@@ -17,7 +17,7 @@ mod error;
 pub use error::*;
 
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct TauriBackend;
 
 impl TauriBackend {

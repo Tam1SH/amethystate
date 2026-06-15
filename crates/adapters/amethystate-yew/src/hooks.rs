@@ -1,3 +1,4 @@
+use amethystate::Pipeline;
 use crate::MapSignal;
 use amethystate::MapChange;
 use amethystate::client::{AsyncSubscriptionBackend, Field, ReactiveMap};
@@ -23,6 +24,38 @@ where
             let (tx, mut rx) = mpsc::unbounded::<T>();
 
             let sub = field.subscribe(move |val| {
+                let _ = tx.unbounded_send(val);
+            });
+
+            spawn_local(async move {
+                use futures::StreamExt;
+                while let Some(val) = rx.next().await {
+                    value.set(val);
+                }
+            });
+
+            move || drop(sub)
+        });
+    }
+
+    (*value).clone()
+}
+
+#[hook]
+pub fn use_pipeline<T, F>(f: F) -> T
+where
+    T: Clone + Send + Sync + PartialEq + 'static,
+    F: FnOnce() -> Pipeline<T> + 'static,
+{
+    let pipeline = use_state(f);
+    let value = use_state(|| pipeline.get());
+
+    {
+        let value = value.clone();
+        use_effect_with((), move |_| {
+            let (tx, mut rx) = mpsc::unbounded::<T>();
+
+            let sub = pipeline.subscribe(move |val| {
                 let _ = tx.unbounded_send(val);
             });
 
@@ -121,6 +154,25 @@ where
         });
     }
 
+    let set_or_create = {
+        let state = state.clone();
+        let map = map.clone();
+        Callback::from(move |(key, val): (K, V)| {
+            let old = (*state).clone();
+            let mut next = old.clone();
+            next.insert(key.clone(), val.clone());
+            state.set(next);
+
+            let map = map.clone();
+            let state = state.clone();
+            spawn_local(async move {
+                if map.set_or_create(key, &val).await.is_err() {
+                    state.set(old);
+                }
+            });
+        })
+    };
+
     let set = {
         let state = state.clone();
         let map = map.clone();
@@ -177,10 +229,11 @@ where
     };
 
     MapSignal {
-        value: (*state).clone(),
+        entries: (*state).clone(),
         set,
         remove,
         clear,
+        set_or_create
     }
 }
 

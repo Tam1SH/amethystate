@@ -193,7 +193,6 @@ where
         .run_interceptors(context_path, change)
         .map_err(|_| backend.intercepted())?;
 
-    core.notify(&processed);
     map_apply_remote_change(core, &processed);
 
     match &processed {
@@ -217,5 +216,7 @@ where
         }
     }
 
+    core.notify(&processed);
+    
     Ok(())
 }

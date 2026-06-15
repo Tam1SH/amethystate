@@ -18,11 +18,11 @@ where
         .run_interceptors(path.clone(), value, source)
         .map_err(|_| backend.intercepted())?;
 
-    core.signal.set(change.new_value.clone(), change.source);
-
     backend
         .set_owned_with_source(path, &change.new_value, change.source)
         .await?;
+
+    core.signal.set(change.new_value.clone(), change.source);
 
     Ok(())
 }

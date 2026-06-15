@@ -189,7 +189,7 @@ where
 
 impl<TValue, S: Store, M: AccessMode> PartialEq for Field<TValue, S, M> {
     fn eq(&self, other: &Self) -> bool {
-        self.path == other.path && Arc::ptr_eq(&self.core.signal.value, &other.core.signal.value)
+        self.path == other.path && self.instance_id == other.instance_id && Arc::ptr_eq(&self.core.signal.value, &other.core.signal.value)
     }
 }
 

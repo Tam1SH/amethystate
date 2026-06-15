@@ -3,6 +3,7 @@ examples/*/target
 examples/*/Cargo.lock
 examples/*/.idea
 examples/*/*.redb
+examples/*/*/*.redb
 
 
 /profile.json.gz

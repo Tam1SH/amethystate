@@ -6,6 +6,6 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "rpstate:default"
+    "amethystate:default"
   ]
 }

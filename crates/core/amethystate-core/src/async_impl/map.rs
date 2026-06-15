@@ -31,7 +31,7 @@ where
 
 impl<K, V, B> PartialEq for ReactiveMap<K, V, B> {
     fn eq(&self, other: &Self) -> bool {
-        self.prefix == other.prefix && Arc::ptr_eq(&self.core.next_id, &other.core.next_id)
+        self.prefix == other.prefix && self.instance_id == other.instance_id && Arc::ptr_eq(&self.core.next_id, &other.core.next_id)
     }
 }
 
@@ -171,8 +171,20 @@ where
         }
     }
 
-    pub async fn set(&self, key: K, value: &V) -> Result<(), B::Error> {
+    pub async fn set_or_create(&self, key: K, value: &V) -> Result<(), B::Error> {
         crate::map_set_or_create_async(
+            &self.backend,
+            &self.core,
+            self.prefix.clone(),
+            key,
+            value,
+            Some(self.instance_id),
+        )
+            .await
+    }
+    
+    pub async fn set(&self, key: K, value: &V) -> Result<(), B::Error> {
+        crate::map_set_existing_async(
             &self.backend,
             &self.core,
             self.prefix.clone(),

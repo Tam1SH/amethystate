@@ -73,7 +73,7 @@ pub fn generate_wasm_code(
             quote! {
                 #fname: {
                     let mut map_init = ::std::collections::HashMap::new();
-                    let map_prefix = if #prefix_str == "." { format!("{}.", #full_key) } else { format!("{}.{}.", #prefix_str, #full_key) };
+                    let map_prefix = format!("{}.", #full_key);
                     for (k, v) in initial {
                         if let Some(sub_key) = k.strip_prefix(&map_prefix) {
                             if let Ok(parsed_k) = <#k as ::std::str::FromStr>::from_str(sub_key) {
@@ -190,7 +190,7 @@ pub fn generate_wasm_code(
     });
 
     quote! {
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Debug, Eq, PartialEq)]
         #(#attrs)* #vis struct #name {
             __amethystate_instance_id: #crate_name::uuid::Uuid,
             #(#struct_fields,)*

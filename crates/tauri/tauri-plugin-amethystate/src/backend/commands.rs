@@ -5,36 +5,37 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Runtime, State};
 
 pub struct PluginState {
+    pub store: amethystate::DefaultStore,
     pub subscriptions: Mutex<HashMap<String, SubscriptionId>>,
 }
 
 #[tauri::command]
 pub async fn amethystate_get(
-    store: State<'_, amethystate::DefaultStore>,
+    store: State<'_, PluginState>,
     key: String,
 ) -> Result<Option<serde_json::Value>, String> {
-    store.get(&key).map_err(|e| e.to_string())
+    store.store.get(&key).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn amethystate_set(
-    store: State<'_, amethystate::DefaultStore>,
+    store: State<'_, PluginState>,
     key: String,
     value: serde_json::Value,
 ) -> Result<(), String> {
-    store.set(&key, &value).map_err(|e| e.to_string())
+    store.store.set(&key, &value).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn amethystate_get_prefix(
-    store: State<'_, amethystate::DefaultStore>,
+    store: State<'_, PluginState>,
     prefix: String,
 ) -> Result<HashMap<String, serde_json::Value>, String> {
-    let raw = amethystate::Store::scan_prefix(store.inner(), &prefix).map_err(|e| e.to_string())?;
+    let raw = amethystate::Store::scan_prefix(&store.store, &prefix).map_err(|e| e.to_string())?;
 
     let mut map = HashMap::new();
     for (path, bytes) in raw {
-        if let Ok(val) = store.inner().decode::<serde_json::Value>(&bytes) {
+        if let Ok(val) = store.store.decode::<serde_json::Value>(&bytes) {
             map.insert(path, val);
         }
     }
@@ -43,29 +44,28 @@ pub async fn amethystate_get_prefix(
 
 #[tauri::command]
 pub async fn amethystate_flush(
-    store: State<'_, amethystate::DefaultStore>,
+    store: State<'_, PluginState>,
     prefix: String,
 ) -> Result<(), String> {
-    amethystate::Store::flush_prefix(store.inner(), &prefix).map_err(|e| e.to_string())
+    amethystate::Store::flush_prefix(&store.store, &prefix).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn amethystate_subscribe<R: Runtime>(
-    store: State<'_, amethystate::DefaultStore>,
+    store: State<'_, PluginState>,
     app: AppHandle<R>,
-    state: State<'_, PluginState>,
     key: String,
 ) -> Result<(), String> {
-    let mut subs = state.subscriptions.lock().map_err(|e| e.to_string())?;
+    let mut subs = store.subscriptions.lock().map_err(|e| e.to_string())?;
     if subs.contains_key(&key) {
         return Ok(());
     }
 
     let app_handle = app.clone();
     let key_clone = key.clone();
-    let store_clone = store.inner().clone();
+    let store_clone = store.store.clone();
 
-    let sub_id = store.subscribe(
+    let sub_id = store.store.subscribe(
         amethystate::SubscriptionKind::Prefix(Arc::from(key.as_str())),
         Arc::new(move |event| {
             let event_name = format!("amethystate://{}", key_clone.replace('.', ":"));
@@ -121,20 +121,19 @@ pub async fn amethystate_subscribe<R: Runtime>(
 
 #[tauri::command]
 pub async fn amethystate_unsubscribe(
-    store: State<'_, amethystate::DefaultStore>,
     state: State<'_, PluginState>,
     key: String,
 ) -> Result<(), String> {
     let mut subs = state.subscriptions.lock().map_err(|e| e.to_string())?;
     if let Some(sub_id) = subs.remove(&key) {
-        store.unsubscribe(sub_id);
+        state.store.unsubscribe(sub_id);
     }
     Ok(())
 }
 #[tauri::command]
 pub async fn amethystate_delete(
-    store: State<'_, amethystate::DefaultStore>,
+    store: State<'_, PluginState>,
     key: String,
 ) -> Result<(), String> {
-    store.delete(&key).map_err(|e| e.to_string())
+    store.store.delete(&key).map_err(|e| e.to_string())
 }

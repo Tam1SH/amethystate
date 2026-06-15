@@ -31,7 +31,7 @@ where
 
 impl<T, B> PartialEq for Field<T, B> {
     fn eq(&self, other: &Self) -> bool {
-        self.path == other.path && Arc::ptr_eq(&self.core.signal.value, &other.core.signal.value)
+        self.path == other.path && self.instance_id == other.instance_id && Arc::ptr_eq(&self.core.signal.value, &other.core.signal.value)
     }
 }
 

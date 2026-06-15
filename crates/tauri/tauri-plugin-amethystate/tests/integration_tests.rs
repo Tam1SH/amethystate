@@ -1,5 +1,6 @@
 use amethystate::Store;
 use amethystate::test_utils::unique_store;
+use tauri_plugin_amethystate::backend::commands::PluginState;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
@@ -12,9 +13,12 @@ async fn test_tauri_plugin_commands() {
     store.save_now().unwrap();
 
     let app = tauri::test::mock_app();
-    app.manage(store.clone());
+    app.manage(PluginState {
+        subscriptions: Default::default(),
+        store
+    });
 
-    let state_store = app.state::<DefaultStore>();
+    let state_store = app.state::<PluginState>();
 
     let val = tauri_plugin_amethystate::backend::commands::amethystate_get(
         state_store.clone(),

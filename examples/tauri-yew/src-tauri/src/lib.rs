@@ -43,8 +43,7 @@ pub fn run() {
         .unwrap();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_amethystate::init())
-        .manage(store)
+        .plugin(tauri_plugin_amethystate::init(store))
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

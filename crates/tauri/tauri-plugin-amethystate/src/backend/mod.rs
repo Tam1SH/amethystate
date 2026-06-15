@@ -5,7 +5,7 @@ use tauri::{
     plugin::{Builder, TauriPlugin},
 };
 
-pub fn init<R: Runtime>() -> TauriPlugin<R> {
+pub fn init<R: Runtime>(store: amethystate::DefaultStore) -> TauriPlugin<R> {
     Builder::new("amethystate")
         .invoke_handler(tauri::generate_handler![
             commands::amethystate_get,
@@ -18,6 +18,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         ])
         .setup(|app, _api| {
             app.manage(commands::PluginState {
+                store,
                 subscriptions: std::sync::Mutex::new(std::collections::HashMap::new()),
             });
             Ok(())

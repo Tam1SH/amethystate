@@ -249,7 +249,7 @@ where
 
 impl<K, V, S: Store, M: AccessMode> PartialEq for ReactiveMap<K, V, S, M> {
     fn eq(&self, other: &Self) -> bool {
-        self.path == other.path && Arc::ptr_eq(&self.core.next_id, &other.core.next_id)
+        self.path == other.path && self.instance_id == other.instance_id && Arc::ptr_eq(&self.core.next_id, &other.core.next_id)
     }
 }
 
