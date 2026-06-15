@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "amethystate"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "amethystate-core",
  "amethystate-macros",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "amethystate-arena"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "amethystate",
  "amethystate-macros-arena",
@@ -122,7 +122,7 @@ dependencies = [
 
 [[package]]
 name = "amethystate-codegen"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "amethystate",
  "amethystate-core",
@@ -133,7 +133,7 @@ dependencies = [
 
 [[package]]
 name = "amethystate-core"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -186,7 +186,7 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "amethystate-macros-core",
  "darling 0.23.0",
@@ -198,7 +198,7 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros-arena"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "amethystate-macros-core",
  "darling 0.23.0",
@@ -210,7 +210,7 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros-core"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "darling 0.23.0",
  "proc-macro2",
@@ -220,7 +220,7 @@ dependencies = [
 
 [[package]]
 name = "amethystate-tauri"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "amethystate-core",
  "futures",
@@ -8974,7 +8974,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-amethystate"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "amethystate",
  "amethystate-codegen",
