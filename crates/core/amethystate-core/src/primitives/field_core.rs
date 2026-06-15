@@ -58,6 +58,7 @@ impl<T: Clone + 'static> FieldCore<T> {
         self.signal.get()
     }
 
+    #[track_caller]
     pub fn subscribe<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(T) + Send + Sync + 'static,
@@ -67,6 +68,7 @@ impl<T: Clone + 'static> FieldCore<T> {
         })
     }
 
+    #[track_caller]
     pub fn subscribe_with_source<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(T, Option<Uuid>) + Send + Sync + 'static,

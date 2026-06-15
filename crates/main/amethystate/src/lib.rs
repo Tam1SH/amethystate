@@ -5,6 +5,7 @@ mod global;
 mod macros;
 
 pub mod migration;
+pub mod observability;
 pub mod reactive;
 pub mod store;
 

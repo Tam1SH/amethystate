@@ -26,7 +26,7 @@ amethystate = { version = "*", default-features = false, features = ["toml"] }
 
 `amethystate` uses its own key layout: `prefix.field` for regular fields, `prefix.field.key` for map entries. If your current database uses a different layout, there is no automatic path — you need a one-time export before switching.
 
-The simplest approach is to write a one-time migration step using the manual migration API — read from the old database inside the step closure and write values via `ctx.set`. See [Manual Migrations](../migrations/manual) for the full context API.
+The simplest approach is to write a one-time migration step using the manual migration API — read from the old database inside the step closure and write values via `ctx.set`. See [Manual Migrations](./manual) for the full context API.
 
 ## Custom file format
 

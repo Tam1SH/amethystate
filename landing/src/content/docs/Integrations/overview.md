@@ -1,5 +1,7 @@
 ---
-title: Integrations
+title: Overview
+sidebar:
+  order: 10
 ---
 
 `amethystate` supports multiple GUI frameworks. Which mode to use — reactive or persistent-only — depends on the execution model of the framework.
@@ -14,17 +16,15 @@ These frameworks have an explicit event loop. Either they redraw every frame (im
 
 One caveat: persistent-only state does not observe external changes. If another thread, another process, or a manually edited file changes the underlying store while the app is running, the loaded struct will not update. If you need that, use reactive mode and call `.get()` at the start of each frame or update cycle — the framework loop naturally polls the latest value.
 
-- [egui](./egui.md)
-- [iced](./iced.md)
-- [ratatui](./ratatui.md)
+- [egui / iced / ratatui](./retain-mode)
 
-### Property bindings (Slint)
 
-Slint owns a set of typed properties on the UI side. The Rust side pushes values into them. There is no shared signal graph — the bridge is one-directional: subscribe to a `Field<T>`, and in the callback push the new value into the corresponding Slint property.
+### Property bindings (Slint, GTK 4)
+Both frameworks own their UI properties. The bridge is bidirectional: subscribe to a Field<T> and push changes into the framework's property system, with optional back-propagation from UI callbacks into the field.
+Reactive mode is required.
 
-**Reactive mode** is required.
-
-- [Slint](./slint.md)
+- [Slint](./slint)
+- [GTK 4](./gtk4)
 
 ### Signal-based (Dioxus, Leptos, Yew)
 
@@ -34,15 +34,15 @@ The signals differ in ownership model: Dioxus and Leptos use arena-allocated `Co
 
 **Reactive mode** is required.
 
-- [Dioxus](./dioxus.md)
-- [Leptos](./leptos.md)
-- [Yew](./yew.md)
+- [Dioxus](./dioxus)
+- [Leptos](./leptos)
+- [Yew](./yew)
 
 ### Webview bridge (Tauri)
 
 Tauri splits the application into a Rust backend and a frontend communicating over commands and events. `amethystate` provides a dedicated plugin that handles this boundary — state is loaded on the Rust side, and generated bindings expose it to the frontend. Both TypeScript and Rust frontend clients are supported.
 
-- [Tauri](./tauri.md)
+- [Tauri](./tauri)
 
 ### GPUI
 
@@ -50,4 +50,4 @@ GPUI uses an entity model with deferred notification. Mutations are applied insi
 
 **Reactive mode** is required.
 
-- [GPUI](./gpui.md)
+- [GPUI](./gpui)

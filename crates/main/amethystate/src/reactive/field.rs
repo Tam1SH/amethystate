@@ -73,6 +73,7 @@ where
         self.core.signal.clone()
     }
 
+    #[track_caller]
     pub fn subscribe_external<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(TValue) + Send + Sync + 'static,
@@ -104,6 +105,7 @@ where
     ///
     /// // drain rx in your framework's event loop
     /// ```
+    #[track_caller]
     pub fn subscribe<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(TValue) + Send + Sync + 'static,
@@ -137,6 +139,13 @@ where
     }
 
     pub fn set(&self, value: TValue) -> Result<()> {
+        tracing::trace!(
+            target: "amethystate",
+            path = %self.path,
+            source = crate::observability::resolve_instance_short(self.instance_id).unwrap_or("external"),
+            "field write",
+        );
+
         if let Some(sub) = &self.store_sub {
             let backend = StoreBackend::new(sub.store.clone());
             amethystate_core::field_set(

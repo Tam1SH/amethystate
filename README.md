@@ -35,10 +35,10 @@ fn main() -> amethystate::Result<()> {
     let store = StoreBuilder::new("./app").build()?;
     let state = NetworkState::new_with(&store)?;
 
-    state.port().set(9090)?;
-
     let _sub = state.port().subscribe(|p| println!("port → {p}"));
-
+    
+    state.port().set(9090)?;
+    
     let address = (state.host(), state.port())
         .pipe()
         .map(|(host, port)| format!("{host}:{port}"));
@@ -47,8 +47,8 @@ fn main() -> amethystate::Result<()> {
 }
 ```
 
-egui, iced, ratatui, and other retain-mode frameworks are supported too — see [Integrations](./landing/src/content/docs/docs/Integrations/overview.md).
+egui, iced, ratatui, and other retain-mode frameworks are supported too — see [Integrations](./landing/src/content/docs/Integrations/overview.md).
 
 ---
 
-See the **[book](./landing/src/content/docs/docs/)** for full documentation — concepts, migrations, and per-framework integration guides.
+See the **[book](./landing/src/content/docs/)** for full documentation — concepts, migrations, and per-framework integration guides.

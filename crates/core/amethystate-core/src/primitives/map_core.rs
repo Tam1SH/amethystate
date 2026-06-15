@@ -1,6 +1,7 @@
 use crate::SignalSubscription;
 use crate::change::MapChange;
 use crate::primitives::intercept::{InterceptDisposer, InterceptGuard};
+use crate::primitives::signal::SubscriptionMeta;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
@@ -32,8 +33,8 @@ impl<T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static + Default> 
 pub struct ReactiveMapCore<K, V> {
     pub interceptors_any: Arc<Mutex<Vec<(u64, InterceptorAny<K, V>)>>>,
     pub interceptors_key: Arc<Mutex<HashMap<K, Vec<(u64, InterceptorKey<K, V>)>>>>,
-    pub subscribers_any: Arc<Mutex<Vec<(u64, SubscriberAny<K, V>)>>>,
-    pub subscribers_key: Arc<Mutex<HashMap<K, Vec<(u64, SubscriberKey<K, V>)>>>>,
+    pub subscribers_any: Arc<Mutex<Vec<(u64, SubscriberAny<K, V>, SubscriptionMeta)>>>,
+    pub subscribers_key: Arc<Mutex<HashMap<K, Vec<(u64, SubscriberKey<K, V>, SubscriptionMeta)>>>>,
     pub next_id: Arc<AtomicU64>,
     pub intercept_depth: Arc<AtomicUsize>,
     pub cache: Arc<Mutex<HashMap<K, V>>>,
@@ -56,24 +57,13 @@ impl<K, V> Clone for ReactiveMapCore<K, V> {
 impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for ReactiveMapCore<K, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut d = f.debug_struct("ReactiveMapCore");
-
         if let Ok(cache) = self.cache.try_lock() {
             d.field("cache", &*cache);
         } else {
             d.field("cache", &"<locked>");
         }
-
-        let interceptors_count = self
-            .interceptors_any
-            .try_lock()
-            .map(|l| l.len())
-            .unwrap_or(0);
-        let subscribers_count = self
-            .subscribers_any
-            .try_lock()
-            .map(|l| l.len())
-            .unwrap_or(0);
-
+        let interceptors_count = self.interceptors_any.try_lock().map(|l| l.len()).unwrap_or(0);
+        let subscribers_count = self.subscribers_any.try_lock().map(|l| l.len()).unwrap_or(0);
         d.field("interceptors_any_count", &interceptors_count)
             .field("subscribers_any_count", &subscribers_count)
             .finish()
@@ -99,45 +89,73 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
         }
     }
 
+    #[track_caller]
     pub fn subscribe_any<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
     {
+        let location = std::panic::Location::caller();
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.subscribers_any
-            .lock()
-            .unwrap()
-            .push((id, Arc::new(callback)));
-        let subs = self.subscribers_any.clone();
+        let meta = SubscriptionMeta { id, location, name: None };
+        self.subscribers_any.lock().unwrap().push((id, Arc::new(callback), meta));
+
+        let subs_for_name = self.subscribers_any.clone();
+        let set_name = Arc::new(move |name: &'static str| {
+            if let Ok(mut lock) = subs_for_name.lock() {
+                if let Some(entry) = lock.iter_mut().find(|(i, _, _)| *i == id) {
+                    entry.2.name = Some(name);
+                }
+            }
+        });
+        let subs_for_cleanup = self.subscribers_any.clone();
         SignalSubscription {
             id,
+            location,
+            name: None,
+            set_name,
             cleanup: Arc::new(move |id| {
-                if let Ok(mut lock) = subs.lock() {
-                    lock.retain(|(i, _)| *i != id);
+                if let Ok(mut lock) = subs_for_cleanup.lock() {
+                    lock.retain(|(i, _, _)| *i != id);
                 }
             }),
         }
     }
 
+    #[track_caller]
     pub fn subscribe_key<F>(&self, key: K, callback: F) -> SignalSubscription
     where
         F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
     {
+        let location = std::panic::Location::caller();
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.subscribers_key
-            .lock()
-            .unwrap()
+        let meta = SubscriptionMeta { id, location, name: None };
+        self.subscribers_key.lock().unwrap()
             .entry(key.clone())
             .or_default()
-            .push((id, Arc::new(callback)));
-        let subs = self.subscribers_key.clone();
+            .push((id, Arc::new(callback), meta));
+
+        let subs_for_name = self.subscribers_key.clone();
+        let key_for_name = key.clone();
+        let set_name = Arc::new(move |name: &'static str| {
+            if let Ok(mut lock) = subs_for_name.lock() {
+                if let Some(list) = lock.get_mut(&key_for_name) {
+                    if let Some(entry) = list.iter_mut().find(|(i, _, _)| *i == id) {
+                        entry.2.name = Some(name);
+                    }
+                }
+            }
+        });
+        let subs_for_cleanup = self.subscribers_key.clone();
         SignalSubscription {
             id,
+            location,
+            name: None,
+            set_name,
             cleanup: Arc::new(move |id| {
-                if let Ok(mut lock) = subs.lock()
+                if let Ok(mut lock) = subs_for_cleanup.lock()
                     && let Some(list) = lock.get_mut(&key)
                 {
-                    list.retain(|(i, _)| *i != id);
+                    list.retain(|(i, _, _)| *i != id);
                 }
             }),
         }
@@ -148,10 +166,7 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
         F: Fn(MapChange<K, V>) -> Option<MapChange<K, V>> + Send + Sync + 'static,
     {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.interceptors_any
-            .lock()
-            .unwrap()
-            .push((id, Arc::new(callback)));
+        self.interceptors_any.lock().unwrap().push((id, Arc::new(callback)));
         let subs = self.interceptors_any.clone();
         InterceptDisposer {
             id,
@@ -169,9 +184,7 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
         F: Fn(MapChange<K, V>) -> Option<MapChange<K, V>> + Send + Sync + 'static,
     {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.interceptors_key
-            .lock()
-            .unwrap()
+        self.interceptors_key.lock().unwrap()
             .entry(key.clone())
             .or_default()
             .push((id, Arc::new(callback)));
@@ -202,7 +215,6 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
                 let lock = self.interceptors_key.lock().unwrap();
                 keys_to_intercept = lock.keys().cloned().collect();
             }
-
             for key in keys_to_intercept {
                 let interceptors = {
                     let lock = self.interceptors_key.lock().unwrap();
@@ -216,11 +228,7 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
                     }
                 }
             }
-
-            let interceptors_any = {
-                let lock = self.interceptors_any.lock().unwrap();
-                lock.clone()
-            };
+            let interceptors_any = self.interceptors_any.lock().unwrap().clone();
             for (_, interceptor) in interceptors_any {
                 if let Some(new_change) = interceptor(change.clone()) {
                     change = new_change;
@@ -235,15 +243,29 @@ impl<K: ReactiveMapKey, V: ReactiveMapValue> ReactiveMapCore<K, V> {
     pub fn notify(&self, change: &MapChange<K, V>) {
         if let Some(k) = change.key()
             && let Ok(lock) = self.subscribers_key.lock()
-            && let Some(cbs) = lock.get(k)
+            && let Some(entries) = lock.get(k)
         {
-            for (_, cb) in cbs {
+            for (_, cb, meta) in entries {
+                tracing::trace!(
+                    target: "amethystate",
+                    subscription_id = meta.id,
+                    name = meta.name,
+                    location = format!("{}:{}", meta.location.file(), meta.location.line()),
+                    "map signal emit → key subscription fire",
+                );
                 cb(change);
             }
         }
 
         if let Ok(lock) = self.subscribers_any.lock() {
-            for (_, cb) in lock.iter() {
+            for (_, cb, meta) in lock.iter() {
+                tracing::trace!(
+                    target: "amethystate",
+                    subscription_id = meta.id,
+                    name = meta.name,
+                    location = format!("{}:{}", meta.location.file(), meta.location.line()),
+                    "map signal emit → any subscription fire",
+                );
                 cb(change);
             }
         }

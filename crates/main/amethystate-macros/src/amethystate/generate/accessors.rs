@@ -123,6 +123,10 @@ pub(crate) fn constructor(
 
             pub fn new_with_id(store: &S, instance_id: #crate_name::uuid::Uuid) -> #crate_name::Result<Self> {
                 use #crate_name::Store;
+                #crate_name::observability::register_instance(
+                    instance_id,
+                    ::std::any::type_name::<Self>(),
+                );
                 let result = Self { __amethystate_instance_id: instance_id, #(#init_fields,)* };
                 store.mark_initialized(<Self as #crate_name::StateScope>::PREFIX)?;
                 Ok(result)
@@ -136,6 +140,10 @@ pub(crate) fn constructor(
 
             pub fn new_with_id(store: &S, namespace: &str, instance_id: #crate_name::uuid::Uuid) -> #crate_name::Result<Self> {
                 use #crate_name::Store;
+                #crate_name::observability::register_instance(
+                    instance_id,
+                    ::std::any::type_name::<Self>(),
+                );
                 let result = Self { __amethystate_instance_id: instance_id, #(#init_fields,)* };
                 store.mark_initialized(namespace)?;
                 Ok(result)

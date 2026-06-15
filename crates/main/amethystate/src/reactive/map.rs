@@ -103,6 +103,7 @@ where
         self.len().map(|l| l == 0)
     }
 
+    #[track_caller]
     pub fn subscribe_any<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
@@ -110,6 +111,7 @@ where
         self.core.subscribe_any(callback)
     }
 
+    #[track_caller]
     pub fn subscribe_any_external<F>(&self, callback: F) -> SignalSubscription
     where
         F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
@@ -125,6 +127,7 @@ where
         })
     }
 
+    #[track_caller]
     pub fn subscribe_key_external<F>(&self, key: K, callback: F) -> SignalSubscription
     where
         F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
@@ -140,6 +143,7 @@ where
         })
     }
 
+    #[track_caller]
     pub fn subscribe_key<F>(&self, key: K, callback: F) -> SignalSubscription
     where
         F: Fn(&MapChange<K, V>) + Send + Sync + 'static,
