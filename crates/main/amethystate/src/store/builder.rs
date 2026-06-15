@@ -140,7 +140,6 @@ impl<M> StoreBuilder<M> {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn collect_migrations(self) -> StoreBuilder<WithMigrations> {
         let mut builder = MigrationBuilder::default();
         builder.collect_codegen();

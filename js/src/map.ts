@@ -42,18 +42,18 @@ export class ReactiveMap<K extends string, V> {
     }
 
     /**
-     * Absolute asynchronous getter.
+     * Direct asynchronous getter.
      *
      * @param key The map key to look up.
      * @returns A promise resolving to the value queried directly from the backend.
      * @benefit Transaction-safe. Guarantees data fresh from the persistent store.
      */
     async get(key: K): Promise<V | null> {
-        return invoke("plugin:rpstate|rpstate_get", { key: `${this.prefix}.${key}` });
+        return invoke("plugin:amethystate|amethystate_get", { key: `${this.prefix}.${key}` });
     }
 
     /**
-     * Absolute asynchronous setter.
+     * Direct asynchronous setter.
      *
      * @param key The map key to assign.
      * @param value The value to persist.
@@ -62,7 +62,7 @@ export class ReactiveMap<K extends string, V> {
      * call and await the `save()` method on the parent slice class.
      */
     async set(key: K, value: V): Promise<void> {
-        return invoke("plugin:rpstate|rpstate_set", { key: `${this.prefix}.${key}`, value });
+        return invoke("plugin:amethystate|amethystate_set", { key: `${this.prefix}.${key}`, value });
     }
 
     /**
@@ -109,19 +109,40 @@ export class ReactiveMap<K extends string, V> {
         return this._map;
     }
 
+    /**
+     * Direct asynchronous deletion.
+     * Sends a request to delete the key from the persistent store and awaits backend confirmation.
+     */
+    async remove(key: K): Promise<void> {
+        const fullKey = `${this.prefix}.${key}`;
+        await invoke("plugin:amethystate|amethystate_delete", { key: fullKey });
+    }
+
+    /**
+     * Synchronous in-memory deletion.
+     * Instantly removes the key from the local cache (optimistic update) and triggers a background delete in Rust.
+     */
+    removeSync(key: K): void {
+        const fullKey = `${this.prefix}.${key}`;
+
+        this._map.delete(key);
+
+        invoke("plugin:amethystate|amethystate_delete", { key: fullKey }).catch(console.error);
+    }
+    
     subscribeKey(key: K, cb: (value: V) => void): () => void {
         const fullKey = `${this.prefix}.${key}`;
-        invoke("plugin:rpstate|rpstate_subscribe", { key: fullKey });
+        invoke("plugin:amethystate|amethystate_subscribe", { key: fullKey });
         let unlisten: (() => void) | null = null;
         let cancelled = false;
 
-        const channel = `rpstate://${fullKey.replace(/\./g, ":")}`;
+        const channel = `amethystate://${fullKey.replace(/\./g, ":")}`;
 
         listen<V>(channel, (e) => cb(e.payload))
             .then((fn) => {
                 if (cancelled) {
                     fn();
-                    invoke("plugin:rpstate|rpstate_unsubscribe", { key: fullKey });
+                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
                 } else {
                     unlisten = fn;
                 }
@@ -131,24 +152,24 @@ export class ReactiveMap<K extends string, V> {
             cancelled = true;
             if (unlisten) {
                 unlisten();
-                invoke("plugin:rpstate|rpstate_unsubscribe", { key: fullKey });
+                invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
             }
         };
     }
 
     subscribeAny(cb: (change: MapChange<K, V>) => void): () => void {
         const fullKey = this.prefix;
-        invoke("plugin:rpstate|rpstate_subscribe", { key: fullKey });
+        invoke("plugin:amethystate|amethystate_subscribe", { key: fullKey });
         let unlisten: (() => void) | null = null;
         let cancelled = false;
 
-        const channel = `rpstate://${fullKey.replace(/\./g, ":")}`;
+        const channel = `amethystate://${fullKey.replace(/\./g, ":")}`;
 
         listen<MapChange<K, V>>(channel, (e) => cb(e.payload))
             .then((fn) => {
                 if (cancelled) {
                     fn();
-                    invoke("plugin:rpstate|rpstate_unsubscribe", { key: fullKey });
+                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
                 } else {
                     unlisten = fn;
                 }
@@ -158,7 +179,7 @@ export class ReactiveMap<K extends string, V> {
             cancelled = true;
             if (unlisten) {
                 unlisten();
-                invoke("plugin:rpstate|rpstate_unsubscribe", { key: fullKey });
+                invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
             }
         };
     }

@@ -1,8 +1,24 @@
 {
   "name": "amethystate",
-  "version": "0.1.0",
+  "version": "0.3.1",
   "description": "Reactive persistent state for Tauri apps",
   "type": "module",
+  "license": "MIT",
+  "homepage": "https://tam1sh.github.io/amethystate/integrations/typescript/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tam1sh/amethystate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tam1sh/amethystate/issues"
+  },
+  "keywords": [
+    "tauri",
+    "state",
+    "reactive",
+    "persistent",
+    "store"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

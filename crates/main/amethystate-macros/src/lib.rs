@@ -3,6 +3,7 @@ use proc_macro::TokenStream;
 mod amethystate;
 mod migrate;
 mod hash;
+mod ts_mapping;
 
 /// Generates a persistent state wrapper for a struct.
 ///
@@ -241,13 +242,62 @@ pub fn ame_type_derive(input: TokenStream) -> TokenStream {
         vec![]
     };
 
-    let type_hash_expr = hash::gen_recursive_type_hash(&crate_name, fields_info);
+    let type_hash_expr = hash::gen_recursive_type_hash(&crate_name, fields_info.clone());
+
+    let schema_export = if cfg!(feature = "tauri") {
+        let struct_name_str = name.to_string();
+        let field_metas = if let syn::Data::Struct(s) = &input.data {
+            s.fields
+                .iter()
+                .map(|f| {
+                    let field_name = f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
+                    let ty = &f.ty;
+                    let (ts_type, full_ts_type) = ts_mapping::map_type_to_ts(ty.clone());
+                    let rust_type_str = quote::quote!(#ty).to_string();
+
+                    let kind_tokens = if ts_mapping::is_primitive_ts_type(&ts_type) {
+                        quote::quote! { #crate_name::tauri::FieldKind::Plain }
+                    } else {
+                        quote::quote! { #crate_name::tauri::FieldKind::Nested { struct_name: #ts_type } }
+                    };
+
+                    quote::quote! {
+                        #crate_name::tauri::FieldExportMeta {
+                            name: #field_name,
+                            ts_type: #ts_type,
+                            full_ts_type: #full_ts_type,
+                            rust_type: #rust_type_str,
+                            kind: #kind_tokens,
+                        }
+                    }
+                })
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        };
+
+        quote::quote! {
+            #crate_name::inventory::submit! {
+                #crate_name::tauri::SchemaExportEntry {
+                    prefix: None,
+                    struct_name: #struct_name_str,
+                    fields: &[
+                        #(#field_metas),*
+                    ],
+                }
+            }
+        }
+    } else {
+        quote::quote! {}
+    };
 
     let expanded = quote::quote! {
         impl #crate_name::migration::types::AmeType for #name {
             const TYPE_HASH: u32 = #type_hash_expr;
             const TYPE_NAME: &'static str = stringify!(#name);
         }
+
+        #schema_export
     };
     TokenStream::from(expanded)
 }

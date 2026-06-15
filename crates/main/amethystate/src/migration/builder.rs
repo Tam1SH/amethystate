@@ -25,7 +25,7 @@ pub struct PrefixMigrationBuilder<'a> {
 }
 
 impl MigrationBuilder {
-    #[cfg(not(target_arch = "wasm32"))]
+
     pub fn collect_codegen(&mut self) -> &mut Self {
         use crate::migration::registry::MigrationStepEntry;
         use std::collections::HashSet;

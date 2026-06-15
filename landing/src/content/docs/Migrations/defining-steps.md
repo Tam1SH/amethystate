@@ -15,7 +15,7 @@ sidebar:
 
 ```rust
 #[migrate]
-fn migrate_config_v1_to_v2(old: AmeData<v1::Config>) -> amethystate::Result<AmeData<Config>> {
+fn migrate_config_v1_to_v2(old: AmeData<v1::Config>) -> amethystate::MigrationResult<AmeData<Config>> {
     Ok(AmeData::<Config> {
         address: old.host,
         port: old.port,
@@ -62,7 +62,7 @@ Both structs share the same `prefix`. The version number is what the migrator us
 Fields are accessed directly:
 
 ```rust
-fn migrate_config_v1_to_v2(old: AmeData<v1::Config>) -> amethystate::Result<AmeData<Config>> {
+fn migrate_config_v1_to_v2(old: AmeData<v1::Config>) -> amethystate::MigrationResult<AmeData<Config>> {
     Ok(AmeData::<Config> {
         address: old.host, // direct field access
         port: old.port,
@@ -79,7 +79,7 @@ fn migrate_config_v1_to_v2(old: AmeData<v1::Config>) -> amethystate::Result<AmeD
 #[rename(login => username, tier => plan)]
 fn migrate_identity_v1_to_v2(
     old: AmeData<v1::Identity>,
-) -> amethystate::Result<AmeData<Identity>> {
+) -> amethystate::MigrationResult<AmeData<Identity>> {
     Ok(AmeData::<Identity> {
         username: old.login,
         plan: match old.tier.as_str() {
@@ -102,7 +102,7 @@ When a migration involves a `ReactiveMap` field, `AmeData` holds a snapshot of i
 fn migrate_proxy_config_v1_to_v2(
     old: AmeData<v1::ProxyConfig>,
     ctx: &mut MigrationContext,
-) -> amethystate::Result<AmeData<ProxyConfig>> {
+) -> amethystate::MigrationResult<AmeData<ProxyConfig>> {
     for key in old.routes.keys() {
         ctx.delete(&format!("routes.{}", key))?;
     }
@@ -132,7 +132,7 @@ If a prefix goes through more than one version, define a step for each transitio
 #[rename(title => name)]
 fn migrate_workspace_v1_to_v2(
     old: AmeData<workspace_v1::Workspace>,
-) -> amethystate::Result<AmeData<workspace_v2::Workspace>> {
+) -> amethystate::MigrationResult<AmeData<workspace_v2::Workspace>> {
     Ok(AmeData::<workspace_v2::Workspace> {
         name: old.title,
         appearance_theme: old.theme,
@@ -143,7 +143,7 @@ fn migrate_workspace_v1_to_v2(
 #[migrate]
 fn migrate_workspace_v2_to_v3(
     old: AmeData<workspace_v2::Workspace>,
-) -> amethystate::Result<AmeData<Workspace>> {
+) -> amethystate::MigrationResult<AmeData<Workspace>> {
     Ok(AmeData::<Workspace> {
         name: old.name,
         appearance_theme: old.appearance_theme,

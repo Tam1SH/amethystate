@@ -39,345 +39,7 @@ impl CodegenRegistry {
             r#"// src/bindings/amethystate.ts DO NOT EDIT
 import {invoke} from "@tauri-apps/api/core";
 import {listen} from "@tauri-apps/api/event";
-
-
-export type MapChange<K, V> =
-    | { type: "Insert"; key: K; value: V }
-    | { type: "Update"; key: K; oldValue: V; newValue: V }
-    | { type: "Remove"; key: K; oldValue: V }
-    | { type: "Clear" };
-
-export class Field<T> {
-    private _value: T | null = null;
-    private _unlisten: (() => void) | null = null;
-
-    constructor(public readonly key: string, initialValue?: T) {
-        if (initialValue !== undefined) {
-            this._value = initialValue;
-        } else {
-            this.get()
-                .then((val) => {
-                    this._value = val;
-                })
-                .catch(() => {});
-        }
-
-        this._unlisten = this.subscribe((val) => {
-            this._value = val;
-        });
-    }
-
-    /**
-     * Synchronous in-memory getter.
-     *
-     * @returns The locally cached value.
-     * @tradeoff Resolved in-memory. Might not reflect the actual persistent store
-     * if background sync is pending or failed. Use `get()` for transaction-safe checks.
-     */
-    get value(): T | null {
-        return this._value;
-    }
-
-    /**
-     * Synchronous in-memory setter.
-     *
-     * @param newValue The new value to assign.
-     * @tradeoff Immediately updates the local cache to keep the UI lag-free,
-     * while firing an asynchronous write in the background. Note that writes are debounced/buffered;
-     * call and await the `save()` method on the parent slice class to guarantee immediate disk persistence.
-     */
-    set value(newValue: T) {
-        this._value = newValue;
-        this.set(newValue).catch((err) => {
-            console.error(`Sync write failed for key ${this.key}:`, err);
-        });
-    }
-
-    /**
-     * Absolute asynchronous getter.
-     *
-     * @returns A promise resolving to the most up-to-date value queried directly from the persistent store.
-     * @benefit Transaction-safe. Guarantees that the retrieved value is persisted on disk.
-     */
-    async get(): Promise<T> {
-        return invoke("plugin:amethystate|amethystate_get", { key: this.key });
-    }
-
-    /**
-     * Absolute asynchronous setter.
-     *
-     * @param value The value to persist.
-     * @returns A promise resolving when the value is queued for writing in the persistent store.
-     * @note Writes are debounced/buffered. To guarantee immediate persistence on disk,
-     * call and await the `save()` method on the parent slice class.
-     */
-    async set(value: T): Promise<void> {
-        return invoke("plugin:amethystate|amethystate_set", { key: this.key, value });
-    }
-
-    destroy() {
-        if (this._unlisten) {
-            this._unlisten();
-        }
-    }
-
-    subscribe(cb: (value: T) => void): () => void {
-        invoke("plugin:amethystate|amethystate_subscribe", { key: this.key });
-        let unlisten: (() => void) | null = null;
-        let cancelled = false;
-
-        const channel = `amethystate://${this.key.replace(/\./g, ":")}`;
-
-        listen<T>(channel, (e) => cb(e.payload))
-            .then((fn) => {
-                if (cancelled) {
-                    fn();
-                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
-                } else {
-                    unlisten = fn;
-                }
-            });
-
-        return () => {
-            cancelled = true;
-            if (unlisten) {
-                unlisten();
-                invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
-            }
-        };
-    }
-}
-
-export class ReadonlyField<T> {
-    private _value: T | null = null;
-    private _unlisten: (() => void) | null = null;
-
-    constructor(public readonly key: string, initialValue?: T) {
-        if (initialValue !== undefined) {
-            this._value = initialValue;
-        } else {
-            this.get()
-                .then((val) => {
-                    this._value = val;
-                })
-                .catch(() => {});
-        }
-
-        this._unlisten = this.subscribe((val) => {
-            this._value = val;
-        });
-    }
-
-    /**
-     * Synchronous in-memory getter.
-     *
-     * @returns The locally cached value.
-     * @tradeoff Resolved in-memory. Might not reflect the actual persistent store
-     * if background sync is pending or failed. Use `get()` for transaction-safe checks.
-     */
-    get value(): T | null {
-        return this._value;
-    }
-
-    /**
-     * Absolute asynchronous getter.
-     *
-     * @returns A promise resolving to the most up-to-date value queried directly from the persistent store.
-     * @benefit Transaction-safe. Guarantees that the retrieved value is persisted on disk.
-     */
-    async get(): Promise<T> {
-        return invoke("plugin:amethystate|amethystate_get", { key: this.key });
-    }
-
-    destroy() {
-        if (this._unlisten) {
-            this._unlisten();
-        }
-    }
-
-    subscribe(cb: (value: T) => void): () => void {
-        invoke("plugin:amethystate|amethystate_subscribe", { key: this.key });
-        let unlisten: (() => void) | null = null;
-        let cancelled = false;
-
-        const channel = `amethystate://${this.key.replace(/\./g, ":")}`;
-
-        listen<T>(channel, (e) => cb(e.payload))
-            .then((fn) => {
-                if (cancelled) {
-                    fn();
-                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
-                } else {
-                    unlisten = fn;
-                }
-            });
-
-        return () => {
-            cancelled = true;
-            if (unlisten) {
-                unlisten();
-                invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
-            }
-        };
-    }
-}
-
-export class ReactiveMapField<K extends string, V> {
-    private _map = new Map<K, V>();
-    private _unlisten: (() => void) | null = null;
-
-    constructor(public readonly prefix: string, initialValues?: Record<string, any>) {
-        if (initialValues) {
-            const dotPrefix = `${this.prefix}.`;
-            for (const [key, value] of Object.entries(initialValues)) {
-                if (key.startsWith(dotPrefix)) {
-                    const subKey = key.slice(dotPrefix.length) as K;
-                    this._map.set(subKey, value);
-                }
-            }
-        }
-
-        this._unlisten = this.subscribeAny((change) => {
-            if (change.type === "Insert") {
-                this._map.set(change.key, change.value);
-            } else if (change.type === "Update") {
-                this._map.set(change.key, change.newValue);
-            } else if (change.type === "Remove") {
-                this._map.delete(change.key);
-            } else if (change.type === "Clear") {
-                this._map.clear();
-            }
-        });
-    }
-
-    destroy() {
-        if (this._unlisten) {
-            this._unlisten();
-        }
-    }
-
-    /**
-     * Absolute asynchronous getter.
-     *
-     * @param key The map key to look up.
-     * @returns A promise resolving to the value queried directly from the backend.
-     * @benefit Transaction-safe. Guarantees data fresh from the persistent store.
-     */
-    async get(key: K): Promise<V | null> {
-        return invoke("plugin:amethystate|amethystate_get", { key: `${this.prefix}.${key}` });
-    }
-
-    /**
-     * Absolute asynchronous setter.
-     *
-     * @param key The map key to assign.
-     * @param value The value to persist.
-     * @returns A promise resolving when the value is queued for writing.
-     * @note Writes are debounced/buffered. To guarantee immediate persistence on disk,
-     * call and await the `save()` method on the parent slice class.
-     */
-    async set(key: K, value: V): Promise<void> {
-        return invoke("plugin:amethystate|amethystate_set", { key: `${this.prefix}.${key}`, value });
-    }
-
-    /**
-     * Synchronous in-memory getter.
-     *
-     * @param key The map key to look up.
-     * @returns The locally cached value.
-     * @tradeoff Resolved in-memory. Might lag behind actual persistent store transactions. Use `get(key)` for absolute checks.
-     */
-    getSync(key: K): V | null {
-        return this._map.get(key) ?? null;
-    }
-
-    /**
-     * Synchronous in-memory setter.
-     *
-     * @param key The map key to assign.
-     * @param value The value to write.
-     * @tradeoff Instantly updates the local memory map while initiating background write.
-     * Writes are debounced/buffered; call and await `save()` on the parent slice class to flush changes to disk.
-     */
-    setSync(key: K, value: V): void {
-        this._map.set(key, value);
-        this.set(key, value).catch((err) => {
-            console.error(`Sync map write failed for ${this.prefix}.${key}:`, err);
-        });
-    }
-
-    /**
-     * Synchronous in-memory key lookup.
-     *
-     * @param key The map key to check.
-     * @returns True if the key is present in the local cache.
-     * @tradeoff Resolved in-memory. Might not reflect pending backend transactions.
-     */
-    hasSync(key: K): boolean {
-        return this._map.has(key);
-    }
-
-    /**
-     * Returns the read-only, native JavaScript Map entries currently synchronized.
-     */
-    get entries(): ReadonlyMap<K, V> {
-        return this._map;
-    }
-
-    subscribeKey(key: K, cb: (value: V) => void): () => void {
-        const fullKey = `${this.prefix}.${key}`;
-        invoke("plugin:amethystate|amethystate_subscribe", { key: fullKey });
-        let unlisten: (() => void) | null = null;
-        let cancelled = false;
-
-        const channel = `amethystate://${fullKey.replace(/\./g, ":")}`;
-
-        listen<V>(channel, (e) => cb(e.payload))
-            .then((fn) => {
-                if (cancelled) {
-                    fn();
-                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
-                } else {
-                    unlisten = fn;
-                }
-            });
-
-        return () => {
-            cancelled = true;
-            if (unlisten) {
-                unlisten();
-                invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
-            }
-        };
-    }
-
-    subscribeAny(cb: (change: MapChange<K, V>) => void): () => void {
-        const fullKey = this.prefix;
-        invoke("plugin:amethystate|amethystate_subscribe", { key: fullKey });
-        let unlisten: (() => void) | null = null;
-        let cancelled = false;
-
-        const channel = `amethystate://${fullKey.replace(/\./g, ":")}`;
-
-        listen<MapChange<K, V>>(channel, (e) => cb(e.payload))
-            .then((fn) => {
-                if (cancelled) {
-                    fn();
-                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
-                } else {
-                    unlisten = fn;
-                }
-            });
-
-        return () => {
-            cancelled = true;
-            if (unlisten) {
-                unlisten();
-                invoke("plugin:amethystate|amethystate_unsubscribe", { key: fullKey });
-            }
-        };
-    }
-}
+import { ReactiveField, ReadonlyReactiveField, ReactiveMap } from "amethystate";
 
 "#,
         );
@@ -411,19 +73,42 @@ export class ReactiveMapField<K extends string, V> {
         for entry in self.registry.values() {
             match entry.prefix {
                 None => {
-                    nested_classes.push_str(&format!("class {}Fields {{\n", entry.struct_name));
+                    nested_classes.push_str(&format!("export type {} = {{\n", entry.struct_name));
+                    for field in entry.fields {
+                        let prop_name = field.name.to_lower_camel_case();
+                        let prop_type = match &field.kind {
+                            FieldKind::Plain | FieldKind::Volatile | FieldKind::Lookup { .. } => {
+                                field.ts_type.to_string()
+                            }
+                            FieldKind::Nested { struct_name } | FieldKind::LookupNode { struct_name, .. } => {
+                                struct_name.to_string()
+                            }
+                            FieldKind::ReactiveMap {
+                                key_type,
+                                value_type,
+                                ..
+                            } => {
+                                format!("Record<{}, {}>", key_type, value_type)
+                            }
+                        };
+                        nested_classes.push_str(&format!("    {}: {};\n", prop_name, prop_type));
+                    }
+                    nested_classes.push_str("};\n\n");
+
+
+                    nested_classes.push_str(&format!("export class {}Fields {{\n", entry.struct_name));
                     for field in entry.fields {
                         let prop_name = field.name.to_lower_camel_case();
                         let prop_type = match &field.kind {
                             FieldKind::Plain | FieldKind::Volatile => {
-                                format!("Field<{}>", field.full_ts_type)
+                                format!("ReactiveField<{}>", field.full_ts_type)
                             }
                             FieldKind::Nested { struct_name } => format!("{}Fields", struct_name),
                             FieldKind::Lookup { mutable, .. } => {
                                 if *mutable {
-                                    format!("Field<{}>", field.full_ts_type)
+                                    format!("ReactiveField<{}>", field.full_ts_type)
                                 } else {
-                                    format!("ReadonlyField<{}>", field.full_ts_type)
+                                    format!("ReadonlyReactiveField<{}>", field.full_ts_type)
                                 }
                             }
                             FieldKind::LookupNode { struct_name, .. } => {
@@ -434,7 +119,7 @@ export class ReactiveMapField<K extends string, V> {
                                 value_type,
                                 ..
                             } => {
-                                format!("ReactiveMapField<{}, {}>", key_type, value_type)
+                                format!("ReactiveMap<{}, {}>", key_type, value_type)
                             }
                         };
                         nested_classes
@@ -449,7 +134,7 @@ export class ReactiveMapField<K extends string, V> {
                         match &field.kind {
                             FieldKind::Plain | FieldKind::Volatile => {
                                 nested_classes.push_str(&format!(
-                                    "        this.{} = new Field(`${{prefix}}.{}`, initialValues?.[`${{prefix}}.{}`]);\n",
+                                    "        this.{} = new ReactiveField(`${{prefix}}.{}`, initialValues?.[`${{prefix}}.{}`]);\n",
                                     prop_name, field.name, field.name
                                 ));
                             }
@@ -463,7 +148,7 @@ export class ReactiveMapField<K extends string, V> {
                                 target_key,
                                 mutable,
                             } => {
-                                let class_name = if *mutable { "Field" } else { "ReadonlyField" };
+                                let class_name = if *mutable { "ReactiveField" } else { "ReadonlyReactiveField" };
                                 nested_classes.push_str(&format!(
                                     "        this.{} = new {}<{}>(\"{}\", initialValues?.[\"{}\"]);\n",
                                     prop_name, class_name, field.full_ts_type, target_key, target_key
@@ -484,7 +169,7 @@ export class ReactiveMapField<K extends string, V> {
                                 ..
                             } => {
                                 nested_classes.push_str(&format!(
-                                    "        this.{} = new ReactiveMapField<{}, {}>(`${{prefix}}.{}`, initialValues);\n",
+                                    "        this.{} = new ReactiveMap<{}, {}>(`${{prefix}}.{}`, initialValues);\n",
                                     prop_name, key_type, value_type, field.name
                                 ));
                             }
@@ -493,6 +178,28 @@ export class ReactiveMapField<K extends string, V> {
                     nested_classes.push_str("    }\n}\n\n");
                 }
                 Some(prefix) => {
+                    root_classes.push_str(&format!("export type {}Plain = {{\n", entry.struct_name));
+                    for field in entry.fields {
+                        let prop_name = field.name.to_lower_camel_case();
+                        let prop_type = match &field.kind {
+                            FieldKind::Plain | FieldKind::Volatile | FieldKind::Lookup { .. } => {
+                                field.ts_type.to_string()
+                            }
+                            FieldKind::Nested { struct_name } | FieldKind::LookupNode { struct_name, .. } => {
+                                struct_name.to_string()
+                            }
+                            FieldKind::ReactiveMap {
+                                key_type,
+                                value_type,
+                                ..
+                            } => {
+                                format!("Record<{}, {}>", key_type, value_type)
+                            }
+                        };
+                        root_classes.push_str(&format!("    {}: {};\n", prop_name, prop_type));
+                    }
+                    root_classes.push_str("};\n\n");
+
                     let mut resolved = Vec::new();
                     self.resolve_fields_ts(prefix, entry.fields, &mut resolved);
 
@@ -516,14 +223,14 @@ export class ReactiveMapField<K extends string, V> {
                         let prop_name = field.name.to_lower_camel_case();
                         let prop_type = match &field.kind {
                             FieldKind::Plain | FieldKind::Volatile => {
-                                format!("Field<{}>", field.full_ts_type)
+                                format!("ReactiveField<{}>", field.full_ts_type)
                             }
                             FieldKind::Nested { struct_name } => format!("{}Fields", struct_name),
                             FieldKind::Lookup { mutable, .. } => {
                                 if *mutable {
-                                    format!("Field<{}>", field.full_ts_type)
+                                    format!("ReactiveField<{}>", field.full_ts_type)
                                 } else {
-                                    format!("ReadonlyField<{}>", field.full_ts_type)
+                                    format!("ReadonlyReactiveField<{}>", field.full_ts_type)
                                 }
                             }
                             FieldKind::LookupNode { struct_name, .. } => {
@@ -534,7 +241,7 @@ export class ReactiveMapField<K extends string, V> {
                                 value_type,
                                 ..
                             } => {
-                                format!("ReactiveMapField<{}, {}>", key_type, value_type)
+                                format!("ReactiveMap<{}, {}>", key_type, value_type)
                             }
                         };
                         root_classes
@@ -551,7 +258,7 @@ export class ReactiveMapField<K extends string, V> {
                         match &field.kind {
                             FieldKind::Plain | FieldKind::Volatile => {
                                 root_classes.push_str(&format!(
-                                    "        this.{} = new Field<{}>(\"{}\", initialValues?.[\"{}\"]);\n",
+                                    "        this.{} = new ReactiveField<{}>(\"{}\", initialValues?.[\"{}\"]);\n",
                                     prop_name, field.full_ts_type, full_key, full_key
                                 ));
                             }
@@ -565,7 +272,7 @@ export class ReactiveMapField<K extends string, V> {
                                 target_key,
                                 mutable,
                             } => {
-                                let class_name = if *mutable { "Field" } else { "ReadonlyField" };
+                                let class_name = if *mutable { "ReactiveField" } else { "ReadonlyReactiveField" };
                                 root_classes.push_str(&format!(
                                     "        this.{} = new {}<{}>(\"{}\", initialValues?.[\"{}\" as any]);\n",
                                     prop_name, class_name, field.full_ts_type, target_key, target_key
@@ -586,7 +293,7 @@ export class ReactiveMapField<K extends string, V> {
                                 ..
                             } => {
                                 root_classes.push_str(&format!(
-                                    "        this.{} = new ReactiveMapField<{}, {}>(\"{}\", initialValues);\n",
+                                    "        this.{} = new ReactiveMap<{}, {}>(\"{}\", initialValues);\n",
                                     prop_name, key_type, value_type, full_key
                                 ));
                             }
@@ -772,9 +479,19 @@ macro_rules! amethystate_codegen {
     (rs_out = $rs_out:expr, framework = $fw:ident, ts_out = $ts_out:expr) => {
         $crate::amethystate_codegen!(@run $rs_out, $fw, Some($ts_out))
     };
+    (ts_out = $ts_out:expr) => {
+        $crate::amethystate_codegen!(@run_ts $ts_out)
+    };
 
     (@run $rs_out:expr, $fw:ident, $ts_opt:expr) => {
         $crate::amethystate_codegen!(@exec $rs_out, $fw, $ts_opt)
+    };
+
+    (@run_ts $ts_out:expr) => {
+        {
+            let reg = $crate::CodegenRegistry::new();
+            reg.export_ts($ts_out).expect("TS codegen failed");
+        }
     };
 
     (@exec $rs_out:expr, dioxus, $ts_opt:expr) => {
@@ -824,6 +541,11 @@ macro_rules! amethystate_codegen_main {
     (rs_out = $rs_out:expr, framework = $fw:ident) => {
         fn main() {
             $crate::amethystate_codegen!(rs_out = $rs_out, framework = $fw);
+        }
+    };
+    (ts_out = $ts_out:expr) => {
+        fn main() {
+            $crate::amethystate_codegen!(ts_out = $ts_out);
         }
     };
     (rs_out = $rs_out:expr, framework = $fw:ident, ts_out = $ts_out:expr) => {

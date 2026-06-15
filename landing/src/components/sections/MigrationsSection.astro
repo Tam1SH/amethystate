@@ -24,7 +24,7 @@ import { Code } from 'astro:components';
 #[rename(host => address)]
 fn migrate_config_v1_to_v2(
     old: AmeData<v1::Config>,
-) -> amethystate::Result<AmeData<Config>> {
+) -> amethystate::MigrationResult<AmeData<Config>> {
     Ok(AmeData::<Config> {
         address: old.host,
         port: old.port,

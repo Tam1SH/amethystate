@@ -8,6 +8,7 @@
 [![Docs.rs](https://docs.rs/amethystate/badge.svg)](https://docs.rs/amethystate)
 [![CI](https://github.com/Tam1SH/amethystate/actions/workflows/ci.yml/badge.svg)](https://github.com/Tam1SH/amethystate/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MSRV](https://img.shields.io/badge/MSRV-1.90-orange.svg)](https://blog.rust-lang.org/2025/09/18/Rust-1.90.0/)
 
 *Persistent reactive state for Rust GUI apps.*
 
@@ -52,3 +53,6 @@ egui, iced, ratatui, and other retain-mode frameworks are supported too — see 
 ---
 
 See the **[book](./landing/src/content/docs/)** for full documentation — concepts, migrations, and per-framework integration guides.
+
+### Compatibility
+The minimum supported Rust version (MSRV) for `amethystate` is **1.90**.

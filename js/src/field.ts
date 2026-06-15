@@ -1,7 +1,7 @@
 import {invoke} from "@tauri-apps/api/core";
 import {listen} from "@tauri-apps/api/event";
 
-export class Field<T> {
+export class ReactiveField<T> {
     private _value: T | null = null;
     private _unlisten: (() => void) | null = null;
 
@@ -48,17 +48,17 @@ export class Field<T> {
     }
 
     /**
-     * Absolute asynchronous getter.
+     * Direct asynchronous getter.
      *
      * @returns A promise resolving to the most up-to-date value queried directly from the persistent store.
      * @benefit Transaction-safe. Guarantees that the retrieved value is persisted on disk.
      */
     async get(): Promise<T> {
-        return invoke("plugin:rpstate|rpstate_get", { key: this.key });
+        return invoke("plugin:amethystate|amethystate_get", { key: this.key });
     }
 
     /**
-     * Absolute asynchronous setter.
+     * Direct asynchronous setter.
      *
      * @param value The value to persist.
      * @returns A promise resolving when the value is queued for writing in the persistent store.
@@ -66,7 +66,7 @@ export class Field<T> {
      * call and await the `save()` method on the parent slice class.
      */
     async set(value: T): Promise<void> {
-        return invoke("plugin:rpstate|rpstate_set", { key: this.key, value });
+        return invoke("plugin:amethystate|amethystate_set", { key: this.key, value });
     }
 
     destroy() {
@@ -76,17 +76,17 @@ export class Field<T> {
     }
 
     subscribe(cb: (value: T) => void): () => (Promise<void> | void) {
-        invoke("plugin:rpstate|rpstate_subscribe", { key: this.key });
+        invoke("plugin:amethystate|amethystate_subscribe", { key: this.key });
         let unlisten: (() => void) | null = null;
         let cancelled = false;
 
-        const channel = `rpstate://${this.key.replace(/\./g, ":")}`;
+        const channel = `amethystate://${this.key.replace(/\./g, ":")}`;
 
         listen<T>(channel, (e) => cb(e.payload))
             .then((fn) => {
                 if (cancelled) {
                     fn();
-                    invoke("plugin:rpstate|rpstate_unsubscribe", { key: this.key });
+                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
                 } else {
                     unlisten = fn;
                 }
@@ -96,13 +96,13 @@ export class Field<T> {
             cancelled = true;
             if (unlisten) {
                 unlisten();
-                return invoke("plugin:rpstate|rpstate_unsubscribe", { key: this.key })
+                return invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key })
             }
         };
     }
 }
 
-export class ReadonlyField<T> {
+export class ReadonlyReactiveField<T> {
     private _value: T | null = null;
     private _unlisten: (() => void) | null = null;
 
@@ -134,13 +134,13 @@ export class ReadonlyField<T> {
     }
 
     /**
-     * Absolute asynchronous getter.
+     * Direct asynchronous getter.
      *
      * @returns A promise resolving to the most up-to-date value queried directly from the persistent store.
      * @benefit Transaction-safe. Guarantees that the retrieved value is persisted on disk.
      */
     async get(): Promise<T> {
-        return invoke("plugin:rpstate|rpstate_get", { key: this.key });
+        return invoke("plugin:amethystate|amethystate_get", { key: this.key });
     }
 
     destroy() {
@@ -150,17 +150,17 @@ export class ReadonlyField<T> {
     }
 
     subscribe(cb: (value: T) => void): () => void {
-        invoke("plugin:rpstate|rpstate_subscribe", { key: this.key });
+        invoke("plugin:amethystate|amethystate_subscribe", { key: this.key });
         let unlisten: (() => void) | null = null;
         let cancelled = false;
 
-        const channel = `rpstate://${this.key.replace(/\./g, ":")}`;
+        const channel = `amethystate://${this.key.replace(/\./g, ":")}`;
 
         listen<T>(channel, (e) => cb(e.payload))
             .then((fn) => {
                 if (cancelled) {
                     fn();
-                    invoke("plugin:rpstate|rpstate_unsubscribe", { key: this.key });
+                    invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
                 } else {
                     unlisten = fn;
                 }
@@ -170,7 +170,7 @@ export class ReadonlyField<T> {
             cancelled = true;
             if (unlisten) {
                 unlisten();
-                invoke("plugin:rpstate|rpstate_unsubscribe", { key: this.key });
+                invoke("plugin:amethystate|amethystate_unsubscribe", { key: this.key });
             }
         };
     }
