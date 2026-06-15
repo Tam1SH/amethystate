@@ -10,11 +10,12 @@ const snippets: Record<string, string> = {
     yew: `#[function_component(Counter)]\nfn counter(props: &CounterProps) -> Html {\n    let (count, set_count) = use_field(props.state.counter.clone());\n    html! {\n        <button onclick={Callback::from(move |_| set_count.emit(count + 1))}>\n            {format!("count: {count}")}\n        </button>\n    }\n}`,
     tauri: `import { AppSettings } from "./bindings/amethystate";\n\nconst settings = await AppSettings.load();\nconsole.log(settings.username.value);\nsettings.username.value = "Alice";\nawait settings.save();`,
     gpui: `impl CounterView {\n    fn new(cx: &mut Context<Self>) -> Self {\n        Self { state: cx.new_amethystate(CounterState::new).unwrap() }\n    }\n}\nfn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {\n    div().child(format!("Count: {}", self.state.read(cx).count().get()))\n}`,
-};
+    ratatui: `#[amethystate(prefix = "app", mode = "persistent")]\npub struct TuiSettings {\n    pub username: String,\n    pub theme: String,\n}\n\nlet mut state = TuiSettings::load_with(&store)?;\n\nloop {\n    let username = &state.username;\n    let theme = &state.theme;\n\n    terminal.draw(|f| {\n        let text = vec![\n            Line::from(format!("Username: {username}")),\n            Line::from(format!("Theme:    {theme}")),\n        ];\n        f.render_widget(\n            Paragraph::new(text).block(Block::default().borders(Borders::ALL)),\n            f.area(),\n        );\n    })?;\n}`,};
 
 const frameworks = [
     { id: 'egui',   label: 'egui',   logo: 'egui-logo.svg'   },
     { id: 'iced',   label: 'iced',   logo: 'iced-logo.svg'   },
+    { id: 'ratatui', label: 'ratatui', logo: 'ratatui-logo.png' },
     { id: 'dioxus', label: 'dioxus', logo: 'dioxus-logo.png' },
     { id: 'leptos', label: 'leptos', logo: 'leptos-logo.svg' },
     { id: 'yew',    label: 'yew',    logo: 'yew-logo.svg'    },
