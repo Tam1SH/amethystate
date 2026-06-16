@@ -17,38 +17,46 @@ import { asset } from '../utils/asset';
   <title>amethystate</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
 </head>
-<body class="bg-[#0e0b1a] text-[#e8e4f4]">
+<body class="bg-[#0e0b1a] text-[#e8e4f4]"
+      style="background: linear-gradient(to bottom, #13101f 0px, #0e0b1a 100vh, #0B0914 100%);"
+  ">
+
+
 
   <!-- Hero -->
   <Hero />
 
-  <hr class="border-[rgba(255,255,255,0.06)]" />
-
   <!-- Why -->
   <WhySection />
-
-  <hr class="border-[rgba(255,255,255,0.06)]" />
 
   <!-- How it works -->
   <HowItWorksSection />
 
-  <hr class="border-[rgba(255,255,255,0.06)]" />
 
   <!-- Integrations -->
   <IntegrationsSection />
-  <hr class="border-[rgba(255,255,255,0.06)]" />
+
 
   <!-- Migrations -->
   <MigrationsSection />
 
-  <hr class="border-[rgba(255,255,255,0.06)]" />
-  <footer class="max-w-[1100px] mx-auto px-8 py-8 flex items-center justify-between">
-    <span class="text-sm text-[#4a4560]">amethystate · MIT</span>
-    <div class="flex gap-5">
-      <a href="https://github.com/Tam1SH/amethystate" class="text-sm text-[#6e6890] flex items-center gap-1.5"><i class="ti ti-brand-github"></i> GitHub</a>
-      <a href={asset('/introduction/')} class="text-sm text-[#6e6890]">Docs</a>
-    </div>
-  </footer>
+  <div class="relative overflow-x-clip">
+    <img
+        src={asset('/poly-zones (4).svg')}
+        alt=""
+        id="hero-poly"
+        aria-hidden="true"
+        class="absolute left-[-25%] bottom-0 pointer-events-none w-[150vw] h-[550px] opacity-10 max-w-none max-h-none object-cover"
+    />
+    <footer class="max-w-[1100px] mx-auto px-8 py-8 flex items-center justify-between">
+      <span class="text-sm text-[#4a4560]">amethystate · MIT</span>
+      <div class="flex gap-5">
+        <a href="https://github.com/Tam1SH/amethystate" class="text-sm text-[#6e6890] flex items-center gap-1.5"><i class="ti ti-brand-github"></i> GitHub</a>
+        <a href={asset('/introduction/')} class="text-sm text-[#6e6890]">Docs</a>
+      </div>
+    </footer>
+  </div>
+
 
 </body>
 </html>

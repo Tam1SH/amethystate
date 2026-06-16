@@ -10,28 +10,62 @@ const snippets: Record<string, string> = {
     yew: `#[function_component(Counter)]\nfn counter(props: &CounterProps) -> Html {\n    let (count, set_count) = use_field(props.state.counter.clone());\n    html! {\n        <button onclick={Callback::from(move |_| set_count.emit(count + 1))}>\n            {format!("count: {count}")}\n        </button>\n    }\n}`,
     tauri: `import { AppSettings } from "./bindings/amethystate";\n\nconst settings = await AppSettings.load();\nconsole.log(settings.username.value);\nsettings.username.value = "Alice";\nawait settings.save();`,
     gpui: `impl CounterView {\n    fn new(cx: &mut Context<Self>) -> Self {\n        Self { state: cx.new_amethystate(CounterState::new).unwrap() }\n    }\n}\nfn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {\n    div().child(format!("Count: {}", self.state.read(cx).count().get()))\n}`,
-    ratatui: `#[amethystate(prefix = "app", mode = "persistent")]\npub struct TuiSettings {\n    pub username: String,\n    pub theme: String,\n}\n\nlet mut state = TuiSettings::load_with(&store)?;\n\nloop {\n    let username = &state.username;\n    let theme = &state.theme;\n\n    terminal.draw(|f| {\n        let text = vec![\n            Line::from(format!("Username: {username}")),\n            Line::from(format!("Theme:    {theme}")),\n        ];\n        f.render_widget(\n            Paragraph::new(text).block(Block::default().borders(Borders::ALL)),\n            f.area(),\n        );\n    })?;\n}`,};
+    ratatui: `#[amethystate(prefix = "app", mode = "persistent")]\npub struct TuiSettings {\n    pub username: String,\n    pub theme: String,\n}\n\nlet mut state = TuiSettings::load_with(&store)?;\n\nloop {\n    let username = &state.username;\n    let theme = &state.theme;\n\n    terminal.draw(|f| {\n        let text = vec![\n            Line::from(format!("Username: {username}")),\n            Line::from(format!("Theme:    {theme}")),\n        ];\n        f.render_widget(\n            Paragraph::new(text).block(Block::default().borders(Borders::ALL)),\n            f.area(),\n        );\n    })?;\n}`,
+};
 
-const frameworks = [
-    { id: 'egui',   label: 'egui',   logo: 'egui-logo.svg'   },
-    { id: 'iced',   label: 'iced',   logo: 'iced-logo.svg'   },
-    { id: 'ratatui', label: 'ratatui', logo: 'ratatui-logo.png' },
-    { id: 'dioxus', label: 'dioxus', logo: 'dioxus-logo.png' },
-    { id: 'leptos', label: 'leptos', logo: 'leptos-logo.svg' },
-    { id: 'yew',    label: 'yew',    logo: 'yew-logo.svg'    },
-    { id: 'tauri',  label: 'tauri',  logo: 'tauri-logo.svg'  },
-    { id: 'gpui',   label: 'gpui',   logo: 'zed-logo.svg'    },
+const groups = [
+    {
+        mode: 'Persistent-only',
+        subgroups: [
+            {
+                label: 'Immediate',
+                frameworks: [
+                    { id: 'egui',    label: 'egui',    logo: 'egui-logo.svg'   },
+                    { id: 'ratatui', label: 'ratatui', logo: 'ratatui-logo.png' },
+                ],
+            },
+            {
+                label: 'TEA',
+                frameworks: [
+                    { id: 'iced', label: 'iced', logo: 'iced-logo.svg' },
+                ],
+            },
+        ],
+    },
+    {
+        mode: 'Reactive',
+        subgroups: [
+            {
+                label: 'Signal-based',
+                frameworks: [
+                    { id: 'dioxus', label: 'dioxus', logo: 'dioxus-logo.png' },
+                    { id: 'leptos', label: 'leptos', logo: 'leptos-logo.svg'  },
+                    { id: 'yew',    label: 'yew',    logo: 'yew-logo.svg'    },
+                ],
+            },
+            {
+                label: 'Webview IPC',
+                frameworks: [
+                    { id: 'tauri', label: 'tauri', logo: 'tauri-logo.svg' },
+                ],
+            },
+            {
+                label: 'Entity / Observer',
+                frameworks: [
+                    { id: 'gpui', label: 'gpui', logo: 'zed-logo.svg' },
+                ],
+            },
+        ],
+    },
 ];
 
 const langs: Record<string, string> = {
-    egui:   'rust',
-    iced:   'rust',
-    dioxus: 'rust',
-    leptos: 'rust',
-    yew:    'rust',
-    tauri:  'ts',
-    gpui:   'rust',
+    egui: 'rust', iced: 'rust', dioxus: 'rust',
+    leptos: 'rust', yew: 'rust', tauri: 'ts',
+    gpui: 'rust', ratatui: 'rust',
 };
+
+const allFrameworks = groups.flatMap(g => g.subgroups.flatMap(s => s.frameworks));
 ---
 
 <script>
@@ -58,23 +92,49 @@ const langs: Record<string, string> = {
     window.addEventListener('load', () => { initTabs(); });
 </script>
 
+<div class="flex relative overflow-x-clip">
+    <img
+            src={asset('/poly-zones (3).svg')}
+            alt=""
+            aria-hidden="true"
+            class="absolute left-[-10%] pointer-events-none opacity-10"
+    />
+</div>
+
 <section class="max-w-[1100px] mx-auto px-8 py-32">
     <p class="text-xl tracking-[0.1em] text-[#7A4699] uppercase mb-4">Integrations</p>
     <h2 class="text-4xl font-medium text-[#f0ecfc] mb-4 tracking-tight">Works with your framework</h2>
     <p class="text-base text-[#9990b8] max-w-lg leading-relaxed mb-8">
         Pick your framework — the integration handles the bridge between amethystate fields and framework-native signals or update loops.
     </p>
-    <div class="flex gap-2 flex-wrap mb-6" id="int-tabs">
-        {frameworks.map(fw => (
-                <button class="int-tab" data-fw={fw.id}>
-                    <span class="int-tab-icon"><img src={asset(fw.logo)} /></span>
-                    <span>{fw.label}</span>
-                </button>
-        ))}
+
+    <div class="int-selector" id="int-tabs">
+        {groups.map((group, gi) => (<>
+                <div class="int-mode-group">
+                    <span class="int-mode-label">{group.mode}</span>
+                    <div class="int-subgroups">
+                        {group.subgroups.map(sub => (
+                                <div class="int-subgroup">
+                                    <span class="int-subgroup-label">{sub.label}</span>
+                                    <div class="int-chips">
+                                        {sub.frameworks.map(fw => (
+                                                <button class="int-tab" data-fw={fw.id}>
+                                                    <span class="int-tab-icon"><img src={asset(fw.logo)} /></span>
+                                                    <span>{fw.label}</span>
+                                                </button>
+                                        ))}
+                                    </div>
+                                </div>
+                        ))}
+                    </div>
+                </div>
+                {gi === 0 && <div class="int-vdivider" />}
+            </>
+            ))}
     </div>
 
-    <div class="int-code-block">
-        {frameworks.map(fw => (
+    <div class="int-code-block mt-6">
+        {allFrameworks.map(fw => (
                 <div class="int-snippet" data-fw={fw.id} hidden>
                     <Code code={snippets[fw.id]} lang={langs[fw.id]} theme="css-variables" />
                 </div>
@@ -83,39 +143,96 @@ const langs: Record<string, string> = {
 </section>
 
 <style>
+    .int-selector {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+
+    .int-mode-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .int-mode-label {
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: rgba(180, 160, 220, 0.4);
+    }
+
+    .int-subgroups {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .int-subgroup {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 10px;
+        padding: 10px 12px;
+    }
+
+    .int-subgroup-label {
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: rgba(180, 160, 220, 0.35);
+    }
+
+    .int-chips {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+
+    .int-vdivider {
+        width: 1px;
+        align-self: stretch;
+        background: rgba(255, 255, 255, 0.07);
+        margin: 0 2px;
+        flex-shrink: 0;
+    }
+
     .int-tab {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        border: 1px solid rgba(255,255,255,0.1);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 100px;
-        padding: 6px 16px;
-        font-size: 13px;
+        padding: 5px 10px;
+        font-size: 12px;
         color: #9990b8;
         background: transparent;
         cursor: pointer;
         font-family: inherit;
         line-height: 1;
     }
-    .int-tab span:last-child {
-        position: relative;
-        top: -2px;
-    }
+
     .int-tab-icon {
-        width: 16px;
-        height: 16px;
+        width: 14px;
+        height: 14px;
         border-radius: 3px;
         flex-shrink: 0;
     }
+
     .int-tab.active {
-        background: rgba(124,77,232,0.1);
-        border-color: rgba(124,77,232,0.5);
+        background: rgba(124, 77, 232, 0.1);
+        border-color: rgba(124, 77, 232, 0.5);
         color: #b766e7;
     }
 
     .int-code-block {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.07);
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.07);
         border-radius: 0.75rem;
         padding: 1.5rem;
         overflow: auto;
