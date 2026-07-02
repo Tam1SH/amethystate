@@ -3,6 +3,7 @@ mod data;
 mod init;
 mod wasm;
 
+use quote::format_ident;
 use crate::ts_mapping::map_type_to_ts;
 use amethystate_macros_core::{MacroArgs, StoreFieldEntry, get_type_ident_str};
 use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
@@ -64,7 +65,7 @@ pub fn generate_code(
     let scope = accessors::scope(&crate_name, name, prefix.clone());
     let constructor = accessors::constructor(&crate_name, is_root, &init_fields);
 
-    let schema_export = generate_schema_export(&crate_name, name, &prefix, entries);
+    let schema_export = generate_schema_export(&crate_name, name, &prefix, macro_args.version, entries);
 
     let inherent_subs = if matches!(rp_mode, RpMode::Reactive | RpMode::Both) {
         let sub_all_fields = entries.iter().map(|e| {
@@ -277,6 +278,7 @@ fn generate_schema_export(
     crate_name: &TokenStream2,
     name: &Ident,
     prefix: &Option<String>,
+    version: Option<u32>,
     entries: &[StoreFieldEntry],
 ) -> TokenStream2 {
     let struct_name_str = name.to_string();
@@ -334,20 +336,40 @@ fn generate_schema_export(
         }
     });
 
-    if cfg!(feature = "tauri") {
-        quote! {
-            #crate_name::inventory::submit! {
-                #crate_name::tauri::SchemaExportEntry {
-                    prefix: #prefix_tokens,
-                    struct_name: #struct_name_str,
-                    fields: &[
-                        #(#field_metas),*
-                    ],
-                }
+    let data_struct_name = format_ident!("{}_Data", name);
+    let version_val = version.unwrap_or(0);
+
+    let schema_entry = quote! {
+        #crate_name::inventory::submit! {
+            #crate_name::observability::SchemaEntry {
+                prefix: #prefix_tokens,
+                struct_name: #struct_name_str,
+                version: #version_val,
+                schema_hash: <#data_struct_name as #crate_name::migration::types::AmeType>::TYPE_HASH,
+                fields: <#data_struct_name as #crate_name::migration::fields::AmeStateFields>::FIELDS,
             }
         }
+    };
+
+    let tauri_entry = if cfg!(feature = "tauri") {
+        quote! {
+        #crate_name::inventory::submit! {
+            #crate_name::tauri::SchemaExportEntry {
+                prefix: #prefix_tokens,
+                struct_name: #struct_name_str,
+                fields: &[
+                    #(#field_metas),*
+                ],
+            }
+        }
+    }
     } else {
         quote!()
+    };
+
+    quote! {
+        #schema_entry
+        #tauri_entry
     }
 }
 

@@ -1,3 +1,9 @@
+mod scheme;
+mod inspector_trait;
+pub use inspector_trait::*;
+
+pub use scheme::*;
+
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;

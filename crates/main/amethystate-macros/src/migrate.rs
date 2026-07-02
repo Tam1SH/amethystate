@@ -28,7 +28,18 @@ pub fn migrate_impl(
     _args: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    let mut item_fn = parse_macro_input!(input as ItemFn);
+    let item_fn = parse_macro_input!(input as ItemFn);
+    match migrate_impl_inner(_args, item_fn) {
+        Ok(ts) => ts,
+        Err(e) => e.to_compile_error().into(),
+    }
+}
+
+pub fn migrate_impl_inner(
+    _args: proc_macro::TokenStream,
+    mut item_fn: ItemFn,
+) -> syn::Result<proc_macro::TokenStream> {
+
     let crate_name = amethystate_crate_path();
 
     let fn_name = &item_fn.sig.ident;
@@ -39,15 +50,39 @@ pub fn migrate_impl(
 
     let old_ty = match first_arg {
         FnArg::Typed(PatType { ty, .. }) => ty.clone(),
-        _ => panic!("Expected typed argument"),
+        _ => return Err(syn::Error::new_spanned(
+            &item_fn.sig,
+            "first argument must be `AmeData<T>`, e.g. `AmeData<v1::Config>`"
+        )),
     };
 
     let has_ctx = inputs.next().is_some();
 
     let new_ty = match &item_fn.sig.output {
-        ReturnType::Type(_, ty) => extract_target_type(ty).unwrap(),
-        _ => panic!("Expected MigrationResult<TargetType>"),
+        ReturnType::Type(_, ty) => match extract_target_type(ty) {
+            Some(ty) => ty,
+            None => return Err(syn::Error::new_spanned(
+                ty,
+                "return type must be `MigrationResult<AmeData<T>>`, e.g. `MigrationResult<AmeData<Config>>`"
+            )),
+        },
+        _ => return Err(syn::Error::new_spanned(
+            &item_fn.sig,
+            "return type must be `MigrationResult<AmeData<T>>`, e.g. `MigrationResult<AmeData<Config>>`"
+        )),
     };
+
+    let old_inner_ty = extract_ame_data_inner(&old_ty)
+        .ok_or_else(|| syn::Error::new_spanned(
+            &old_ty,
+            "first argument must be `AmeData<T>`, e.g. `AmeData<v1::Config>`"
+        ))?;
+
+    let new_inner_ty = extract_ame_data_inner(&new_ty)
+        .ok_or_else(|| syn::Error::new_spanned(
+            &new_ty,
+            "return type must be `MigrationResult<AmeData<T>>`, e.g. `MigrationResult<AmeData<Config>>`"
+        ))?;
 
     let mut renames = Vec::new();
     let mut cleaned_attrs = Vec::new();
@@ -104,6 +139,14 @@ pub fn migrate_impl(
         }
     };
 
+    let struct_name = if let Type::Path(tp) = &new_inner_ty {
+        tp.path.segments.last()
+            .map(|s| s.ident.to_string())
+            .ok_or_else(|| syn::Error::new_spanned(&new_inner_ty, "expected a type path"))?
+    } else {
+        return Err(syn::Error::new_spanned(&new_inner_ty, "expected a type path"));
+    };
+
     let inventory_block = quote! {
         #crate_name::inventory::submit! {
             #crate_name::migration::registry::MigrationStepEntry {
@@ -111,6 +154,7 @@ pub fn migrate_impl(
                 target_version: <#new_ty as #crate_name::migration::fields::AmeStateFields>::VERSION,
                 dependencies: <#new_ty as #crate_name::migration::fields::AmeStateFields>::MIGRATION_DEPS,
                 description: #description,
+                struct_name: #struct_name,
                 schema_hash: <#new_ty as #crate_name::migration::fields::AmeStateFields>::SCHEMA_HASH,
                 fields: <#new_ty as #crate_name::migration::fields::AmeStateFields>::FIELDS,
                 run: |ctx| {
@@ -140,13 +184,25 @@ pub fn migrate_impl(
         }
     };
 
-    quote! {
+    Ok(quote! {
         #item_fn
         #check_fields
         #impl_block
         #inventory_block
     }
-    .into()
+    .into())
+}
+
+fn extract_ame_data_inner(ty: &Type) -> Option<Type> {
+    if let Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+        && segment.ident == "AmeData"
+        && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+        && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
+    {
+        return Some(inner_ty.clone());
+    }
+    None
 }
 
 fn extract_target_type(ty: &Type) -> Option<Type> {

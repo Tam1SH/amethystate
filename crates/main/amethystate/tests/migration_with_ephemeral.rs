@@ -96,8 +96,7 @@ fn test_nested_and_ephemeral_integration() {
     }
 
     {
-        let (store, _) = StoreBuilder::new(&path)
-            .collect_migrations()
+        let store = StoreBuilder::new(&path)
             .build()
             .unwrap();
 

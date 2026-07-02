@@ -56,7 +56,7 @@ fn migration_builder_mixes_codegen_and_manual_steps() {
         profile.legacy_flag().set(true).unwrap();
     }
 
-    let (store, _) = StoreBuilder::new(&path)
+    let store = StoreBuilder::new(&path)
         .migrations(|m| {
             m.collect_codegen();
             m.for_node::<Profile>()

@@ -31,6 +31,7 @@ use crate::store::traits::MigrationBackendAdapter;
 pub mod error;
 mod migration;
 mod tables;
+mod inspector;
 
 const BUF_SIZE: usize = 64 * 1024;
 

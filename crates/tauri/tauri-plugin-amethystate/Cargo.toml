@@ -25,6 +25,7 @@ heck.workspace = true
 [dev-dependencies]
 tauri = { version = "2", default-features = false, features = ["test"] }
 tokio = { version = "1.0", features = ["full"] }
+amethystate = { workspace = true, features = ["tauri", "test-utils"] }
 
 [build-dependencies]
 tauri-plugin = { version = "2", features = ["build"] }

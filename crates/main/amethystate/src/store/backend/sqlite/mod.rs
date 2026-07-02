@@ -24,6 +24,7 @@ use crate::store::traits::MigrationBackendAdapter;
 
 pub mod error;
 mod migration;
+mod inspector;
 
 struct SqliteStoreInner {
     conn: Arc<Mutex<Connection>>,

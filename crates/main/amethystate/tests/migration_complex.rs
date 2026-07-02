@@ -385,7 +385,7 @@ fn complex_hybrid_migrations_handle_dependency_tree_and_rollback() {
                 |_| Err(MigrationError::Custom("intentional failure".into()).into()),
             );
         })
-        .build()
+        .build_with_report()
         .unwrap();
 
     assert!(report.has_failures());

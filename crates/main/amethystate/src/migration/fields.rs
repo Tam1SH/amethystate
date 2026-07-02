@@ -1,6 +1,7 @@
 use crate::store::StorageResult;
 use crate::MigrationContext;
 
+#[derive(Clone)]
 pub struct FieldDescriptor {
     pub name: &'static str,
     pub type_hash: u32,

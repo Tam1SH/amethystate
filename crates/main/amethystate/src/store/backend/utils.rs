@@ -1,6 +1,8 @@
+use std::sync::Arc;
 use crate::store::{StoreEvent, SubscriptionEntry};
-use parking_lot::RwLock;
-use crate::SubscriptionKind;
+use parking_lot::{Mutex, RwLock};
+use crate::store::util::debouncer::Debouncer;
+use crate::{StorageResult, StoreOp, SubscriptionKind};
 
 pub fn emit_events(subs_lock: &RwLock<Vec<SubscriptionEntry>>, event: StoreEvent) {
     let callbacks = {
@@ -59,4 +61,34 @@ pub fn drain_pending_prefix(
         }
         matched
     }
+}
+
+pub fn set_raw_pending(
+    pending: &Mutex<std::collections::HashMap<Arc<str>, Option<Vec<u8>>>>,
+    subscriptions: &RwLock<Vec<SubscriptionEntry>>,
+    debouncer: &Debouncer,
+    key: &str,
+    value: &[u8],
+) -> StorageResult<()> {
+    let key_arc: Arc<str> = Arc::from(key);
+    let old_bytes = {
+        let lock = pending.lock();
+        lock.get(&*key_arc).cloned().flatten()
+    };
+    {
+        let mut lock = pending.lock();
+        lock.insert(key_arc.clone(), Some(value.to_vec()));
+    }
+    emit_events(
+        subscriptions,
+        StoreEvent {
+            path: key_arc,
+            op: StoreOp::Set,
+            old: old_bytes,
+            new: Some(value.to_vec()),
+            source: None,
+        },
+    );
+    debouncer.schedule();
+    Ok(())
 }

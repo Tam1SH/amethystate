@@ -1,16 +1,12 @@
 use crate::store::StorageResult;
-use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::migration::builder::MigrationBuilder;
-use crate::migration::set::MigrationSet;
 
 use crate::store::config::StoreConfig;
 use crate::{DefaultStore, MigrationReport};
 
-pub struct NoMigrations;
-pub struct WithMigrations;
 
 #[cfg(backend = "redb")]
 const FILE_EXTENSION: &str = "redb";
@@ -27,24 +23,20 @@ const FILE_EXTENSION: &str = "ron";
 #[cfg(backend = "sqlite")]
 const FILE_EXTENSION: &str = "db";
 
-pub struct StoreBuilder<M = NoMigrations> {
+pub struct StoreBuilder {
     config: StoreConfig,
-    migration_set: MigrationSet,
-    _state: PhantomData<M>,
+    migration_builder: MigrationBuilder,
 }
 
-impl StoreBuilder<NoMigrations> {
+impl StoreBuilder {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         let mut path: PathBuf = path.into();
-
         if path.extension().is_none() {
             path.set_extension(FILE_EXTENSION);
         }
-
         Self {
             config: StoreConfig::new(path),
-            migration_set: MigrationSet::default(),
-            _state: PhantomData,
+            migration_builder: MigrationBuilder::default(),
         }
     }
 
@@ -114,9 +106,6 @@ impl StoreBuilder<NoMigrations> {
 
         Ok(Self::new(path))
     }
-}
-
-impl<M> StoreBuilder<M> {
     pub fn debounce(mut self, ms: u64) -> Self {
         self.config.save_debounce = Duration::from_millis(ms);
         self
@@ -127,42 +116,25 @@ impl<M> StoreBuilder<M> {
         self
     }
 
-    pub fn migrations(
-        self,
-        configure: impl FnOnce(&mut MigrationBuilder),
-    ) -> StoreBuilder<WithMigrations> {
-        let mut builder = MigrationBuilder::default();
-        configure(&mut builder);
-        StoreBuilder {
-            config: self.config,
-            migration_set: builder.into_set(),
-            _state: PhantomData,
-        }
+    pub fn migrations(mut self, configure: impl FnOnce(&mut MigrationBuilder)) -> Self {
+        configure(&mut self.migration_builder);
+        self
     }
 
-    pub fn collect_migrations(self) -> StoreBuilder<WithMigrations> {
-        let mut builder = MigrationBuilder::default();
-        builder.collect_codegen();
-        StoreBuilder {
-            config: self.config,
-            migration_set: builder.into_set(),
-            _state: PhantomData,
-        }
-    }
-}
-
-impl StoreBuilder<NoMigrations> {
-    pub fn build(self) -> StorageResult<DefaultStore> {
-        let (store, _) = crate::store::default::DefaultStore::open(self.config, Default::default())?;
+    pub fn build(mut self) -> StorageResult<DefaultStore> {
+        self.migration_builder.collect_codegen();
+        let migration_set = self.migration_builder.into_set();
+        let (store, _) = DefaultStore::open(self.config, migration_set)?;
+        
         Ok(store)
     }
-}
-
-impl StoreBuilder<WithMigrations> {
-    pub fn build(self) -> StorageResult<(DefaultStore, MigrationReport)> {
-        let (store, report) =
-            crate::store::default::DefaultStore::open(self.config, self.migration_set)?;
+    
+    pub fn build_with_report(mut self) -> StorageResult<(DefaultStore, MigrationReport)> {
+        self.migration_builder.collect_codegen();
+        let migration_set = self.migration_builder.into_set();
+        let (store, report) = DefaultStore::open(self.config, migration_set)?;
         report.log_to_tracing();
         Ok((store, report))
     }
+
 }

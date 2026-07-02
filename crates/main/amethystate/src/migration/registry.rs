@@ -10,6 +10,7 @@ pub struct MigrationStepEntry {
     pub target_version: u32,
     pub description: &'static str,
     pub dependencies: &'static [&'static str],
+    pub struct_name: &'static str,
     pub fields: &'static [FieldDescriptor],
     pub schema_hash: u32,
     pub run: fn(&mut MigrationContext) -> StorageResult<()>,

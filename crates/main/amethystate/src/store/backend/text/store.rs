@@ -131,7 +131,7 @@ impl<D: TextDocument> StoreFiles<D> {
     }
 }
 
-struct TextStoreInner<D: TextDocument> {
+pub(crate) struct TextStoreInner<D: TextDocument> {
     pub(crate) files: StoreFiles<D>,
     pub(crate) subscriptions: Arc<RwLock<Vec<SubscriptionEntry>>>,
     pub(crate) next_id: Arc<AtomicU64>,
@@ -141,7 +141,7 @@ struct TextStoreInner<D: TextDocument> {
 }
 
 impl<D: TextDocument> TextStoreInner<D> {
-    fn check_debouncer(&self) -> StorageResult<()> {
+    pub(crate) fn check_debouncer(&self) -> StorageResult<()> {
         if self.debouncer.is_poisoned() {
             panic!("debouncer thread is dead — store integrity cannot be guaranteed");
         }
@@ -157,7 +157,7 @@ impl<D: TextDocument> Drop for TextStoreInner<D> {
 
 #[derive(Clone)]
 pub struct TextStore<D: TextDocument> {
-    inner: Arc<TextStoreInner<D>>,
+    pub(crate) inner: Arc<TextStoreInner<D>>,
 }
 
 impl<D: TextDocument> PartialEq for TextStore<D> {
@@ -317,6 +317,7 @@ impl<D: TextDocument + Send + 'static> TextStore<D> {
 
         Ok(Self { inner })
     }
+
 }
 
 impl<D: TextDocument + Send + 'static> SchemaAwareStore for TextStore<D> {
@@ -375,35 +376,9 @@ impl<D: TextDocument> TextStoreInner<D> {
 
     fn set<T: Serialize>(&self, path: &str, value: &T, source: Option<uuid::Uuid>) -> StorageResult<()> {
         self.check_debouncer()?;
-
         let path_str = normalize_path(path)?;
-        let parts = split_path(&path_str);
         let node = D::serialize_node(value)?;
-
-        let (old_bytes, new_bytes) = {
-            let mut guard = self.files.data.doc.write();
-            let old = guard.get(&parts).map(|n| D::node_to_bytes(n)).transpose()?;
-            guard.set(&parts, node)?;
-            let new_node = guard.get(&parts).unwrap();
-            let new_bytes = D::node_to_bytes(new_node)?;
-            (old, new_bytes)
-        };
-
-        self.has_pending.store(true, Ordering::Release);
-
-        utils::emit_events(
-            &self.subscriptions,
-            StoreEvent {
-                path: Arc::from(path_str),
-                op: StoreOp::Set,
-                old: old_bytes,
-                new: Some(new_bytes),
-                source,
-            },
-        );
-
-        self.debouncer.schedule();
-        Ok(())
+        self.set_node(path_str, node, source)
     }
 
     fn save_now(&self) -> StorageResult<()> {
@@ -490,6 +465,40 @@ impl<D: TextDocument> TextStoreInner<D> {
         self.files.meta.persist()?;
         Ok(())
     }
+
+    pub(crate) fn set_node(
+        &self,
+        path_str: String,
+        node: D::Node,
+        source: Option<uuid::Uuid>,
+    ) -> StorageResult<()> {
+        let parts = split_path(&path_str);
+        let (old_bytes, new_bytes) = {
+            let mut guard = self.files.data.doc.write();
+            let old = guard.get(&parts).map(|n| D::node_to_bytes(n)).transpose()?;
+            guard.set(&parts, node)?;
+            let new_node = guard.get(&parts).unwrap();
+            let new_bytes = D::node_to_bytes(new_node)?;
+            (old, new_bytes)
+        };
+
+        self.has_pending.store(true, Ordering::Release);
+
+        utils::emit_events(
+            &self.subscriptions,
+            StoreEvent {
+                path: Arc::from(path_str),
+                op: StoreOp::Set,
+                old: old_bytes,
+                new: Some(new_bytes),
+                source,
+            },
+        );
+
+        self.debouncer.schedule();
+        Ok(())
+    }
+
 }
 
 impl<D: TextDocument + Send + 'static> Store for TextStore<D> {
@@ -646,22 +655,22 @@ pub(super) fn scan_prefix_impl<D: TextDocument>(
     let mut raw_nodes = Vec::new();
     scan_prefix_recursive(doc, &parts, prefix, &mut raw_nodes, Some(target_depth));
 
-    let mut StorageResults = Vec::new();
+    let mut results = Vec::new();
     for (k, node) in raw_nodes {
         if k.starts_with(prefix) {
             let bytes = D::node_to_bytes(&node)?;
-            StorageResults.push((k, bytes));
+            results.push((k, bytes));
         }
     }
 
-    Ok(StorageResults)
+    Ok(results)
 }
 
 pub(super) fn scan_prefix_recursive<D: TextDocument>(
     doc: &D,
     parts: &[&str],
     prefix_str: &str,
-    StorageResults: &mut Vec<(String, D::Node)>,
+    results: &mut Vec<(String, D::Node)>,
     target_depth: Option<usize>,
 ) {
     let current_depth = parts.len();
@@ -673,7 +682,7 @@ pub(super) fn scan_prefix_recursive<D: TextDocument>(
             && !prefix_str.ends_with('.')
             && let Some(node) = doc.get(parts)
         {
-            StorageResults.push((prefix_str.to_string(), node.clone()));
+            results.push((prefix_str.to_string(), node.clone()));
         }
         return;
     }
@@ -684,7 +693,7 @@ pub(super) fn scan_prefix_recursive<D: TextDocument>(
             && !prefix_str.ends_with('.')
             && let Some(node) = doc.get(parts)
         {
-            StorageResults.push((prefix_str.to_string(), node.clone()));
+            results.push((prefix_str.to_string(), node.clone()));
         }
     } else {
         for (full_key, _node) in children {
@@ -696,10 +705,10 @@ pub(super) fn scan_prefix_recursive<D: TextDocument>(
 
             if should_stop {
                 if let Some(child_node) = doc.get(&child_parts) {
-                    StorageResults.push((full_key, child_node.clone()));
+                    results.push((full_key, child_node.clone()));
                 }
             } else {
-                scan_prefix_recursive(doc, &child_parts, prefix_str, StorageResults, target_depth);
+                scan_prefix_recursive(doc, &child_parts, prefix_str, results, target_depth);
             }
         }
     }

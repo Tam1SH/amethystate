@@ -8,6 +8,7 @@ pub mod ron;
 pub mod store;
 #[cfg(feature = "toml")]
 pub mod toml;
+mod inspector;
 
 pub use document::TextDocument;
 pub use error::TextStoreError;

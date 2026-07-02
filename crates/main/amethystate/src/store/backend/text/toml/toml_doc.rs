@@ -1,6 +1,6 @@
-use crate::Result;
+use crate::StorageResult;
 use crate::codec::CodecError;
-use crate::store::CodecFormat;
+use crate::store::{CodecFormat, StorageError};
 use crate::store::backend::text::TextStoreError;
 use crate::store::backend::text::document::{
     Navigable, TextDocument, generic_delete, generic_get, generic_scan, generic_set,
@@ -55,13 +55,13 @@ impl TextDocument for TomlDocument {
         generic_get(self.0.as_item(), parts)
     }
 
-    fn set(&mut self, parts: &[&str], node: Self::Node) -> Result<()> {
+    fn set(&mut self, parts: &[&str], node: Self::Node) -> StorageResult<()> {
         let is_root = parts.is_empty() || parts == ["."];
         if is_root {
             let table = match node.into_table() {
                 Ok(t) => t,
                 Err(_) => {
-                    return Err(crate::error::Error::TextStore(
+                    return Err(StorageError::TextStore(
                         TextStoreError::RootMustBeObject,
                     ));
                 }
@@ -72,7 +72,7 @@ impl TextDocument for TomlDocument {
         generic_set(self.0.as_item_mut(), parts, node)
     }
 
-    fn delete(&mut self, parts: &[&str]) -> Result<Option<Self::Node>> {
+    fn delete(&mut self, parts: &[&str]) -> StorageResult<Option<Self::Node>> {
         if parts.is_empty() {
             return Ok(None);
         }
@@ -83,7 +83,7 @@ impl TextDocument for TomlDocument {
         generic_scan(self.0.as_item(), parts)
     }
 
-    fn parse(src: &str) -> Result<Self> {
+    fn parse(src: &str) -> StorageResult<Self> {
         let doc = src
             .parse::<toml_edit::DocumentMut>()
             .map_err(|e| CodecError::Toml(e.to_string()))
@@ -92,7 +92,7 @@ impl TextDocument for TomlDocument {
         Ok(TomlDocument(doc))
     }
 
-    fn serialize(&self) -> Result<String> {
+    fn serialize(&self) -> StorageResult<String> {
         Ok(self.0.to_string())
     }
 
@@ -100,7 +100,7 @@ impl TextDocument for TomlDocument {
         TomlDocument(toml_edit::DocumentMut::new())
     }
 
-    fn deserialize_node<T: DeserializeOwned>(node: &Self::Node) -> Result<T> {
+    fn deserialize_node<T: DeserializeOwned>(node: &Self::Node) -> StorageResult<T> {
         let mut doc = toml_edit::DocumentMut::new();
         doc.as_table_mut().insert("val", node.clone());
         let s = doc.to_string();
@@ -116,7 +116,7 @@ impl TextDocument for TomlDocument {
         Ok(unwrapped.val)
     }
 
-    fn serialize_node<T: Serialize>(value: &T) -> Result<Self::Node> {
+    fn serialize_node<T: Serialize>(value: &T) -> StorageResult<Self::Node> {
         #[derive(serde::Serialize)]
         struct Wrap<'a, T> {
             val: &'a T,
@@ -137,13 +137,13 @@ impl TextDocument for TomlDocument {
             .unwrap_or(toml_edit::Item::None))
     }
 
-    fn node_to_bytes(node: &Self::Node) -> Result<Vec<u8>> {
+    fn node_to_bytes(node: &Self::Node) -> StorageResult<Vec<u8>> {
         let mut doc = toml_edit::DocumentMut::new();
         doc.as_table_mut().insert("val", node.clone());
         Ok(doc.to_string().into_bytes())
     }
 
-    fn bytes_to_node(bytes: &[u8]) -> Result<Self::Node> {
+    fn bytes_to_node(bytes: &[u8]) -> StorageResult<Self::Node> {
         let s = std::str::from_utf8(bytes)
             .map_err(|e| CodecError::Toml(e.to_string()))
             .map_err(TextStoreError::from)?;

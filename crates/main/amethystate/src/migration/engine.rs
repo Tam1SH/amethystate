@@ -1,3 +1,4 @@
+use crate::observability::SchemaEntry;
 use crate::store::StorageResult;
 use crate::migration::fields::FieldDescriptor;
 use crate::migration::meta::{PrefixMeta, SchemaSnapshot, StoredFieldEntry};
@@ -22,6 +23,40 @@ pub struct MigrationEngine<'a, P: StorageProvider> {
 impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
     pub fn new(provider: &'a P) -> Self {
         Self { provider }
+    }
+
+    pub fn ensure_snapshots(&self) -> StorageResult<()> {
+        self.provider.atomic(|storage| {
+            for entry in inventory::iter::<SchemaEntry> {
+                let prefix = match entry.prefix {
+                    Some(p) => p,
+                    None => continue,
+                };
+
+                let stored = storage.get_schema_snapshot(prefix)?;
+
+                let needs_update = match &stored {
+                    None => true,
+                    Some(s) => s.struct_name.as_deref() != Some(entry.struct_name)
+                        || s.version != entry.version
+                        || s.schema_hash != entry.schema_hash,
+                };
+
+                if needs_update {
+                    storage.set_schema_snapshot(prefix, &SchemaSnapshot {
+                        version: entry.version,
+                        struct_name: Some(entry.struct_name.to_string()),
+                        schema_hash: entry.schema_hash,
+                        fields: entry.fields.iter().map(|f| StoredFieldEntry {
+                            name: f.name.to_string(),
+                            type_name: f.type_name.to_string(),
+                            type_hash: f.type_hash,
+                        }).collect(),
+                    })?;
+                }
+            }
+            Ok(())
+        })
     }
 
     pub fn run(&self, mset: MigrationSet) -> StorageResult<MigrationReport> {
@@ -59,6 +94,9 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
                 }
             }
         }
+
+        self.ensure_snapshots()?;
+
         Ok(report)
     }
 
@@ -223,8 +261,15 @@ impl<'a, P: StorageProvider> MigrationEngine<'a, P> {
         }
 
         if meta.version == target_v && !target_fields.is_empty() {
+            let struct_name = inventory::iter::<SchemaEntry>
+                .into_iter()
+                .find(|e| e.prefix == Some(prefix))
+                .map(|e| e.struct_name.to_string());
+
             let new_snapshot = SchemaSnapshot {
                 version: target_v,
+                schema_hash: meta.hash,
+                struct_name,
                 fields: target_fields
                     .iter()
                     .map(|f| StoredFieldEntry {
@@ -743,6 +788,8 @@ mod tests {
                         type_name: "String".to_string(),
                         type_hash: 1,
                     }],
+                    schema_hash: 0,
+                    struct_name: None,
                 },
             )
             .unwrap();
@@ -803,6 +850,8 @@ mod tests {
                         type_name: "u16".to_string(),
                         type_hash: 100,
                     }],
+                    schema_hash: 0,
+                    struct_name: None,
                 },
             )
             .unwrap();
@@ -852,6 +901,8 @@ mod tests {
                 &SchemaSnapshot {
                     version: 1,
                     fields: vec![],
+                    schema_hash: 0,
+                    struct_name: None,
                 },
             )
             .unwrap();
@@ -942,6 +993,8 @@ mod tests {
                         type_name: "u8".into(),
                         type_hash: 1,
                     }],
+                    schema_hash: 0,
+                    struct_name: None,
                 },
             )
             .unwrap();

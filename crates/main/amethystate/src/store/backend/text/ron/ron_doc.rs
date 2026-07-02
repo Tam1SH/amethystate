@@ -1,6 +1,6 @@
-use crate::Result;
+use crate::StorageResult;
 use crate::codec::CodecError;
-use crate::store::CodecFormat;
+use crate::store::{CodecFormat, StorageError};
 use crate::store::backend::text::document::{
     Navigable, TextDocument, generic_delete, generic_get, generic_scan, generic_set,
 };
@@ -71,11 +71,11 @@ impl TextDocument for RonDocument {
         generic_get(&self.0, parts)
     }
 
-    fn set(&mut self, parts: &[&str], node: Self::Node) -> Result<()> {
+    fn set(&mut self, parts: &[&str], node: Self::Node) -> StorageResult<()> {
         let is_root = parts.is_empty() || parts == ["."];
         if is_root {
             if !matches!(node, ::ron::value::Value::Map(_)) {
-                return Err(crate::error::Error::TextStore(
+                return Err(StorageError::TextStore(
                     TextStoreError::RootMustBeObject,
                 ));
             }
@@ -85,7 +85,7 @@ impl TextDocument for RonDocument {
         generic_set(&mut self.0, parts, node)
     }
 
-    fn delete(&mut self, parts: &[&str]) -> Result<Option<Self::Node>> {
+    fn delete(&mut self, parts: &[&str]) -> StorageResult<Option<Self::Node>> {
         generic_delete(&mut self.0, parts)
     }
 
@@ -93,17 +93,17 @@ impl TextDocument for RonDocument {
         generic_scan(&self.0, parts)
     }
 
-    fn parse(src: &str) -> Result<Self> {
+    fn parse(src: &str) -> StorageResult<Self> {
         let val: ::ron::value::Value =
             ::ron::from_str(src).map_err(|e| TextStoreError::Codec(CodecError::Ron(e.into())))?;
 
         if !matches!(val, ::ron::value::Value::Map(_)) {
-            return Err(crate::error::Error::from(TextStoreError::RootMustBeObject));
+            return Err(StorageError::TextStore(TextStoreError::RootMustBeObject));
         }
         Ok(RonDocument(val))
     }
 
-    fn serialize(&self) -> Result<String> {
+    fn serialize(&self) -> StorageResult<String> {
         ::ron::ser::to_string_pretty(&self.0, ::ron::ser::PrettyConfig::default())
             .map_err(|e| TextStoreError::Codec(CodecError::Ron(e)))
             .map_err(Into::into)
@@ -113,14 +113,14 @@ impl TextDocument for RonDocument {
         RonDocument(::ron::value::Value::Map(::ron::value::Map::new()))
     }
 
-    fn deserialize_node<T: DeserializeOwned>(node: &Self::Node) -> Result<T> {
+    fn deserialize_node<T: DeserializeOwned>(node: &Self::Node) -> StorageResult<T> {
         node.clone()
             .into_rust::<T>()
             .map_err(|e| TextStoreError::Codec(CodecError::Ron(e)))
             .map_err(Into::into)
     }
 
-    fn serialize_node<T: Serialize>(value: &T) -> Result<Self::Node> {
+    fn serialize_node<T: Serialize>(value: &T) -> StorageResult<Self::Node> {
         let s =
             ::ron::ser::to_string(value).map_err(|e| TextStoreError::Codec(CodecError::Ron(e)))?;
         let node: ::ron::value::Value =
@@ -128,13 +128,13 @@ impl TextDocument for RonDocument {
         Ok(node)
     }
 
-    fn node_to_bytes(node: &Self::Node) -> Result<Vec<u8>> {
+    fn node_to_bytes(node: &Self::Node) -> StorageResult<Vec<u8>> {
         let s =
             ::ron::ser::to_string(node).map_err(|e| TextStoreError::Codec(CodecError::Ron(e)))?;
         Ok(s.into_bytes())
     }
 
-    fn bytes_to_node(bytes: &[u8]) -> Result<Self::Node> {
+    fn bytes_to_node(bytes: &[u8]) -> StorageResult<Self::Node> {
         let s = std::str::from_utf8(bytes)
             .map_err(|e| CodecError::Custom(e.to_string()))
             .map_err(TextStoreError::from)?;

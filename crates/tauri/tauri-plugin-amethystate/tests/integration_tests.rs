@@ -5,7 +5,6 @@ use tauri_plugin_amethystate::backend::commands::PluginState;
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::test]
 async fn test_tauri_plugin_commands() {
-    use amethystate::DefaultStore;
     use tauri::Manager;
     let store = unique_store("amethystate_tauri_test_store.redb");
 
@@ -13,22 +12,26 @@ async fn test_tauri_plugin_commands() {
     store.save_now().unwrap();
 
     let app = tauri::test::mock_app();
-    app.manage(PluginState {
-        subscriptions: Default::default(),
-        store
-    });
 
-    let state_store = app.state::<PluginState>();
+    let plugin_state = PluginState {
+        subscriptions: Default::default(),
+        store: store.clone()
+    };
+
+    app.manage(plugin_state);
+
+    let plugin_state = app.state::<PluginState>();
+
 
     let val = tauri_plugin_amethystate::backend::commands::amethystate_get(
-        state_store.clone(),
+        plugin_state.clone(),
         "test_root.value".to_string(),
     )
     .await;
     assert_eq!(val, Ok(Some(serde_json::json!(100))));
 
     let set_res = tauri_plugin_amethystate::backend::commands::amethystate_set(
-        state_store.clone(),
+        plugin_state,
         "test_root.value".to_string(),
         serde_json::json!(200),
     )

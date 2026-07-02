@@ -77,8 +77,7 @@ fn test_embedded_map_migration() {
         store.save_now().unwrap();
     }
 
-    let (store, _) = StoreBuilder::new(&path)
-        .collect_migrations()
+    let store = StoreBuilder::new(&path)
         .build()
         .unwrap();
 

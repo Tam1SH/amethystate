@@ -42,8 +42,7 @@ fn test_decentralized_codegen_migration() {
     }
 
     let (store, reports) = StoreBuilder::new(&path)
-        .collect_migrations()
-        .build()
+        .build_with_report()
         .unwrap();
 
     assert!(!reports.has_failures());
